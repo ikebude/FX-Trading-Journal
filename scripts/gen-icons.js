@@ -11,7 +11,7 @@
  */
 
 import { createRequire } from 'module';
-import { writeFileSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -20,6 +20,7 @@ const sharp = require('sharp');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const buildDir = join(__dirname, '..', 'build');
+mkdirSync(buildDir, { recursive: true });
 
 // ─── Colour palette ────────────────────────────────────────────
 const PRIMARY = { r: 99, g: 102, b: 241, alpha: 1 };   // indigo-500
