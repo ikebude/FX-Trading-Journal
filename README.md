@@ -1,2 +1,399 @@
-# FX Trading Journal
+# Ledger — Forex Trading Journal
 
+> A local-first, institutional-grade trading journal for Windows. No cloud, no login, no subscription, no telemetry. Your data never leaves your machine.
+
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge&logo=windows)](https://github.com/ikebude/ledger/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey?style=for-the-badge&logo=windows)](https://github.com/ikebude/ledger/releases/latest)
+
+---
+
+## What Is Ledger?
+
+Ledger is a professional forex trading journal designed for serious traders who want full control of their data. It runs entirely on your Windows PC — no account required, no internet needed after installation.
+
+**Key principles:**
+
+- **Local-first.** Your journal database lives in `%APPDATA%\Ledger\` — a single folder you can back up, move to Dropbox, or copy to a new machine.
+- **Live bridge.** Trades from MetaTrader 4/5 appear in your journal the instant they open, giving you time to add context *while you're in the trade*.
+- **Institutional analytics.** R-multiples, equity curves, session heatmaps, profit factor, setup performance — the metrics you'd expect from a prop firm evaluation platform.
+- **Zero compromise on privacy.** No telemetry, no analytics, no cloud. The only outbound network request ever made is the optional auto-update check, which is off by default.
+
+---
+
+## Download & Install
+
+### System Requirements
+
+| Requirement | Minimum |
+|---|---|
+| Operating System | Windows 10 (64-bit) or Windows 11 |
+| RAM | 4 GB |
+| Disk Space | 500 MB (plus your screenshots) |
+| Display | 1280×720 minimum, 1920×1080 recommended |
+| MetaTrader | MT4 or MT5 (optional, for live bridge) |
+
+### Download
+
+**[⬇ Download Ledger Setup (latest release)](https://github.com/ikebude/ledger/releases/latest)**
+
+Download `Ledger-Setup-x.x.x.exe` from the Assets section of the latest release.
+
+### Installation Steps
+
+1. Run `Ledger-Setup-x.x.x.exe`.
+2. If Windows shows a SmartScreen warning ("Windows protected your PC"), click **More info → Run anyway**. Ledger is not digitally signed (no subscription required for the certificate), but the source code is fully open and auditable.
+3. Choose your installation directory (default: `C:\Program Files\Ledger`).
+4. Click **Install**. The installer creates a desktop shortcut and Start Menu entry.
+5. Launch **Ledger** from the desktop shortcut.
+
+On first launch, Ledger runs the guided setup tour (about 30 seconds). After that, you're in the main blotter.
+
+### Uninstalling
+
+Go to **Settings → Apps → Ledger → Uninstall**, or run `Uninstall Ledger.exe` in your installation folder. Your data folder (`%APPDATA%\Ledger\`) is **not** deleted during uninstall — your trades are preserved. Delete the folder manually if you want a clean removal.
+
+---
+
+## Quick Start
+
+### 1. Create Your First Account
+
+Click **New Trade → Accounts** (or go to **Settings → Accounts**) and create your first trading account. Specify:
+- Account name (e.g., "ICMarkets Live")
+- Broker name
+- Account type (LIVE / DEMO / PROP)
+- Initial balance
+
+### 2. Log a Manual Trade
+
+Press **New Trade** in the top bar, or use the keyboard shortcut **Ctrl+Alt+L** to open the overlay.
+
+Fill in:
+- **Symbol** — EURUSD, XAUUSD, US30, etc.
+- **Direction** — LONG or SHORT
+- **Entry price, lots, timestamp**
+- **Stop loss price** (enables R-multiple calculation)
+- **Setup name** (optional but recommended for analytics)
+
+Click **Save**. The trade appears in the blotter immediately.
+
+### 3. Import a Statement
+
+Go to **Import** (sidebar) and drag your MT4 or MT5 HTML statement onto the import area. Ledger parses the statement, shows you a preview of what will be imported, and lets you confirm before committing. Any rows that can't be parsed are listed separately so nothing is silently dropped.
+
+### 4. Set Up the Live Bridge (Optional)
+
+See [Live Bridge Setup](#live-bridge-setup) below. This is the most powerful feature — trades appear in your journal the instant MetaTrader opens them, so you can add your setup notes and screenshots while you're still in the trade.
+
+---
+
+## Features
+
+### Trade Blotter
+
+The main view shows all your trades in a fast virtualized table.
+
+- **Columns:** Direction badge, Symbol, Open time, Close time, Lots, Pips, P&L, R-multiple, Status, Setup name
+- **Filters panel** (toggle with the sliders icon): filter by status, direction, symbol, setup, session, date range, P&L range, tags
+- **FTS5 full-text search:** type in the search bar to search across symbols, notes, setup names, and tags in milliseconds
+- **Bulk select:** check multiple rows (or the header checkbox to select all) to perform bulk actions — Move to Trash
+- **Pagination:** 100 trades per page with prev/next controls
+- **Live badge:** trades from the MT4/MT5 bridge show a pulsing green "LIVE" badge while open
+
+Click any row to open the trade detail drawer.
+
+### Trade Detail Drawer
+
+Everything about a trade in one panel:
+
+- **Edit** any field: setup name, entry model, market condition, confidence (1–5), pre/post-trade emotion, notes
+- **Add screenshots:** paste from clipboard (Ctrl+V), or use the **Capture** button (Ctrl+Alt+L) to snap the MT4/5 chart
+- **Entry/Exit legs table:** all partial fills and scale-ins/outs with their timestamps, prices, and volumes
+- **Calculated metrics:** net pips, net P&L, R-multiple, commission, swap, weighted avg entry/exit
+- **News tags:** any economic events that occurred while the trade was open are automatically tagged (requires calendar import)
+- **Audit log:** every change to the trade is recorded with a timestamp
+
+### Dashboard
+
+Go to **Dashboard** for a performance overview across any date range and account:
+
+| Widget | What it shows |
+|---|---|
+| Equity Curve | Cumulative P&L over time |
+| Drawdown | Running drawdown from peak (shaded area) |
+| Win Rate | Win / Loss / BE split as donut chart |
+| Profit Factor | Gross profit ÷ gross loss |
+| Expectancy | Expected P&L per trade |
+| R Distribution | Histogram of R-multiples |
+| Setup Performance | Win rate and avg R per setup name |
+| Session Performance | Win rate by London/NY/Asian/Off-hours session |
+| Day Heatmap | P&L by day of week |
+| Hour Heatmap | P&L by hour of day |
+
+### Reviews
+
+Go to **Reviews** to write daily or weekly trade reviews with markdown support. Reviews are linked to the date range they cover and stored alongside your trades.
+
+### Calendar
+
+Go to **Calendar** to see your trades alongside high-impact economic news events. Import the ForexFactory calendar CSV (downloadable from their website) and Ledger will automatically tag trades that occurred within 15 minutes of a news event.
+
+### Reports
+
+Go to **Reports** to generate:
+
+- **Per-trade PDF** — all trade details, screenshots, entry/exit table, and metrics on one page
+- **Date range summary PDF** — equity curve, statistics table, and trade list for any period
+- **CSV export** — export filtered trades to CSV for further analysis in Excel
+
+### Hotkey Overlay
+
+Press **Ctrl+Alt+L** anywhere on your screen (even while MetaTrader is focused) to open a compact 420×640 overlay. The overlay lets you:
+
+- Log a new trade quickly without switching windows
+- Capture a screenshot of the chart that's behind the overlay
+- The overlay auto-hides when you click elsewhere
+
+Change the hotkey in **Settings → General**.
+
+### Backup & Restore
+
+- **Auto-backup:** Ledger creates a ZIP backup of your database automatically when you close the app.
+- **Manual backup:** Settings → Backup → Backup Now creates an immediate backup.
+- **Restore:** Settings → Backup → select a backup → Restore. The backup ZIP contains your full database and all screenshots.
+
+Your backups live in `%APPDATA%\Ledger\backups\`. For cloud redundancy, move your data folder to OneDrive or Dropbox via Settings → Data.
+
+---
+
+## Live Bridge Setup
+
+The live bridge lets MetaTrader 4 or 5 send trades to Ledger in real time using a bundled Expert Advisor (EA). When you open a position in MT4/MT5, Ledger sees it within seconds and creates an OPEN trade. You add your "why" notes, screenshots, and setup details while the trade is live. When you close the position, Ledger updates the same trade record with the exit price and P&L — all your annotations are preserved.
+
+### Step 1: Copy the Expert Advisor
+
+After installing Ledger, the EA files are at:
+```
+%USERPROFILE%\Documents\Ledger\mql\LedgerBridge.mq5   (for MT5)
+%USERPROFILE%\Documents\Ledger\mql\LedgerBridge.mq4   (for MT4)
+```
+
+**For MetaTrader 5:**
+1. In MT5, press **F4** to open MetaEditor.
+2. In MetaEditor, navigate to `File → Open Data Folder`. This opens the MT5 data directory.
+3. Navigate to `MQL5\Experts\`.
+4. Copy `LedgerBridge.mq5` into that folder.
+5. Back in MetaEditor, press **F7** to compile. You should see "0 errors, 0 warnings".
+6. In MT5, open the **Navigator** panel (Ctrl+N), expand **Expert Advisors**, and drag **LedgerBridge** onto any chart.
+7. In the EA settings dialog:
+   - Enable **Allow DLL imports** — not required for this EA
+   - Enable **Allow automated trading**
+   - Click OK
+
+**For MetaTrader 4:**
+Same steps but use `MQL4\Experts\` and `LedgerBridge.mq4`.
+
+### Step 2: Configure the Bridge in Ledger
+
+1. In Ledger, go to **Settings → Live Bridge**.
+2. In the **Watch Directory** field, enter the path to the `Ledger` folder inside your MT4/MT5 data directory. Example:
+   ```
+   C:\Users\YourName\AppData\Roaming\MetaQuotes\Terminal\<hash>\MQL5\Files\Ledger
+   ```
+   To find the correct path: in MT5, press **F4 → File → Open Data Folder**, then navigate to `MQL5\Files\Ledger\`. Copy that path.
+3. Click **Set & Start Watching**. The status indicator should turn green: **Running**.
+
+### Step 3: Verify It's Working
+
+1. Open a position in MT4/MT5 on any symbol.
+2. Within 5 seconds, you should see a toast notification in Ledger: *"EURUSD LONG — position opened"*.
+3. The trade appears in the blotter with a pulsing green LIVE badge.
+4. Add your notes and screenshots now, while the trade is live.
+5. When you close the position in MT4/MT5, the trade updates automatically with the exit price and P&L.
+
+### Troubleshooting the Bridge
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No trades appearing after EA attaches | Watch directory is wrong | Copy the path from MT5's Open Data Folder |
+| EA compiles but shows "not authorized" | AutoTrading is disabled | Click the AutoTrading button in the MT5 toolbar |
+| Trades appear but duplicate on reimport | Normal behaviour — deduplication is automatic | No action needed |
+| EA shows an error in the Journal tab | Check the MT5 Journal for details | Most common: wrong file permissions on the Ledger folder |
+
+---
+
+## Settings Reference
+
+| Setting | Description |
+|---|---|
+| Theme | Dark / Light / System |
+| Display Timezone | All timestamps in the app are displayed in this IANA timezone |
+| Launch on startup | Start Ledger when Windows logs in |
+| Auto-update | Check for new versions on startup (off by default; requires internet) |
+| Hotkey | Global shortcut to open the capture overlay (default: Ctrl+Alt+L) |
+| Watch Directory | MT4/5 files folder for the live bridge |
+| Backup | Manual backup and restore controls |
+| Data Folder | Location of your Ledger data (database + screenshots + backups) |
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Alt+L` | Open capture overlay (global, works in any app) |
+| `?` | Show keyboard shortcuts reference |
+| `N` | New trade (when blotter is focused) |
+| `Esc` | Close any open drawer or dialog |
+| `Ctrl+Z` | Undo last trade edit (in trade form) |
+| `←` / `→` | Previous / next trade in the detail drawer |
+
+---
+
+## Data Folder Layout
+
+```
+%APPDATA%\Ledger\
+├── ledger.db              ← SQLite database (all your trades)
+├── config.json            ← App settings (timezone, theme, hotkey, etc.)
+├── screenshots\           ← Trade screenshots (WebP format)
+│   └── unmatched\        ← Screenshots not yet linked to a trade
+├── bridge\
+│   ├── inbox\            ← MT4/5 EA writes trade JSON files here
+│   ├── processed\        ← Successfully processed bridge files
+│   └── failed\           ← Bridge files that couldn't be parsed
+├── imports\               ← Uploaded statement files
+├── backups\
+│   └── auto\            ← Automatic backups on close
+├── calendar\              ← Imported ForexFactory CSV files
+├── reports\               ← Generated PDF reports
+└── logs\                  ← Application log files
+```
+
+To move your data folder to a different location (e.g., OneDrive or a different drive):
+1. Go to **Settings → Data → Open Folder**.
+2. Copy the entire `Ledger\` folder to the new location.
+3. In Settings → Data → Data Folder path, paste the new path and click Save.
+4. Restart Ledger. It will use the new location on next launch.
+
+---
+
+## Privacy & Security
+
+- **No network calls** — Ledger makes zero outbound connections unless you enable auto-update in Settings.
+- **No telemetry, no analytics.** Period. The source code is public — verify for yourself.
+- **No login required.** There is no account, no email, no password.
+- **All data is on your machine.** The database is a standard SQLite file you can open with any SQLite browser.
+- **electron-log never records trade content, notes, or screenshots.** Log files only contain operational events (startup, file errors, bridge status).
+- **Sandboxed renderer.** The renderer process runs in a sandboxed Electron context with contextIsolation enabled. The IPC bridge only exposes whitelisted methods.
+
+---
+
+## Building from Source
+
+**Prerequisites:**
+- Node.js 20+
+- npm 10+
+- Windows (for packaging — development works on macOS/Linux too)
+
+```bash
+git clone https://github.com/ikebude/ledger.git
+cd ledger
+npm install
+npm run dev          # Start development server (hot reload)
+npm test             # Run test suite (34+ tests)
+npm run typecheck    # TypeScript type check
+npm run build        # Build renderer + main (no installer)
+npm run package:win  # Build Windows NSIS installer → release/
+```
+
+The packaged installer will be at `release/Ledger Setup x.x.x.exe`.
+
+### Project Structure
+
+```
+electron/
+  main.ts          ← Electron main process (window, hotkey, tray, IPC registration)
+  preload.ts       ← Typed IPC bridge (all renderer↔main channels)
+  ipc/             ← IPC handler modules (one per domain)
+  services/        ← Long-running services (bridge-watcher, backup)
+  mql/             ← MT4 + MT5 Expert Advisors
+src/
+  lib/
+    pnl.ts         ← P&L engine (single source of truth, fully tested)
+    tz.ts          ← Timezone + session detection (DST-safe, IANA only)
+    db/
+      schema.ts    ← Drizzle ORM schema (18 tables)
+      queries.ts   ← All database queries
+    importers/     ← MT4/MT5 HTML statement parsers, CSV importer
+  pages/           ← Route components
+  components/      ← Reusable UI components
+tests/
+  pnl.test.ts      ← 34+ unit tests for the P&L engine
+schema.sql         ← SQLite DDL source of truth
+```
+
+---
+
+## FAQ
+
+**Q: Can I use Ledger with a broker other than MetaTrader?**
+> Yes. The statement importer supports MT4 HTML statements, MT5 HTML statements, and generic CSV. For live tracking you need MT4 or MT5. Other platforms can be logged manually or imported via CSV.
+
+**Q: Is there a mobile app?**
+> No. Ledger is a Windows desktop app only. The data folder can be synced to a phone via OneDrive/Dropbox for viewing, but the app itself is Windows-only.
+
+**Q: Can I have multiple trading accounts?**
+> Yes. Create as many accounts as you need in Settings → Accounts. Each account has its own analytics, and the account selector in the top bar filters the entire app to that account.
+
+**Q: How do I back up to the cloud?**
+> Move your data folder to a OneDrive or Dropbox folder via Settings → Data. All your trades, screenshots, and backups will sync automatically.
+
+**Q: Where are my screenshots stored?**
+> In `%APPDATA%\Ledger\screenshots\`. Each screenshot is a WebP file named with a random ID. They are linked to their trade in the database.
+
+**Q: Can I delete a trade permanently?**
+> Yes. Deleting from the blotter moves it to Trash (soft-delete). Go to **Trash** in the sidebar to permanently delete trades. Hard-delete cannot be undone.
+
+**Q: Why does the installer show a SmartScreen warning?**
+> Ledger is not code-signed with an Extended Validation certificate (these cost hundreds of dollars per year). The source code is fully public — you can review, build, and verify it yourself. Click "More info → Run anyway" to proceed.
+
+**Q: Does Ledger work without MetaTrader?**
+> Fully. You can log every trade manually and import statements. The live bridge is optional.
+
+**Q: How do I report a bug or request a feature?**
+> Open an issue at [github.com/ikebude/ledger/issues](https://github.com/ikebude/ledger/issues).
+
+---
+
+## Changelog
+
+### v1.0.0 (Initial Release)
+- Full blotter with virtualized table, filters, FTS5 search, and bulk select
+- Trade detail drawer with full edit, screenshots, legs, audit log
+- Dashboard with 10 analytics widgets
+- Statement importer (MT4 HTML, MT5 HTML, CSV)
+- Live MT4/MT5 bridge with real-time open/close tracking
+- Daily and weekly review pages with Markdown editor
+- ForexFactory calendar import with automatic news tagging
+- PDF reports (per-trade and date-range summary)
+- Backup & restore (ZIP, auto on close)
+- Prop firm guardrails and persistent risk banner
+- Trash and audit log UI
+- Interactive guided tour on first launch
+- Global hotkey overlay (Ctrl+Alt+L, always-on-top)
+- System tray with live daily P&L
+- Lot-size / risk calculator
+- Auto-launch on Windows startup (opt-in)
+- Auto-update check (opt-in)
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+*Built with Electron · React 18 · TypeScript · SQLite · Drizzle ORM · TanStack Router/Query/Table · Recharts · shadcn/ui · Tailwind CSS*

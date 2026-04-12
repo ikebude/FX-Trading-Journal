@@ -1,0 +1,24 @@
+{
+  // TypeScript config for the Electron main process and shared lib code.
+  // Used by the IDE for type-checking electron/ files as Node.js (not browser).
+  // electron-vite uses esbuild for compilation, but reads this for transpile settings.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "composite": false,
+    "noEmit": true,
+    // Node types only — no DOM/browser APIs in the main process
+    "types": ["node"]
+  },
+  // Include both the electron main process files and the shared lib files it imports
+  "include": [
+    "electron/**/*",
+    "src/lib/**/*"
+  ]
+}
