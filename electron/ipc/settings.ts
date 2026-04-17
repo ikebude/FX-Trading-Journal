@@ -55,16 +55,8 @@ export function registerSettingsHandlers(ctx: IpcContext): void {
     shell.showItemInFolder(filePath);
   });
 
-  ipcMain.handle('capture:show', () => {
-    ctx.showOverlay();
-  });
-
-  ipcMain.handle('capture:hide', () => {
-    ctx.hideOverlay();
-  });
-
-  ipcMain.handle('capture:foreground-window', async () => {
-    // Screenshot capture of the foreground window — implemented in Milestone 10.
-    return null;
-  });
+  // capture:show, capture:hide, capture:foreground-window are registered by
+  // registerCaptureHandlers (capture.ts) which holds the live implementations.
+  // They were previously duplicated here — removed to prevent Electron's
+  // "Attempted to register a second handler" crash on startup.
 }

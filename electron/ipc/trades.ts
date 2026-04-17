@@ -16,6 +16,7 @@ import {
   updateTrade,
   getInstrument,
 } from '../../src/lib/db/queries';
+import { withAsyncTransaction } from '../../src/lib/db/client';
 import { computeTradeMetrics } from '../../src/lib/pnl';
 import {
   CreateTradeSchema,
@@ -24,6 +25,7 @@ import {
   UpdateTradeSchema,
 } from '../../src/lib/schemas';
 import { detectSession } from '../../src/lib/tz';
+import { invalidateDashboardCache } from './dashboard';
 
 export function registerTradeHandlers(): void {
   ipcMain.handle('trades:list', async (_e, filters: unknown) => {
@@ -55,59 +57,65 @@ export function registerTradeHandlers(): void {
         session = detectSession(new Date(parsed.entryLeg.timestampUtc));
       }
 
-      const trade = await createTrade({
-        accountId: parsed.accountId,
-        symbol: parsed.symbol.toUpperCase(),
-        direction: parsed.direction,
-        status: 'OPEN',
-        initialStopPrice: parsed.initialStopPrice ?? null,
-        initialTargetPrice: parsed.initialTargetPrice ?? null,
-        plannedRr: parsed.plannedRr ?? null,
-        plannedRiskAmount: parsed.plannedRiskAmount ?? null,
-        plannedRiskPct: parsed.plannedRiskPct ?? null,
-        setupName: parsed.setupName ?? null,
-        session: session ?? null,
-        marketCondition: parsed.marketCondition ?? null,
-        entryModel: parsed.entryModel ?? null,
-        confidence: parsed.confidence ?? null,
-        preTradeEmotion: parsed.preTradeEmotion ?? null,
-        postTradeEmotion: null,
-        openedAtUtc: parsed.entryLeg?.timestampUtc ?? null,
-        closedAtUtc: null,
-        netPnl: null,
-        netPips: null,
-        rMultiple: null,
-        totalCommission: 0,
-        totalSwap: 0,
-        weightedAvgEntry: null,
-        weightedAvgExit: null,
-        totalEntryVolume: 0,
-        totalExitVolume: 0,
-        externalTicket: parsed.externalTicket ?? null,
-        externalPositionId: parsed.externalPositionId ?? null,
-        source: parsed.source,
-        deletedAtUtc: null,
-        isSample: false,
+      // Wrap create + optional entry leg + recompute in a single transaction
+      // so a failure mid-way never leaves a trade with no legs or stale metrics.
+      const tradeId = await withAsyncTransaction(async () => {
+        const trade = await createTrade({
+          accountId: parsed.accountId,
+          symbol: parsed.symbol.toUpperCase(),
+          direction: parsed.direction,
+          status: 'OPEN',
+          initialStopPrice: parsed.initialStopPrice ?? null,
+          initialTargetPrice: parsed.initialTargetPrice ?? null,
+          plannedRr: parsed.plannedRr ?? null,
+          plannedRiskAmount: parsed.plannedRiskAmount ?? null,
+          plannedRiskPct: parsed.plannedRiskPct ?? null,
+          setupName: parsed.setupName ?? null,
+          session: session ?? null,
+          marketCondition: parsed.marketCondition ?? null,
+          entryModel: parsed.entryModel ?? null,
+          confidence: parsed.confidence ?? null,
+          preTradeEmotion: parsed.preTradeEmotion ?? null,
+          postTradeEmotion: null,
+          openedAtUtc: parsed.entryLeg?.timestampUtc ?? null,
+          closedAtUtc: null,
+          netPnl: null,
+          netPips: null,
+          rMultiple: null,
+          totalCommission: 0,
+          totalSwap: 0,
+          weightedAvgEntry: null,
+          weightedAvgExit: null,
+          totalEntryVolume: 0,
+          totalExitVolume: 0,
+          externalTicket: parsed.externalTicket ?? null,
+          externalPositionId: parsed.externalPositionId ?? null,
+          source: parsed.source,
+          deletedAtUtc: null,
+          isSample: false,
+        });
+
+        if (parsed.entryLeg) {
+          await createLeg({
+            tradeId: trade.id,
+            legType: 'ENTRY',
+            timestampUtc: parsed.entryLeg.timestampUtc,
+            price: parsed.entryLeg.price,
+            volumeLots: parsed.entryLeg.volumeLots,
+            commission: parsed.entryLeg.commission,
+            swap: parsed.entryLeg.swap,
+            brokerProfit: null,
+            externalDealId: null,
+            notes: null,
+          });
+          await recomputeAndSaveTrade(trade.id);
+        }
+
+        return trade.id;
       });
 
-      // If an entry leg was provided, insert it and recompute metrics
-      if (parsed.entryLeg) {
-        await createLeg({
-          tradeId: trade.id,
-          legType: 'ENTRY',
-          timestampUtc: parsed.entryLeg.timestampUtc,
-          price: parsed.entryLeg.price,
-          volumeLots: parsed.entryLeg.volumeLots,
-          commission: parsed.entryLeg.commission,
-          swap: parsed.entryLeg.swap,
-          brokerProfit: null,
-          externalDealId: null,
-          notes: null,
-        });
-        await recomputeAndSaveTrade(trade.id);
-      }
-
-      return await getTrade(trade.id);
+      invalidateDashboardCache();
+      return await getTrade(tradeId);
     } catch (err) {
       log.error('trades:create', err);
       throw new Error('Failed to create trade');
@@ -119,6 +127,7 @@ export function registerTradeHandlers(): void {
       const parsed = UpdateTradeSchema.parse(patch);
       await updateTrade(id, parsed as Parameters<typeof updateTrade>[1]);
       await recomputeAndSaveTrade(id);
+      invalidateDashboardCache();
       return await getTrade(id);
     } catch (err) {
       log.error('trades:update', err);
@@ -129,6 +138,7 @@ export function registerTradeHandlers(): void {
   ipcMain.handle('trades:soft-delete', async (_e, ids: string[]) => {
     try {
       await softDeleteTrades(ids);
+      invalidateDashboardCache();
     } catch (err) {
       log.error('trades:soft-delete', err);
       throw new Error('Failed to delete trades');
@@ -138,6 +148,7 @@ export function registerTradeHandlers(): void {
   ipcMain.handle('trades:restore', async (_e, ids: string[]) => {
     try {
       await restoreTrades(ids);
+      invalidateDashboardCache();
     } catch (err) {
       log.error('trades:restore', err);
       throw new Error('Failed to restore trades');
@@ -147,6 +158,7 @@ export function registerTradeHandlers(): void {
   ipcMain.handle('trades:permanently-delete', async (_e, ids: string[]) => {
     try {
       await hardDeleteTrades(ids);
+      invalidateDashboardCache();
     } catch (err) {
       log.error('trades:permanently-delete', err);
       throw new Error('Failed to permanently delete trades');
@@ -156,6 +168,7 @@ export function registerTradeHandlers(): void {
   ipcMain.handle('trades:bulk-update', async (_e, ids: string[], patch: unknown) => {
     try {
       await bulkUpdateTrades(ids, patch as Parameters<typeof bulkUpdateTrades>[1]);
+      invalidateDashboardCache();
     } catch (err) {
       log.error('trades:bulk-update', err);
       throw new Error('Failed to bulk update trades');

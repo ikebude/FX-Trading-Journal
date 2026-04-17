@@ -413,9 +413,9 @@ export const auditLog = sqliteTable(
       ],
     }).notNull(),
     entityId: text('entity_id').notNull(),
-    tradeId: text('trade_id').references(() => trades.id, { onDelete: 'cascade' }),
+    tradeId: text('trade_id').references(() => trades.id, { onDelete: 'set null' }),
     action: text('action', {
-      enum: ['CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'MERGE', 'BULK_UPDATE'],
+      enum: ['CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'MERGE', 'BULK_UPDATE', 'HARD_DELETE'],
     }).notNull(),
     changedFields: text('changed_fields'),
     actor: text('actor').notNull().default('user'),

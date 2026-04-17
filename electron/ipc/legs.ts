@@ -20,6 +20,7 @@ import { getDb } from '../../src/lib/db/client';
 import { tradeLegs } from '../../src/lib/db/schema';
 import { CreateLegSchema, UpdateLegSchema } from '../../src/lib/schemas';
 import { recomputeAndSaveTrade } from './trades';
+import { invalidateDashboardCache } from './dashboard';
 
 // ─────────────────────────────────────────────────────────────
 // Per-trade serialization queue (H-1)
@@ -34,17 +35,16 @@ const tradeOpQueue = new Map<string, Promise<void>>();
  */
 function enqueue(tradeId: string, fn: () => Promise<void>): Promise<void> {
   const prev = tradeOpQueue.get(tradeId) ?? Promise.resolve();
-  const next = prev.then(fn).catch((err) => {
+  // Single execution: tracked holds the promise for fn(); next adds error handling.
+  // Previously both `next` and `tracked` were independent `.then(fn)` chains on
+  // `prev`, causing fn() to execute twice. Now they share one execution.
+  const tracked = prev.then(fn);
+  const next = tracked.catch((err) => {
     log.error(`enqueue error for trade ${tradeId}:`, err);
   });
-  // Store the chain without the catch so the caller can await errors
-  const tracked = prev.then(fn);
-  tradeOpQueue.set(tradeId, next); // use the caught version to keep queue alive
-  // Clean up after completion
+  tradeOpQueue.set(tradeId, next);
   next.finally(() => {
-    if (tradeOpQueue.get(tradeId) === next) {
-      tradeOpQueue.delete(tradeId);
-    }
+    if (tradeOpQueue.get(tradeId) === next) tradeOpQueue.delete(tradeId);
   });
   return tracked;
 }
@@ -84,6 +84,7 @@ export function registerLegHandlers(): void {
         await recomputeAndSaveTrade(parsed.tradeId);
       });
 
+      invalidateDashboardCache();
       return result;
     } catch (err) {
       log.error('legs:create', err);
@@ -110,6 +111,7 @@ export function registerLegHandlers(): void {
         await recomputeAndSaveTrade(tradeId);
       });
 
+      invalidateDashboardCache();
       return result;
     } catch (err) {
       log.error('legs:update', err);
@@ -131,6 +133,8 @@ export function registerLegHandlers(): void {
         await deleteLeg(id);
         await recomputeAndSaveTrade(tradeId);
       });
+
+      invalidateDashboardCache();
     } catch (err) {
       log.error('legs:delete', err);
       throw new Error('Failed to delete fill');

@@ -72,8 +72,9 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration001(sqlite, schemaPath);
   }
 
-  // Future migrations go here:
-  // if (currentVersion < 2) { applyMigration002(sqlite); }
+  if (currentVersion < 2) {
+    applyMigration002(sqlite);
+  }
 
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
@@ -206,6 +207,68 @@ const INSTRUMENTS: InstrumentRow[] = [
 // Graceful shutdown
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// Migration 002 — audit_log: ON DELETE CASCADE → SET NULL + HARD_DELETE action
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Recreates audit_log with:
+ *  1. trade_id FK changed from ON DELETE CASCADE to ON DELETE SET NULL —
+ *     audit history survives hard-deletes (trade_id becomes NULL, entry kept).
+ *  2. 'HARD_DELETE' added to the action CHECK constraint.
+ *
+ * SQLite does not support ALTER COLUMN/ALTER CONSTRAINT, so we use the
+ * standard CREATE-new / INSERT-SELECT / DROP-old / RENAME pattern inside
+ * a transaction to guarantee atomicity.
+ */
+function applyMigration002(sqlite: Database.Database): void {
+  log.info('Database: applying migration 002 (audit_log ON DELETE SET NULL)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS audit_log_v2 (
+        id              TEXT PRIMARY KEY,
+        entity_type     TEXT NOT NULL CHECK(entity_type IN
+                        ('TRADE','LEG','SCREENSHOT','NOTE','TAG_LINK','TRADE_TAGS','REVIEW','ACCOUNT')),
+        entity_id       TEXT NOT NULL,
+        trade_id        TEXT REFERENCES trades(id) ON DELETE SET NULL,
+        action          TEXT NOT NULL CHECK(action IN
+                        ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE','HARD_DELETE')),
+        changed_fields  TEXT,
+        actor           TEXT NOT NULL DEFAULT 'user',
+        timestamp_utc   TEXT NOT NULL
+      );
+
+      INSERT INTO audit_log_v2
+        SELECT id, entity_type, entity_id, trade_id, action,
+               changed_fields, actor, timestamp_utc
+        FROM audit_log;
+
+      DROP TABLE audit_log;
+
+      ALTER TABLE audit_log_v2 RENAME TO audit_log;
+
+      CREATE INDEX IF NOT EXISTS idx_audit_trade  ON audit_log(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_time   ON audit_log(timestamp_utc);
+      CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
+    `);
+    sqlite.pragma('user_version = 2');
+  });
+
+  migrate();
+  log.info('Database: migration 002 complete');
+}
+
+/**
+ * Create a WAL-safe hot backup of the live database to `destPath`.
+ * Uses better-sqlite3's built-in backup API which produces a consistent
+ * snapshot even while the database is open and being written to.
+ */
+export async function backupDatabaseTo(destPath: string): Promise<void> {
+  if (!_sqlite) throw new Error('Database not initialized');
+  await _sqlite.backup(destPath);
+}
+
 /**
  * Run a function inside a SQLite transaction.
  * better-sqlite3 transactions are synchronous — the callback must not be async.
@@ -220,16 +283,24 @@ export function withTransaction<T>(fn: () => T): T {
  * Run an async function inside a SQLite transaction using manual BEGIN/COMMIT/ROLLBACK.
  * Use this (instead of withTransaction) when the callback contains await expressions.
  * Node.js + better-sqlite3 are both single-threaded, so there is no interleaving risk.
+ *
+ * Nested calls: if already in a transaction (e.g. called from within another
+ * withAsyncTransaction), fn() runs directly without a new BEGIN — better-sqlite3
+ * does not support nested BEGIN statements.
  */
 export async function withAsyncTransaction<T>(fn: () => Promise<T>): Promise<T> {
   if (!_sqlite) throw new Error('Database not initialized');
+  // Safe nesting: if a transaction is already open, run fn() within it.
+  if (_sqlite.inTransaction) {
+    return fn();
+  }
   _sqlite.prepare('BEGIN').run();
   try {
     const result = await fn();
     _sqlite.prepare('COMMIT').run();
     return result;
   } catch (err) {
-    _sqlite.prepare('ROLLBACK').run();
+    if (_sqlite.inTransaction) _sqlite.prepare('ROLLBACK').run();
     throw err;
   }
 }
@@ -240,6 +311,8 @@ export async function withAsyncTransaction<T>(fn: () => Promise<T>): Promise<T> 
  */
 export function closeDatabase(): void {
   if (_sqlite) {
+    // Update query planner statistics for faster queries on next launch.
+    try { _sqlite.pragma('optimize'); } catch { /* non-fatal */ }
     _sqlite.close();
     _sqlite = null;
     _db = null;

@@ -38,7 +38,7 @@ export function detectAndParse(content: string, filename: string): DetectResult 
       lower.includes('metatrader 5') ||
       lower.includes('meta trader 5') ||
       lower.includes('position id') ||
-      lower.includes('position')
+      lower.includes('positionid')
     ) {
       return { format: 'MT5_HTML', result: parseMt5Html(content) };
     }

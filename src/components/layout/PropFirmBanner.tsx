@@ -13,12 +13,8 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ShieldCheck, ShieldAlert } from 'lucide-react';
-import {
-  startOfDay,
-  endOfDay,
-  formatISO,
-} from 'date-fns';
-import { formatInTimeZone } from 'date-fns-tz';
+import { startOfDay, endOfDay } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { computeGuardrails } from '@/lib/prop-firm';
 import { formatCurrency } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -135,11 +131,12 @@ export function PropFirmBanner() {
     staleTime: 1000 * 60, // 1 minute
   });
 
-  // Today's closed trades (in account timezone)
-  const todayStart = formatISO(
-    startOfDay(new Date()),
-  );
-  const todayEnd = formatISO(endOfDay(new Date()));
+  // Today's closed trades — computed in the user's configured display timezone so that
+  // "today" matches the timezone they are trading in, not the browser's local timezone.
+  const tz = displayTimezone || 'UTC';
+  const nowInTz = toZonedTime(new Date(), tz);
+  const todayStart = fromZonedTime(startOfDay(nowInTz), tz).toISOString();
+  const todayEnd = fromZonedTime(endOfDay(nowInTz), tz).toISOString();
 
   const { data: todayTradeData } = useQuery<{ rows: TradeRow[]; total: number }>({
     queryKey: ['trades-prop-today', activeAccountId, todayStart],

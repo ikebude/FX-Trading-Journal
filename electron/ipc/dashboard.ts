@@ -133,11 +133,18 @@ export function registerDashboardHandlers(): void {
       // Track symbols we couldn't compute for (M-5: surface to UI)
       const unknownSymbols = new Set<string>();
 
-      // Fetch ALL legs in one query — avoids N+1 (one query per trade)
+      // Fetch ALL legs — chunked to respect SQLite's 999-variable SQLITE_LIMIT.
+      // inArray() on >999 IDs throws at runtime; chunk into batches of 900.
       const tradeIds = tradeRows.map((t) => t.id);
-      const allLegs = tradeIds.length > 0
-        ? await db.select().from(tradeLegs).where(inArray(tradeLegs.tradeId, tradeIds))
-        : [];
+      const allLegs: (typeof tradeLegs.$inferSelect)[] = [];
+      if (tradeIds.length > 0) {
+        const CHUNK = 900;
+        for (let i = 0; i < tradeIds.length; i += CHUNK) {
+          const batch = tradeIds.slice(i, i + CHUNK);
+          const rows = await db.select().from(tradeLegs).where(inArray(tradeLegs.tradeId, batch));
+          allLegs.push(...rows);
+        }
+      }
       const legsByTrade = new Map<string, typeof allLegs>();
       for (const leg of allLegs) {
         if (!legsByTrade.has(leg.tradeId)) legsByTrade.set(leg.tradeId, []);

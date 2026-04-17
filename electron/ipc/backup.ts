@@ -36,7 +36,7 @@
  * structure manually. This is ~100 lines but has zero external deps.
  */
 
-import { ipcMain, dialog, app } from 'electron';
+import { ipcMain, app } from 'electron';
 import {
   readdirSync,
   statSync,
@@ -48,11 +48,12 @@ import {
   renameSync,
   rmSync,
 } from 'node:fs';
-import { join, relative, basename } from 'node:path';
+import { join, relative } from 'node:path';
 import { deflateRawSync } from 'node:zlib';
 import { format } from 'date-fns';
 import log from 'electron-log/main.js';
 
+import { backupDatabaseTo, closeDatabase, initializeDatabase } from '../../src/lib/db/client';
 import type { IpcContext } from './index';
 
 // ─────────────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ function collectFiles(dir: string, base: string): { name: string; data: Buffer }
 // Backup
 // ─────────────────────────────────────────────────────────────
 
-function createBackup(dataDir: string, configPath: string): string {
+async function createBackup(dataDir: string, configPath: string): Promise<string> {
   const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
   const backupDir = join(dataDir, 'backups');
   mkdirSync(backupDir, { recursive: true });
@@ -212,10 +213,18 @@ function createBackup(dataDir: string, configPath: string): string {
 
   const entries: { name: string; data: Buffer }[] = [];
 
-  // Add database
+  // Add database — use better-sqlite3's hot backup API for a WAL-safe consistent
+  // snapshot. Reading ledger.db directly while WAL mode is active can produce an
+  // inconsistent copy if there are uncommitted WAL transactions not yet checkpointed.
   const dbPath = join(dataDir, 'ledger.db');
   if (existsSync(dbPath)) {
-    entries.push({ name: 'ledger.db', data: readFileSync(dbPath) });
+    const tempDb = dbPath + '.bak-tmp';
+    try {
+      await backupDatabaseTo(tempDb);
+      entries.push({ name: 'ledger.db', data: readFileSync(tempDb) });
+    } finally {
+      if (existsSync(tempDb)) rmSync(tempDb);
+    }
   }
 
   // Add screenshots
@@ -320,6 +329,11 @@ async function restoreBackup(
       writeFileSync(dest, data);
     }
 
+    // Close the live DB connection before touching the file — required on Windows
+    // where the SQLite file is locked while open. Also ensures no in-flight writes
+    // are lost to the old database after the swap.
+    closeDatabase();
+
     // Swap in — copy staged db over the live db
     const liveDb = join(dataDir, 'ledger.db');
     const stagedDb = join(stageDir, 'ledger.db');
@@ -336,6 +350,12 @@ async function restoreBackup(
     }
 
     rmSync(stageDir, { recursive: true });
+
+    // Reopen the database against the newly restored file.
+    const schemaPath = app.isPackaged
+      ? join(process.resourcesPath, 'schema.sql')
+      : join(process.cwd(), 'schema.sql');
+    await initializeDatabase(liveDb, schemaPath);
 
     log.info(`backup: restored from ${zipPath}`);
     return { success: true };
@@ -356,9 +376,9 @@ export function registerBackupHandlers(ctx: IpcContext): void {
   ipcMain.removeHandler('backup:list');
   ipcMain.removeHandler('backup:restore');
 
-  ipcMain.handle('backup:now', () => {
+  ipcMain.handle('backup:now', async () => {
     try {
-      return createBackup(ctx.config.data_dir, configPath);
+      return await createBackup(ctx.config.data_dir, configPath);
     } catch (err) {
       log.error('backup:now', err);
       throw err;

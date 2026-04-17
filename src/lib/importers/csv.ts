@@ -73,8 +73,15 @@ export function parseCsv(csvText: string): ParseResult {
 
     const dirRaw = get(row, 'type') ?? get(row, 'direction') ?? '';
     const dirLower = dirRaw.toLowerCase();
-    const direction: 'LONG' | 'SHORT' =
-      dirLower.includes('buy') || dirLower.includes('long') ? 'LONG' : 'SHORT';
+    let direction: 'LONG' | 'SHORT';
+    if (dirLower.includes('buy') || dirLower.includes('long')) {
+      direction = 'LONG';
+    } else if (dirLower.includes('sell') || dirLower.includes('short')) {
+      direction = 'SHORT';
+    } else {
+      failed.push({ rowIndex: rowIdx, reason: `Unrecognizable direction "${dirRaw}" — expected buy/sell/long/short`, rawRow: row });
+      continue;
+    }
 
     const openTs = parseTs(get(row, 'openTime') ?? get(row, 'time'));
     const closeTs = parseTs(get(row, 'closeTime'));

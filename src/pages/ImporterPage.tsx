@@ -8,7 +8,7 @@
  *  Step 4: Result summary
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FileUp,
@@ -478,8 +478,17 @@ function CommitStep({
     queryFn: () => window.ledger.accounts.list(),
   });
 
-  const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id ?? '');
+  const [selectedAccountId, setSelectedAccountId] = useState('');
   const [committing, setCommitting] = useState(false);
+
+  // Auto-select the first account once the query resolves.
+  // useState() initial value runs before the query returns (accounts is [] at mount),
+  // so we must sync via useEffect when data arrives.
+  useEffect(() => {
+    if (!selectedAccountId && accounts.length > 0) {
+      setSelectedAccountId(accounts[0].id);
+    }
+  }, [accounts, selectedAccountId]);
   const [progress, setProgress] = useState(0);
 
   const mergeCount = [...reconcileActions.values()].filter((a) => a === 'merge').length;

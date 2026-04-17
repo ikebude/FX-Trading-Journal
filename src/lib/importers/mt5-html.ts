@@ -137,7 +137,7 @@ export function parseMt5Html(html: string): ParseResult {
 
     const legs: ParsedLeg[] = group.map((d) => ({
       externalDealId: d.dealId,
-      legType: isEntryDeal(d, group[0]) ? 'ENTRY' : 'EXIT',
+      legType: isEntryDeal(d, group[0], direction) ? 'ENTRY' : 'EXIT',
       timestampUtc: d.timestamp,
       price: d.price,
       volumeLots: d.volume,
@@ -245,11 +245,21 @@ function inferDirection(deal: RawDeal): 'LONG' | 'SHORT' | null {
   return null;
 }
 
-function isEntryDeal(deal: RawDeal, firstDeal: RawDeal): boolean {
+function isEntryDeal(deal: RawDeal, firstDeal: RawDeal, positionDirection: 'LONG' | 'SHORT'): boolean {
   // MT5 marks deals as in/out/inout in a separate column. If we have it, use it.
   if (deal.direction === 'in') return true;
   if (deal.direction === 'out') return false;
-  // Fallback: the first chronological deal is the entry, the rest are exits.
+  // No direction column — infer from type relative to the position's direction.
+  // For scale-in trades: LONG scale-ins have type "buy", SHORT scale-ins have type "sell".
+  const t = deal.type.toLowerCase();
+  if (positionDirection === 'LONG') {
+    if (t.includes('buy')) return true;
+    if (t.includes('sell')) return false;
+  } else {
+    if (t.includes('sell')) return true;
+    if (t.includes('buy')) return false;
+  }
+  // Absolute fallback: the first chronological deal is the entry.
   return deal === firstDeal;
 }
 

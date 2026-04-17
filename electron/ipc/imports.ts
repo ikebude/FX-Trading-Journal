@@ -21,11 +21,12 @@ import { nanoid } from 'nanoid';
 import { eq, and, isNull, sql, desc } from 'drizzle-orm';
 
 import { detectAndParse } from '../../src/lib/importers/detect';
-import { getDb } from '../../src/lib/db/client';
+import { getDb, withAsyncTransaction } from '../../src/lib/db/client';
 import { trades, tradeLegs, importRuns } from '../../src/lib/db/schema';
 import { detectSession } from '../../src/lib/tz';
 import { computeTradeMetrics } from '../../src/lib/pnl';
 import { getInstrument, listAccounts, writeAudit } from '../../src/lib/db/queries';
+import { invalidateDashboardCache } from './dashboard';
 import {
   scoreCandidate,
   extractQualitative,
@@ -156,6 +157,7 @@ async function executeMerge(
   accountId: string,
   source: 'MT4_HTML' | 'MT5_HTML' | 'CSV',
 ): Promise<void> {
+  await withAsyncTransaction(async () => {
   const db = getDb();
   const now = new Date().toISOString();
 
@@ -301,6 +303,7 @@ async function executeMerge(
   }
 
   await writeAudit('TRADE', choice.manualTradeId, 'MERGE', choice.manualTradeId);
+  }); // end withAsyncTransaction
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -459,75 +462,80 @@ export function registerImportHandlers(ctx: IpcContext): void {
               continue;
             }
 
-            // Determine session from first entry leg
-            const firstEntry = parsedTrade.legs.find((l) => l.legType === 'ENTRY');
-            const session = firstEntry
-              ? detectSession(new Date(firstEntry.timestampUtc))
-              : undefined;
+            // Wrap entire insert + legs + recompute in one transaction so a
+            // mid-operation failure never leaves a trade with no legs or stale metrics.
+            await withAsyncTransaction(async () => {
+              // Determine session from first entry leg
+              const firstEntry = parsedTrade.legs.find((l) => l.legType === 'ENTRY');
+              const session = firstEntry
+                ? detectSession(new Date(firstEntry.timestampUtc))
+                : undefined;
 
-            const now = new Date().toISOString();
-            const tradeId = nanoid();
+              const now = new Date().toISOString();
+              const tradeId = nanoid();
 
-            await db.insert(trades).values({
-              id: tradeId,
-              accountId,
-              symbol: parsedTrade.symbol.toUpperCase(),
-              direction: parsedTrade.direction,
-              status: 'OPEN',
-              externalPositionId: parsedTrade.externalPositionId,
-              source,
-              session: session ?? null,
-              openedAtUtc: firstEntry?.timestampUtc ?? null,
-              closedAtUtc: null,
-              netPnl: null,
-              netPips: null,
-              rMultiple: null,
-              totalCommission: 0,
-              totalSwap: 0,
-              weightedAvgEntry: null,
-              weightedAvgExit: null,
-              totalEntryVolume: 0,
-              totalExitVolume: 0,
-              deletedAtUtc: null,
-              isSample: false,
-              createdAtUtc: now,
-              updatedAtUtc: now,
-              initialStopPrice: null,
-              initialTargetPrice: null,
-              plannedRr: null,
-              plannedRiskAmount: null,
-              plannedRiskPct: null,
-              setupName: null,
-              marketCondition: null,
-              entryModel: null,
-              confidence: null,
-              preTradeEmotion: null,
-              postTradeEmotion: null,
-              externalTicket: null,
-            });
-
-            // Insert legs
-            for (const leg of parsedTrade.legs) {
-              await db.insert(tradeLegs).values({
-                id: nanoid(),
-                tradeId,
-                legType: leg.legType,
-                timestampUtc: leg.timestampUtc,
-                price: leg.price,
-                volumeLots: leg.volumeLots,
-                commission: leg.commission,
-                swap: leg.swap,
-                brokerProfit: leg.brokerProfit,
-                externalDealId: leg.externalDealId,
-                notes: null,
+              await db.insert(trades).values({
+                id: tradeId,
+                accountId,
+                symbol: parsedTrade.symbol.toUpperCase(),
+                direction: parsedTrade.direction,
+                status: 'OPEN',
+                externalPositionId: parsedTrade.externalPositionId,
+                source,
+                session: session ?? null,
+                openedAtUtc: firstEntry?.timestampUtc ?? null,
+                closedAtUtc: null,
+                netPnl: null,
+                netPips: null,
+                rMultiple: null,
+                totalCommission: 0,
+                totalSwap: 0,
+                weightedAvgEntry: null,
+                weightedAvgExit: null,
+                totalEntryVolume: 0,
+                totalExitVolume: 0,
+                deletedAtUtc: null,
+                isSample: false,
                 createdAtUtc: now,
+                updatedAtUtc: now,
+                initialStopPrice: null,
+                initialTargetPrice: null,
+                plannedRr: null,
+                plannedRiskAmount: null,
+                plannedRiskPct: null,
+                setupName: null,
+                marketCondition: null,
+                entryModel: null,
+                confidence: null,
+                preTradeEmotion: null,
+                postTradeEmotion: null,
+                externalTicket: null,
               });
-            }
 
-            // Recompute P&L
-            const instrument = await getInstrument(parsedTrade.symbol.toUpperCase());
-            if (instrument) {
-              try {
+              // Insert legs
+              for (const leg of parsedTrade.legs) {
+                await db.insert(tradeLegs).values({
+                  id: nanoid(),
+                  tradeId,
+                  legType: leg.legType,
+                  timestampUtc: leg.timestampUtc,
+                  price: leg.price,
+                  volumeLots: leg.volumeLots,
+                  commission: leg.commission,
+                  swap: leg.swap,
+                  brokerProfit: leg.brokerProfit,
+                  externalDealId: leg.externalDealId,
+                  notes: null,
+                  createdAtUtc: now,
+                });
+              }
+
+              // Audit entry for imported trade (Hard Rule #14)
+              await writeAudit('TRADE', tradeId, 'CREATE', tradeId);
+
+              // Recompute P&L
+              const instrument = await getInstrument(parsedTrade.symbol.toUpperCase());
+              if (instrument) {
                 const allLegs = await db
                   .select()
                   .from(tradeLegs)
@@ -574,13 +582,10 @@ export function registerImportHandlers(ctx: IpcContext): void {
                     updatedAtUtc: updateNow,
                   })
                   .where(eq(trades.id, tradeId));
-              } catch (pnlErr) {
-                log.warn(
-                  `Import: P&L compute failed for ${parsedTrade.externalPositionId}`,
-                  pnlErr,
-                );
+              } else {
+                log.warn(`Import: unknown instrument ${parsedTrade.symbol} — P&L not computed`);
               }
-            }
+            }); // end withAsyncTransaction
 
             imported++;
           } catch (tradeErr) {
@@ -612,6 +617,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
         });
 
         pendingParses.delete(parseResultId);
+        if (imported > 0 || merged > 0) invalidateDashboardCache();
 
         log.info(
           `Import complete: ${imported} imported, ${duplicate} duplicate, ${merged} merged, ${failed} failed`,
