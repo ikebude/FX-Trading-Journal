@@ -28,6 +28,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import type { Account } from '@/lib/db/schema';
+import { UpdateCheckButton } from '@/components/layout/UpdateBanner';
 
 // ─────────────────────────────────────────────────────────────
 // Section wrapper
@@ -193,6 +194,13 @@ function GeneralSection() {
           onChange={(val) => updateMutation.mutate({ auto_update: val })}
           disabled={updateMutation.isPending}
         />
+      </Row>
+
+      <Row
+        label="Check for updates"
+        description="Manually check for a newer version of Ledger"
+      >
+        <UpdateCheckButton />
       </Row>
     </Section>
   );
