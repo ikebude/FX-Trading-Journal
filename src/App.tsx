@@ -23,6 +23,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { PropFirmBanner } from '@/components/layout/PropFirmBanner';
 import { KeyboardShortcuts } from '@/components/help/KeyboardShortcuts';
+import { Glossary } from '@/components/help/Glossary';
 import { GuidedTour } from '@/components/tour/GuidedTour';
 import { useGlobalKeys } from '@/hooks/useGlobalKeys';
 import { NewTradeDialog } from '@/components/trade-form/NewTradeDialog';
@@ -108,6 +109,7 @@ function BridgeToastListener() {
 
 function AppShell() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   useGlobalKeys({ onShortcuts: () => setShortcutsOpen(true) });
 
@@ -128,7 +130,10 @@ function AppShell() {
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar onShortcuts={() => setShortcutsOpen(true)} />
+        <TopBar
+          onShortcuts={() => setShortcutsOpen(true)}
+          onGlossary={() => setGlossaryOpen(true)}
+        />
         <PropFirmBanner />
         <main className="flex flex-1 flex-col overflow-hidden">
           <Outlet />
@@ -138,6 +143,7 @@ function AppShell() {
       <TradeDetailDrawer />
       <BridgeToastListener />
       {shortcutsOpen && <KeyboardShortcuts onClose={() => setShortcutsOpen(false)} />}
+      {glossaryOpen && <Glossary open={glossaryOpen} onClose={() => setGlossaryOpen(false)} />}
       {tourActive && (
         <GuidedTour
           onComplete={() => {
