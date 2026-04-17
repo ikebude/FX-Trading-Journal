@@ -42,6 +42,7 @@ import {
   TooltipContent as HintTooltipContent,
   TooltipTrigger as HintTooltipTrigger,
 } from '@/components/ui/tooltip';
+import { MetricTooltip } from '@/components/help/MetricTooltip';
 import { useAppStore } from '@/stores/app-store';
 import type {
   AggregateMetrics,
@@ -93,17 +94,19 @@ function pnlFill(value: number): string {
 
 function WidgetCard({
   title,
+  metric,
   children,
   className,
 }: {
   title: string;
+  metric?: string;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn('rounded-lg border border-border bg-card p-4', className)}>
       <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
+        {metric ? <MetricTooltip metric={metric}>{title}</MetricTooltip> : title}
       </h3>
       {children}
     </div>
@@ -123,7 +126,13 @@ function EmptyWidget({ message = 'No data yet' }: { message?: string }) {
 // ─────────────────────────────────────────────────────────────
 
 function StatsRow({ agg }: { agg: AggregateMetrics }) {
-  const stats = [
+  const stats: Array<{
+    label: string;
+    value: string;
+    color?: string;
+    metric?: string;
+    tooltip?: string;
+  }> = [
     { label: 'Trades', value: String(agg.closedTrades) },
     {
       label: 'Win rate',
@@ -133,6 +142,7 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
     {
       label: 'Avg R',
       value: agg.averageR !== null ? formatR(agg.averageR) : '—',
+      metric: 'R-multiple',
       color:
         agg.averageR !== null
           ? agg.averageR >= 0
@@ -148,15 +158,16 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
             ? agg.profitFactor.toFixed(2)
             : '∞'
           : '—',
+      metric: 'Profit Factor',
       color:
         agg.profitFactor !== null && agg.profitFactor >= 1
           ? 'text-emerald-400'
           : undefined,
-      tooltip: 'Gross profit ÷ gross loss. Above 1.0 means you earn more than you lose overall. Example: 1.5 means you made $1.50 for every $1.00 lost.',
     },
     {
       label: 'Expectancy',
       value: agg.expectancy !== null ? formatR(agg.expectancy) : '—',
+      metric: 'Expectancy',
     },
     {
       label: 'Net P&L',
@@ -166,18 +177,19 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
     {
       label: 'Max DD',
       value: `-${formatCurrency(agg.maxDrawdown)}`,
+      metric: 'Max Drawdown',
       color: agg.maxDrawdown > 0 ? 'text-rose-400' : undefined,
     },
     {
       label: 'Sharpe',
-      value:
-        agg.sharpePerTrade !== null ? agg.sharpePerTrade.toFixed(2) : '—',
+      value: agg.sharpePerTrade !== null ? agg.sharpePerTrade.toFixed(2) : '—',
+      metric: 'Sharpe Ratio',
     },
   ];
 
   return (
     <div className="grid grid-cols-4 gap-3 lg:grid-cols-8">
-      {stats.map(({ label, value, color, tooltip }) => (
+      {stats.map(({ label, value, color, metric, tooltip }) => (
         <div
           key={label}
           className="rounded-lg border border-border bg-card px-3 py-2.5 text-center"
@@ -190,7 +202,11 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
           >
             {value}
           </p>
-          {tooltip ? (
+          {metric ? (
+            <MetricTooltip metric={metric}>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{label}</p>
+            </MetricTooltip>
+          ) : tooltip ? (
             <HintTooltip>
               <HintTooltipTrigger asChild>
                 <p className="mt-0.5 cursor-help text-[10px] text-muted-foreground border-b border-dashed border-muted-foreground/40 inline-block">
@@ -814,7 +830,7 @@ export function DashboardPage() {
 
         {/* Row 1: Equity curve (wide) + Streak */}
         <div className="grid grid-cols-3 gap-4">
-          <WidgetCard title="Equity curve" className="col-span-2">
+          <WidgetCard title="Equity curve" metric="Equity Curve" className="col-span-2">
             <EquityCurveWidget agg={aggregate} />
           </WidgetCard>
           <WidgetCard title="Win / loss streak">
@@ -824,7 +840,7 @@ export function DashboardPage() {
 
         {/* Row 2: R distribution + Monthly P&L */}
         <div className="grid grid-cols-2 gap-4">
-          <WidgetCard title="R-multiple distribution">
+          <WidgetCard title="R-multiple distribution" metric="R-multiple">
             <RDistributionWidget data={rDistribution} />
           </WidgetCard>
           <WidgetCard title="Monthly P&L (last 12 months)">
