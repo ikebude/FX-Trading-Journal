@@ -22,6 +22,7 @@ import {
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { PropFirmBanner } from '@/components/layout/PropFirmBanner';
+import { UpdateBanner } from '@/components/layout/UpdateBanner';
 import { KeyboardShortcuts } from '@/components/help/KeyboardShortcuts';
 import { Glossary } from '@/components/help/Glossary';
 import { EAInstallGuide } from '@/components/help/EAInstallGuide';
@@ -136,6 +137,7 @@ function AppShell() {
           onGlossary={() => setGlossaryOpen(true)}
         />
         <PropFirmBanner />
+        <UpdateBanner />
         <main className="flex flex-1 flex-col overflow-hidden">
           <Outlet />
         </main>
