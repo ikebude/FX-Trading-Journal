@@ -10,7 +10,7 @@
  *  - Handle clean shutdown (auto-backup)
  */
 
-import { app, BrowserWindow, globalShortcut, screen, Tray, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage } from 'electron';
 import log from 'electron-log/main.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -135,7 +135,9 @@ function createMainWindow() {
     show: false,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      // electron-vite compiles the preload with entryFileNames: '[name].cjs'
+      // so the output is preload.cjs, not preload.js.
+      preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       // T3-3: sandbox: true is the recommended Electron security setting.
@@ -197,7 +199,7 @@ function createOverlayWindow() {
     backgroundColor: '#0a0a0a',
     show: false,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -348,6 +350,19 @@ app.whenReady().then(async () => {
     log.info('Database initialized');
   } catch (err) {
     log.error('Database initialization failed', err);
+    // Show a blocking dialog so the user knows WHY the app quit rather than
+    // seeing a silent close. This also makes fresh-install failures diagnosable
+    // (missing VC++ runtime, locked db file, etc.).
+    dialog.showMessageBoxSync({
+      type: 'error',
+      title: 'Ledger — Startup Failed',
+      message: 'Could not initialize the database.',
+      detail:
+        `Data folder: ${config.data_dir}\n\n` +
+        `Error: ${err instanceof Error ? err.message : String(err)}\n\n` +
+        'Check that the data folder is accessible and that no other instance of Ledger is running.',
+      buttons: ['Quit'],
+    });
     app.quit();
     return;
   }
