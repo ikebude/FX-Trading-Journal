@@ -24,6 +24,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { PropFirmBanner } from '@/components/layout/PropFirmBanner';
 import { KeyboardShortcuts } from '@/components/help/KeyboardShortcuts';
 import { Glossary } from '@/components/help/Glossary';
+import { EAInstallGuide } from '@/components/help/EAInstallGuide';
 import { GuidedTour } from '@/components/tour/GuidedTour';
 import { useGlobalKeys } from '@/hooks/useGlobalKeys';
 import { NewTradeDialog } from '@/components/trade-form/NewTradeDialog';
@@ -224,6 +225,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const eaGuideRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/settings/ea-guide',
+  component: EAInstallGuide,
+});
+
 const routeTree = rootRoute.addChildren([
   overlayRoute,
   shellRoute.addChildren([
@@ -235,6 +242,7 @@ const routeTree = rootRoute.addChildren([
     importRoute,
     trashRoute,
     settingsRoute,
+    eaGuideRoute,
   ]),
 ]);
 
