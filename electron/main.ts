@@ -22,7 +22,7 @@ import { startBridgeWatcher, stopBridgeWatcher } from './services/bridge-watcher
 import { runAutoBackup } from './services/backup';
 import { seedSampleData } from './services/seed';
 // Auto-updater — only activated when user enables it in Settings.
-import { autoUpdater } from 'electron-updater';
+import { initAutoUpdateService, runAutoUpdateCheck } from './services/auto-update';
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -428,13 +428,12 @@ app.whenReady().then(async () => {
     log.warn('setLoginItemSettings failed', err);
   }
 
-  // Auto-updater — only runs if the user has opted in.
+  // Auto-updater — event listeners are always registered (so Settings can
+  // trigger manual checks), but the background check only fires if the user
+  // has opted in.
+  initAutoUpdateService();
   if (config.auto_update) {
-    autoUpdater.logger = log;
-    autoUpdater.autoDownload = false; // Let user decide before downloading
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-      log.warn('Auto-update check failed', err);
-    });
+    runAutoUpdateCheck();
   }
 
   createMainWindow();
