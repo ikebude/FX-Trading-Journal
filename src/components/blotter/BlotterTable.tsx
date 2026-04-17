@@ -16,7 +16,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/lib/cn';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { MetricTooltip } from '@/components/help/MetricTooltip';
 import { formatCurrency, formatDate, formatPips, formatR, formatLots, pnlClass } from '@/lib/format';
 import { useAppStore } from '@/stores/app-store';
 import type { TradeRow } from '@/lib/db/queries';
@@ -124,7 +124,7 @@ export function BlotterTable({ rows, isLoading, selectedIds, onSelectionChange }
     },
     {
       accessorKey: 'netPips',
-      header: 'Pips',
+      header: () => <MetricTooltip metric="Pip / Pip Size">Pips</MetricTooltip>,
       size: 72,
       cell: ({ row }) => (
         <span className={cn('text-xs tabular-nums', pnlClass(row.original.netPips))}>
@@ -134,7 +134,7 @@ export function BlotterTable({ rows, isLoading, selectedIds, onSelectionChange }
     },
     {
       accessorKey: 'netPnl',
-      header: 'P&L',
+      header: () => <MetricTooltip metric="Profit Factor">P&L</MetricTooltip>,
       size: 88,
       cell: ({ row }) => (
         <span className={cn('text-xs font-semibold tabular-nums', pnlClass(row.original.netPnl))}>
@@ -144,17 +144,7 @@ export function BlotterTable({ rows, isLoading, selectedIds, onSelectionChange }
     },
     {
       accessorKey: 'rMultiple',
-      header: () => (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="cursor-help border-b border-dashed border-muted-foreground/40">R</span>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-48 text-center">
-            R-multiple: profit or loss expressed as a multiple of your initial risk.
-            +2R = made 2× what you risked. −1R = lost your full risk.
-          </TooltipContent>
-        </Tooltip>
-      ),
+      header: () => <MetricTooltip metric="R-multiple">R</MetricTooltip>,
       size: 64,
       cell: ({ row }) => (
         <span className={cn('text-xs tabular-nums', pnlClass(row.original.rMultiple))}>
