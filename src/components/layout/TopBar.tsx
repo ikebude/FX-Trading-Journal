@@ -9,7 +9,7 @@
  *  - Keyboard shortcuts help button
  */
 
-import { Plus, Calculator, Keyboard } from 'lucide-react';
+import { Plus, Calculator, Keyboard, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AccountSelector } from './AccountSelector';
 import { SessionClock } from '@/components/session-header/SessionClock';
@@ -18,9 +18,10 @@ import { useAppStore } from '@/stores/app-store';
 
 interface TopBarProps {
   onShortcuts?: () => void;
+  onGlossary?: () => void;
 }
 
-export function TopBar({ onShortcuts }: TopBarProps) {
+export function TopBar({ onShortcuts, onGlossary }: TopBarProps) {
   const setNewTradeOpen = useAppStore((s) => s.setNewTradeOpen);
   const calcOpen = useAppStore((s) => s.calcOpen);
   const setCalcOpen = useAppStore((s) => s.setCalcOpen);
@@ -73,6 +74,19 @@ export function TopBar({ onShortcuts }: TopBarProps) {
             onClick={onShortcuts}
           >
             <Keyboard className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Glossary */}
+        {onGlossary && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title="Trading glossary"
+            onClick={onGlossary}
+          >
+            <HelpCircle className="h-4 w-4" />
           </Button>
         )}
 
