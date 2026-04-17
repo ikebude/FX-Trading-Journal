@@ -194,6 +194,21 @@ const api = {
     openLogFolder: () => ipcRenderer.invoke('shell:open-log-folder'),
     showInExplorer: (path: string) => ipcRenderer.invoke('shell:show-in-explorer', path),
   },
+
+  // ── Updater ───────────────────────────────────────
+  updater: {
+    check: () =>
+      ipcRenderer.invoke('updater:check') as Promise<{ ok: boolean; error?: string }>,
+    download: () =>
+      ipcRenderer.invoke('updater:download') as Promise<void>,
+    installAndRestart: () =>
+      void ipcRenderer.invoke('updater:install'),
+    onEvent: (cb: (e: unknown) => void): (() => void) => {
+      const handler = (_: Electron.IpcRendererEvent, e: unknown) => cb(e);
+      ipcRenderer.on('updater:event', handler);
+      return () => ipcRenderer.off('updater:event', handler);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('ledger', api);
