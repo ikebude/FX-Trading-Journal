@@ -44,7 +44,11 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.exe
+          # Upload the NSIS installer (.exe) AND the auto-update manifest
+          # (latest.yml) so electron-updater can serve in-app update checks.
+          files: |
+            release/*.exe
+            release/latest.yml
           body_path: CHANGELOG.md
           draft: false
           prerelease: false

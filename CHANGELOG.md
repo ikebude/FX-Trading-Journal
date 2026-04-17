@@ -6,6 +6,45 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.1] — 2026-04-17
+
+### Fixed
+- **Critical: app crashed on fresh install** — preload script path was `preload.js` but
+  electron-vite compiles it to `preload.cjs`. The preload never ran, so `window.ledger`
+  was `undefined` in every renderer component, causing "Cannot read properties of undefined"
+  on launch.
+- DB init failure on first run now shows a user-readable dialog with the error message and
+  data folder path instead of silently closing the window.
+- Added a React `RootErrorBoundary` that shows "IPC Bridge Not Available — reinstall using
+  the latest installer" when the preload bridge is missing, instead of TanStack Router's
+  generic "Something went wrong!" screen.
+- **Full-stack production readiness audit (Wave 1-3):**
+  - `isNull()` replaces `eq(..., sql\`NULL\`)` in calendar IPC handler (NULL comparisons
+    were always false, so no trades ever matched news events).
+  - CSV importer now rejects rows with unrecognizable direction instead of silently
+    defaulting every ambiguous row to SHORT.
+  - MT5 HTML importer uses direction-aware entry/exit classification for brokers that
+    omit the Type column.
+  - MT4 HTML importer deduplicates partial-close rows that share a ticket number.
+  - `detect.ts` false-positive removed (`position` alone no longer triggers MT5 path).
+  - `backupDatabaseTo()` uses the WAL-safe `sqlite.backup()` API instead of `readFileSync`.
+  - `audit_log` table migrated: `ON DELETE SET NULL` prevents cascade wipe of audit
+    history when a trade is hard-deleted; `HARD_DELETE` action added to enum.
+  - FTS query sanitizer prevents injection/crash from special characters in search.
+  - `hardDeleteTrades()` writes `HARD_DELETE` audit entries before deleting rows.
+  - `trades:create` IPC handler wrapped in `withAsyncTransaction`.
+  - `invalidateDashboardCache()` called after every trade/leg mutation.
+  - Import handler wraps per-trade inserts in `withAsyncTransaction` and writes
+    `CREATE` audit rows.
+  - `PropFirmBanner` timezone computation uses `date-fns-tz` (no more hardcoded UTC-5).
+  - `TradeDetailDrawer.onSuccess` invalidates `['trades']` and `['dashboard']` queries.
+  - `TradeForm` `entryLeg` field uses safe-merge defaults to prevent undefined spread.
+  - `ImporterPage` account selector now initialises after accounts load, not before.
+- GitHub release workflow now uploads `latest.yml` alongside the `.exe` so
+  `electron-updater` in-app update checks work correctly.
+
+---
+
 ## [1.0.0] — 2026-04-12
 
 ### Added
