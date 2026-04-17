@@ -12,6 +12,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import {
   FolderOpen,
   HardDrive,
@@ -203,6 +204,7 @@ function GeneralSection() {
 
 function BridgeSection() {
   const [watchDir, setWatchDir] = useState('');
+  const navigate = useNavigate();
 
   const { data: status, refetch } = useQuery<{
     running: boolean;
@@ -302,6 +304,16 @@ function BridgeSection() {
           </Button>
         </div>
       </Row>
+
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={() => navigate({ to: '/settings/ea-guide' })}
+          className="text-xs text-primary underline underline-offset-2"
+        >
+          MT4 / MT5 Bridge Setup Guide →
+        </button>
+      </div>
     </Section>
   );
 }
