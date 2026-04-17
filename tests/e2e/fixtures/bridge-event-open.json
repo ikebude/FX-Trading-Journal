@@ -1,0 +1,13 @@
+{
+  "type": "open",
+  "ticket": 88001,
+  "symbol": "EURUSD",
+  "direction": "LONG",
+  "volume": 0.10,
+  "openPrice": 1.08500,
+  "openTime": "2024-04-01T09:00:00.000Z",
+  "stopLoss": 1.08200,
+  "takeProfit": 1.09100,
+  "commission": -3.50,
+  "swap": 0.00
+}
