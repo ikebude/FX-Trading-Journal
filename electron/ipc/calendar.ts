@@ -20,7 +20,8 @@ import { readFileSync } from 'node:fs';
 import Papa from 'papaparse';
 import log from 'electron-log/main.js';
 import { nanoid } from 'nanoid';
-import { eq, gte, lte, and, sql } from 'drizzle-orm';
+import { gte, lte, and, isNull, sql } from 'drizzle-orm';
+import { fromZonedTime } from 'date-fns-tz';
 
 import { getDb } from '../../src/lib/db/client';
 import { newsEvents, tradeNewsEvents, trades, tradeLegs } from '../../src/lib/db/schema';
@@ -91,11 +92,14 @@ function parseFFTimestamp(dateStr: string, timeStr: string): string | null {
       }
     }
 
-    // ForexFactory times are US Eastern — approximate UTC by adding 5 hours
-    // (We store as EST-naïve UTC since we don't have DST info in the CSV;
-    // traders compare news timestamps in their own timezone via the UI.)
-    const utcMs = dateObj.getTime() + hours * 3600000 + minutes * 60000;
-    return new Date(utcMs).toISOString();
+    // ForexFactory times are US Eastern. Use IANA 'America/New_York' so that
+    // DST transitions (EST=UTC-5, EDT=UTC-4) are handled automatically.
+    // Hard Rule #1: no hardcoded UTC offsets.
+    const y = dateObj.getUTCFullYear();
+    const mo = dateObj.getUTCMonth() + 1;
+    const d = dateObj.getUTCDate();
+    const localStr = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+    return fromZonedTime(localStr, 'America/New_York').toISOString();
   } catch {
     return null;
   }
@@ -219,7 +223,7 @@ async function retagTrades(): Promise<{ tagged: number }> {
   const allTrades = await db
     .select({ id: trades.id, openedAtUtc: trades.openedAtUtc, symbol: trades.symbol })
     .from(trades)
-    .where(eq(trades.deletedAtUtc, sql`NULL`));
+    .where(isNull(trades.deletedAtUtc));
 
   // Load all news events
   const allEvents = await db.select().from(newsEvents);

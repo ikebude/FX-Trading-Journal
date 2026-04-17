@@ -317,9 +317,9 @@ CREATE TABLE audit_log (
   entity_type     TEXT NOT NULL CHECK(entity_type IN
                   ('TRADE','LEG','SCREENSHOT','NOTE','TAG_LINK','TRADE_TAGS','REVIEW','ACCOUNT')),
   entity_id       TEXT NOT NULL,
-  trade_id        TEXT REFERENCES trades(id) ON DELETE CASCADE,  -- denormalized for fast trade-history lookup
+  trade_id        TEXT REFERENCES trades(id) ON DELETE SET NULL,  -- denormalized; SET NULL preserves history after hard-delete
   action          TEXT NOT NULL CHECK(action IN
-                  ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE')),
+                  ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE','HARD_DELETE')),
   changed_fields  TEXT,                              -- JSON: { field: [old, new] }
   actor           TEXT NOT NULL DEFAULT 'user',
   timestamp_utc   TEXT NOT NULL

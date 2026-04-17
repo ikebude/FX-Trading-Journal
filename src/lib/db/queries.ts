@@ -288,13 +288,12 @@ export interface TradeDetail extends TradeRow {
   screenshotList: Screenshot[];
 }
 
-export async function getTrade(id: string): Promise<TradeDetail | undefined> {
+export async function getTrade(id: string, includeDeleted = false): Promise<TradeDetail | undefined> {
   const db = getDb();
-  const rows = await db
-    .select()
-    .from(trades)
-    .where(eq(trades.id, id))
-    .limit(1);
+  const cond = includeDeleted
+    ? eq(trades.id, id)
+    : and(eq(trades.id, id), isNull(trades.deletedAtUtc));
+  const rows = await db.select().from(trades).where(cond).limit(1);
   if (!rows[0]) return undefined;
 
   const [legs, notes, screenshotList, tagRows] = await Promise.all([
@@ -380,12 +379,17 @@ export async function restoreTrades(ids: string[]): Promise<void> {
 
 export async function hardDeleteTrades(ids: string[]): Promise<void> {
   const db = getDb();
+  // Write HARD_DELETE audit entries BEFORE the delete so they survive.
+  // After migration 002, audit_log.trade_id is SET NULL on delete —
+  // these rows remain with trade_id = NULL as a permanent forensic record.
+  for (const id of ids) {
+    await writeAudit('TRADE', id, 'HARD_DELETE', id);
+  }
   await db.delete(trades).where(inArray(trades.id, ids));
   // Remove from FTS index
   for (const id of ids) {
     db.run(sql`DELETE FROM trades_fts WHERE trade_id = ${id}`);
   }
-  // Audit rows cascade-deleted via FK, so no need to write them separately.
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -746,12 +750,30 @@ export async function getTodayStats(todayUtc: string): Promise<{ pnl: number; tr
   return { pnl, trades: rows.length, wins };
 }
 
+/**
+ * Sanitise a user-supplied string for use as an FTS5 MATCH expression.
+ *
+ * Strategy: split on whitespace into tokens, double-quote each one (with any
+ * embedded double-quotes doubled per FTS5 quoting rules), then join with AND.
+ * This treats every token as a literal phrase prefix search rather than
+ * exposing raw FTS5 boolean syntax (OR/NOT/NEAR/*) to user input.
+ */
+function sanitizeFtsQuery(raw: string): string {
+  return raw
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => `"${token.replace(/"/g, '""')}"`)
+    .join(' AND ');
+}
+
 export async function searchTrades(query: string, accountId?: string): Promise<string[]> {
   // Returns trade IDs matching the FTS query.
   // Uses the trades_fts virtual table seeded via the IPC trade mutation handlers.
   const db = getDb();
+  const safeQuery = sanitizeFtsQuery(query);
+  if (!safeQuery) return [];
   // Drizzle doesn't model FTS5 — use sql template tag for this one case.
-  const safeQuery = query.replace(/["']/g, '');
   const rows = await db.run(
     sql`SELECT trade_id FROM trades_fts WHERE trades_fts MATCH ${safeQuery} ORDER BY rank LIMIT 100`,
   );

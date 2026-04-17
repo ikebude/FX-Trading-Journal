@@ -151,9 +151,13 @@ export function TradeDetailDrawer() {
                 <TradeForm
                   mode="full"
                   existingTrade={trade as unknown as Trade}
-                  onSuccess={() =>
-                    queryClient.invalidateQueries({ queryKey: ['trade', detailTradeId] })
-                  }
+                  onSuccess={() => {
+                    // Invalidate both the single-trade detail and the blotter list so
+                    // edits made in the drawer are immediately reflected in both views.
+                    queryClient.invalidateQueries({ queryKey: ['trade', detailTradeId] });
+                    queryClient.invalidateQueries({ queryKey: ['trades'] });
+                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                  }}
                 />
               </TabsContent>
 

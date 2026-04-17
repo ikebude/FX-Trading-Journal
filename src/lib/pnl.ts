@@ -20,6 +20,7 @@
 // from the DB schema whenever the instruments table changed.
 export type { Instrument } from './db/schema';
 import type { Instrument } from './db/schema';
+import { dayOfWeekInTz, hourOfDayInTz } from './tz';
 
 export type Direction = 'LONG' | 'SHORT';
 export type LegType = 'ENTRY' | 'EXIT';
@@ -517,14 +518,9 @@ export function computeDayOfWeekHeatmap(
   for (const b of bundles) {
     const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
     if (m.status !== 'CLOSED' || !m.closedAtUtc) continue;
-    // Format to local date string then parse to get local day-of-week
-    const localDateStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: displayTimezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date(m.closedAtUtc));
-    const dow = new Date(localDateStr).getDay();
+    // Use dayOfWeekInTz (formatInTimeZone-based) — avoids non-standard
+    // Intl.DateTimeFormat locale string double-parse that fails on some V8 builds.
+    const dow = dayOfWeekInTz(m.closedAtUtc, displayTimezone);
     if (!map.has(dow)) map.set(dow, { pnl: 0, count: 0 });
     const entry = map.get(dow)!;
     entry.pnl += m.netPnl ?? 0;
@@ -555,12 +551,9 @@ export function computeHourOfDayHeatmap(
   for (const b of bundles) {
     const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
     if (m.status !== 'CLOSED' || !m.closedAtUtc) continue;
-    const hourStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: displayTimezone,
-      hour: 'numeric',
-      hour12: false,
-    }).format(new Date(m.closedAtUtc));
-    const hour = parseInt(hourStr, 10) % 24;
+    // Use hourOfDayInTz (formatInTimeZone 'H' format) — avoids Intl hour12:false
+    // returning "24" for midnight on some V8 versions.
+    const hour = hourOfDayInTz(m.closedAtUtc, displayTimezone);
     if (!map.has(hour)) map.set(hour, { pnl: 0, count: 0 });
     const entry = map.get(hour)!;
     entry.pnl += m.netPnl ?? 0;

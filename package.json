@@ -2,6 +2,7 @@
   "name": "ledger",
   "version": "1.0.0",
   "description": "Ledger — local-first forex trading journal for Windows",
+  "author": "ikebude",
   "main": "dist-electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -120,7 +121,7 @@
     "publish": {
       "provider": "github",
       "owner": "ikebude",
-      "repo": "ledger",
+      "repo": "FX-Trading-Journal",
       "releaseType": "release"
     }
   }

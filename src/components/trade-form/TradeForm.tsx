@@ -349,6 +349,14 @@ function FullForm({
       : {
           direction: 'LONG',
           source: 'MANUAL',
+          // Pre-populate entryLeg so individual field changes don't wipe sibling values
+          entryLeg: {
+            timestampUtc: new Date().toISOString(),
+            price: 0,
+            volumeLots: 0,
+            commission: 0,
+            swap: 0,
+          },
         },
   });
 
@@ -356,6 +364,15 @@ function FullForm({
   const confidence = watch('confidence');
   const preEmotion = watch('preTradeEmotion');
   const postEmotion = watch('postTradeEmotion');
+  const rawEntryLeg = watch('entryLeg');
+  // Guarantee required numeric fields so spread merges never produce undefined values
+  const entryLeg = {
+    timestampUtc: rawEntryLeg?.timestampUtc ?? new Date().toISOString(),
+    price: rawEntryLeg?.price ?? 0,
+    volumeLots: rawEntryLeg?.volumeLots ?? 0,
+    commission: rawEntryLeg?.commission ?? 0,
+    swap: rawEntryLeg?.swap ?? 0,
+  };
 
   async function onSubmit(data: FullFormValues) {
     setSaving(true);
@@ -468,15 +485,9 @@ function FullForm({
                   <Input
                     type="datetime-local"
                     defaultValue={nowLocalIso()}
-                    onChange={(e) => {
-                      setValue('entryLeg', {
-                        timestampUtc: localToUtc(e.target.value),
-                        price: 0,
-                        volumeLots: 0,
-                        commission: 0,
-                        swap: 0,
-                      });
-                    }}
+                    onChange={(e) =>
+                      setValue('entryLeg', { ...entryLeg, timestampUtc: localToUtc(e.target.value) })
+                    }
                   />
                 </Field>
               </div>
@@ -487,13 +498,7 @@ function FullForm({
                     step="any"
                     placeholder="1.08500"
                     onChange={(e) =>
-                      setValue('entryLeg', {
-                        timestampUtc: new Date().toISOString(),
-                        price: parseFloat(e.target.value) || 0,
-                        volumeLots: 0,
-                        commission: 0,
-                        swap: 0,
-                      })
+                      setValue('entryLeg', { ...entryLeg, price: parseFloat(e.target.value) || 0 })
                     }
                   />
                 </Field>
@@ -503,13 +508,7 @@ function FullForm({
                     step="0.01"
                     placeholder="0.10"
                     onChange={(e) =>
-                      setValue('entryLeg', {
-                        timestampUtc: new Date().toISOString(),
-                        price: 0,
-                        volumeLots: parseFloat(e.target.value) || 0,
-                        commission: 0,
-                        swap: 0,
-                      })
+                      setValue('entryLeg', { ...entryLeg, volumeLots: parseFloat(e.target.value) || 0 })
                     }
                   />
                 </Field>

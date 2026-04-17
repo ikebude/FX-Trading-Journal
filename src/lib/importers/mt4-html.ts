@@ -52,7 +52,9 @@ export function parseMt4Html(html: string): ParseResult {
 
   const dataRows = $(best.table).find('tr').toArray().slice(best.headerRowIdx + 1);
   const failed: ParseResult['failed'] = [];
-  const trades: ParsedTrade[] = [];
+  // Group by ticket so that partial closes (same ticket, multiple statement rows)
+  // are merged into one trade with multiple leg pairs instead of duplicate trades.
+  const tradeMap = new Map<string, ParsedTrade>();
 
   const get = (cells: string[], field: CanonicalField): string | undefined => {
     const cols = colMap.get(field);
@@ -98,8 +100,13 @@ export function parseMt4Html(html: string): ParseResult {
       // Open trade case (no close time/price)
       const isOpen = !closeTime || closePrice === 0;
 
+      const existing = tradeMap.get(ticket!);
+      // Use suffix to make deal IDs unique when the same ticket appears multiple times
+      // (partial close: broker reuses the original ticket for each close fragment).
+      const suffix = existing ? `-${existing.legs.length}` : '';
+
       const entryLeg: ParsedLeg = {
-        externalDealId: `${ticket}-entry`,
+        externalDealId: `${ticket}-entry${suffix}`,
         legType: 'ENTRY',
         timestampUtc: openTime,
         price: openPrice,
@@ -109,29 +116,34 @@ export function parseMt4Html(html: string): ParseResult {
         brokerProfit: null,
       };
 
-      const legs: ParsedLeg[] = [entryLeg];
+      const exitLeg: ParsedLeg | null = isOpen ? null : {
+        externalDealId: `${ticket}-exit${suffix}`,
+        legType: 'EXIT',
+        timestampUtc: closeTime,
+        price: closePrice,
+        volumeLots: volume,
+        commission,
+        swap,
+        brokerProfit: profit,
+      };
 
-      if (!isOpen) {
-        legs.push({
-          externalDealId: `${ticket}-exit`,
-          legType: 'EXIT',
-          timestampUtc: closeTime,
-          price: closePrice,
-          volumeLots: volume,
-          commission,
-          swap,
-          brokerProfit: profit,
+      if (existing) {
+        // Merge into the existing trade — additional partial close row
+        existing.legs.push(entryLeg);
+        if (exitLeg) existing.legs.push(exitLeg);
+        existing.rawDealCount = existing.legs.length;
+        if (!isOpen) existing.status = 'CLOSED';
+      } else {
+        const legs: ParsedLeg[] = exitLeg ? [entryLeg, exitLeg] : [entryLeg];
+        tradeMap.set(ticket!, {
+          externalPositionId: ticket!,
+          symbol,
+          direction,
+          status: isOpen ? 'OPEN' : 'CLOSED',
+          legs,
+          rawDealCount: legs.length,
         });
       }
-
-      trades.push({
-        externalPositionId: ticket,
-        symbol,
-        direction,
-        status: isOpen ? 'OPEN' : 'CLOSED',
-        legs,
-        rawDealCount: legs.length,
-      });
     } catch (err) {
       failed.push({
         rowIndex: i,
@@ -141,7 +153,7 @@ export function parseMt4Html(html: string): ParseResult {
     }
   }
 
-  return { trades, failed, rowsTotal: dataRows.length };
+  return { trades: [...tradeMap.values()], failed, rowsTotal: dataRows.length };
 }
 
 function parseNum(s: string | undefined): number {
