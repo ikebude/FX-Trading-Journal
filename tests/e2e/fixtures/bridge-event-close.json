@@ -1,0 +1,16 @@
+{
+  "type": "close",
+  "ticket": 88001,
+  "symbol": "EURUSD",
+  "direction": "LONG",
+  "volume": 0.10,
+  "openPrice": 1.08500,
+  "openTime": "2024-04-01T09:00:00.000Z",
+  "closePrice": 1.09100,
+  "closeTime": "2024-04-01T12:00:00.000Z",
+  "commission": -7.00,
+  "swap": 0.00,
+  "profit": 60.00,
+  "stopLoss": 1.08200,
+  "takeProfit": 1.09100
+}
