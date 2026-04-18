@@ -94,7 +94,7 @@
   },
   "build": {
     "appId": "com.ledger.journal",
-    "productName": "Ledger",
+    "productName": "FXLedger",
     "directories": {
       "output": "release"
     },
@@ -124,7 +124,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ledger"
+      "shortcutName": "FXLedger"
     },
     "publish": {
       "provider": "github",
