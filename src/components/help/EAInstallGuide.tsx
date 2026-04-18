@@ -4,7 +4,7 @@ const STEPS = [
   {
     n: 1,
     title: 'What the bridge does',
-    body: `The LedgerBridge Expert Advisor (EA) runs inside your MT4 or MT5 terminal. Every time a trade closes (or opens), the EA writes a small JSON file to a folder on your PC. Ledger watches that folder and automatically imports the trade into your journal — no manual entry needed.`,
+    body: `The LedgerBridge Expert Advisor (EA) runs inside your MT4 or MT5 terminal. Every time a trade closes (or opens), the EA writes a small JSON file to a folder on your PC. FXLedger watches that folder and automatically imports the trade into your journal — no manual entry needed.`,
   },
   {
     n: 2,
@@ -14,17 +14,17 @@ const STEPS = [
   {
     n: 3,
     title: 'Copying the EA file',
-    body: `The EA files ship with Ledger. Open Ledger's installation folder:\n  C:\\Program Files\\Ledger\\resources\\mql\\\nCopy the correct file into your Experts folder:\n• MT4 → copy LedgerBridge.mq4\n• MT5 → copy LedgerBridge.mq5\nDo not copy the wrong version — MT4 will not load .mq5 files.`,
+    body: `The EA files ship with FXLedger. Open FXLedger's installation folder:\n  C:\\Program Files\\FXLedger\\resources\\mql\\\nCopy the correct file into your Experts folder:\n• MT4 → copy LedgerBridge.mq4\n• MT5 → copy LedgerBridge.mq5\nDo not copy the wrong version — MT4 will not load .mq5 files.`,
   },
   {
     n: 4,
     title: 'Attaching the EA to a chart',
-    body: `1. In MT4/MT5, open any chart (it can be any symbol — the EA logs all trades regardless of which chart it's attached to).\n2. Drag LedgerBridge from the Navigator → Expert Advisors panel onto the chart, or double-click it.\n3. In the EA settings dialog:\n   • Set OutputFolder to the path shown in Ledger → Settings → Bridge.\n   • Ensure AutoTrading (the green robot button) is ON.\n4. Click OK. You should see a smiley face in the chart's top-right corner — this confirms the EA is running.`,
+    body: `1. In MT4/MT5, open any chart (it can be any symbol — the EA logs all trades regardless of which chart it's attached to).\n2. Drag LedgerBridge from the Navigator → Expert Advisors panel onto the chart, or double-click it.\n3. In the EA settings dialog:\n   • Set OutputFolder to the path shown in FXLedger → Settings → Bridge.\n   • Ensure AutoTrading (the green robot button) is ON.\n4. Click OK. You should see a smiley face in the chart's top-right corner — this confirms the EA is running.`,
   },
   {
     n: 5,
     title: 'Verifying the connection',
-    body: `1. Open Ledger → Settings → Bridge Status.\n2. The status should show "Watching: [your output folder path]".\n3. Place a test trade in MT4/MT5, then close it.\n4. Within 2–5 seconds you should see a toast notification in Ledger: "EURUSD LONG — Trade closed and journal updated" (or similar).\n5. The trade will appear in the Blotter with source = LIVE_BRIDGE.`,
+    body: `1. Open FXLedger → Settings → Bridge Status.\n2. The status should show "Watching: [your output folder path]".\n3. Place a test trade in MT4/MT5, then close it.\n4. Within 2–5 seconds you should see a toast notification in FXLedger: "EURUSD LONG — Trade closed and journal updated" (or similar).\n5. The trade will appear in the Blotter with source = LIVE_BRIDGE.`,
   },
   {
     n: 6,
@@ -41,7 +41,7 @@ export function EAInstallGuide() {
           MT4 / MT5 Bridge Setup Guide
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Connect your MetaTrader terminal to Ledger for automatic live trade journalling.
+          Connect your MetaTrader terminal to FXLedger for automatic live trade journalling.
         </p>
       </div>
 

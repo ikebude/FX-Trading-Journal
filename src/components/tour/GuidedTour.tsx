@@ -36,8 +36,8 @@ interface TourStep {
 
 const STEPS: TourStep[] = [
   {
-    title: 'Welcome to Ledger 👋',
-    body: 'Ledger is your local-first forex trading journal. Everything lives on your machine — no cloud, no subscriptions.',
+    title: 'Welcome to FXLedger 👋',
+    body: 'FXLedger is your local-first forex trading journal. Everything lives on your machine — no cloud, no subscriptions.',
     position: 'center',
   },
   {

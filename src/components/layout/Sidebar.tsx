@@ -40,7 +40,7 @@ export function Sidebar() {
       <div className="mb-6 flex h-9 w-full items-center justify-center lg:justify-start lg:px-1">
         <TrendingUp className="h-5 w-5 text-primary shrink-0" />
         <span className="ml-2 hidden text-sm font-semibold tracking-tight text-foreground lg:block">
-          Ledger
+          FXLedger
         </span>
       </div>
 
