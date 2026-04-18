@@ -106,24 +106,36 @@ npm run db:migrate   # drizzle-kit: apply pending migrations to the DB
 - [x] `tests/pnl.test.ts` — test suite
 - [x] `package.json` — locked deps + scripts
 
-### Remaining (Build in Order Below)
-- [ ] `electron.vite.config.ts`, `tailwind.config.ts`, `postcss.config.js`, `tsconfig.node.json`
-- [ ] `src/lib/db/client.ts` — better-sqlite3 + drizzle bootstrap
-- [ ] `src/lib/db/queries.ts` — all read queries
-- [ ] `src/lib/importers/csv.ts`, `detect.ts`
-- [ ] `src/lib/reconcile.ts`, `prop-firm.ts`, `search.ts`, `format.ts`, `risk-calc.ts`, `schemas.ts`
-- [ ] `electron/ipc/` — all IPC handlers (trades, legs, imports, bridge, capture, files, reports, calendar, settings, audit)
-- [ ] `electron/services/` — prop-firm, reconciliation, backup, bridge-watcher
-- [ ] All React routes + components
-- [ ] `src/components/session-header/` — session clock + quick-stats strip (module 6.27)
-- [ ] `src/components/risk-calculator/` — lot-size calculator (module 6.24)
-- [ ] `src/components/tour/` — interactive guided tour (module 6.26)
-- [ ] `src/components/help/` — glossary, keyboard shortcuts overlay (module 6.23)
-- [ ] System tray + auto-launch wiring in `electron/main.ts` (module 6.25)
-- [ ] `drizzle/` migration folder (generated from `npm run db:generate`)
-- [ ] Test fixtures for importers
-- [ ] `src/lib/risk-calc.ts` + `tests/risk-calc.test.ts`
-- [ ] `src/lib/schemas.ts` — Zod validation schemas for all forms
+### Remaining
+- [ ] Code-signing for SmartScreen trust (deferred post-v1.0.2)
+- [ ] macOS and Linux builds (deferred)
+- [ ] Cloud backup option (user-configured S3/Dropbox) (deferred)
+
+### Completed (as of v1.0.2)
+All 18 milestones from the original build order are complete. The following items
+previously marked "remaining" are implemented and verified:
+
+| Item | Status |
+|---|---|
+| `src/lib/risk-calc.ts` + 14 tests | Done |
+| `src/lib/schemas.ts` (Zod, 259 lines) | Done |
+| `src/components/risk-calculator/` UI | Done |
+| `src/components/session-header/` | Done |
+| `src/components/tour/GuidedTour` | Done |
+| `src/components/help/` (Glossary, MetricTooltip, EAInstallGuide) | Done (v1.0.2) |
+| System tray + auto-launch | Done |
+| Auto-update UX (UpdateBanner, useUpdater, IPC) | Done (v1.0.2) |
+| Drizzle migrations | Done |
+| Importer test fixtures (30 tests) | Done |
+| E2E acceptance suite (18 automated + 6 manual) | Done (v1.0.2) |
+
+**Release gate:** Before shipping any future release, run:
+
+```
+npm test && npm run typecheck && npm run lint && npm run build && npm run test:e2e
+```
+
+Then walk through `docs/acceptance-test-playbook.md` for the 6 manual criteria.
 
 ---
 
