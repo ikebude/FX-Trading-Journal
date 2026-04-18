@@ -2,9 +2,9 @@
 
 > A local-first, institutional-grade trading journal for Windows. No cloud, no login, no subscription, no telemetry. Your data never leaves your machine.
 
-[![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge&logo=windows)](https://github.com/ikebude/ledger/releases/latest)
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge&logo=windows)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey?style=for-the-badge&logo=windows)](https://github.com/ikebude/ledger/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey?style=for-the-badge&logo=windows)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)
 
 ---
 
@@ -35,7 +35,7 @@ Ledger is a professional forex trading journal designed for serious traders who 
 
 ### Download
 
-**[⬇ Download Ledger Setup (latest release)](https://github.com/ikebude/ledger/releases/latest)**
+**[⬇ Download Ledger Setup (latest release)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)**
 
 Download `Ledger-Setup-x.x.x.exe` from the Assets section of the latest release.
 
@@ -298,11 +298,11 @@ To move your data folder to a different location (e.g., OneDrive or a different 
 - Windows (for packaging — development works on macOS/Linux too)
 
 ```bash
-git clone https://github.com/ikebude/ledger.git
-cd ledger
+git clone https://github.com/ikebude/FX-Trading-Journal.git
+cd FX-Trading-Journal
 npm install
 npm run dev          # Start development server (hot reload)
-npm test             # Run test suite (34+ tests)
+npm test             # Run test suite (165 tests across 6 suites)
 npm run typecheck    # TypeScript type check
 npm run build        # Build renderer + main (no installer)
 npm run package:win  # Build Windows NSIS installer → release/
@@ -330,7 +330,13 @@ src/
   pages/           ← Route components
   components/      ← Reusable UI components
 tests/
-  pnl.test.ts      ← 34+ unit tests for the P&L engine
+  pnl.test.ts          ← P&L engine tests
+  tz.test.ts           ← timezone / session detection
+  importers.test.ts    ← MT4/MT5/CSV importer fixtures
+  reconcile.test.ts    ← import ↔ manual-trade reconciliation
+  risk-calc.test.ts    ← lot-size / R calculator
+  prop-firm.test.ts    ← prop-firm rule evaluation
+  e2e/                 ← Playwright-Electron acceptance suite
 schema.sql         ← SQLite DDL source of truth
 ```
 
@@ -363,7 +369,7 @@ schema.sql         ← SQLite DDL source of truth
 > Fully. You can log every trade manually and import statements. The live bridge is optional.
 
 **Q: How do I report a bug or request a feature?**
-> Open an issue at [github.com/ikebude/ledger/issues](https://github.com/ikebude/ledger/issues).
+> Open an issue at [github.com/ikebude/FX-Trading-Journal/issues](https://github.com/ikebude/FX-Trading-Journal/issues).
 
 ---
 
