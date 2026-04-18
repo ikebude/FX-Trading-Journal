@@ -1,6 +1,6 @@
 {
   "name": "ledger",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Ledger — local-first forex trading journal for Windows",
   "author": "ikebude",
   "main": "dist-electron/main.cjs",
