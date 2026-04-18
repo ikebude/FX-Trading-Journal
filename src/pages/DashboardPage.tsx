@@ -44,6 +44,10 @@ import {
 } from '@/components/ui/tooltip';
 import { MetricTooltip } from '@/components/help/MetricTooltip';
 import { useAppStore } from '@/stores/app-store';
+import {
+  getDashboardDateRange,
+  type DashboardPreset,
+} from '@/lib/dashboard-presets';
 import type {
   AggregateMetrics,
   RBucket,
@@ -717,26 +721,10 @@ function CalendarHeatmapWidget({ data }: { data: CalendarHeatmapCell[] }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Date range presets
-// ─────────────────────────────────────────────────────────────
-
-type Preset = '7d' | '30d' | '90d' | 'ytd' | 'all';
-
-function getDateRange(preset: Preset): { dateFrom?: string; dateTo?: string } {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const to = fmt(now);
-
-  if (preset === 'all') return {};
-  if (preset === 'ytd') return { dateFrom: `${now.getFullYear()}-01-01`, dateTo: to };
-  const days = preset === '7d' ? 7 : preset === '30d' ? 30 : 90;
-  const from = new Date(now);
-  from.setDate(from.getDate() - days);
-  return { dateFrom: fmt(from), dateTo: to };
-}
+// Date range presets live in src/lib/dashboard-presets.ts so they can be
+// unit-tested without pulling in the full renderer chain (see
+// tests/dashboard-date-range.test.ts).
+type Preset = DashboardPreset;
 
 // ─────────────────────────────────────────────────────────────
 // Main page
@@ -747,7 +735,7 @@ export function DashboardPage() {
   const [preset, setPreset] = useState<Preset>('30d');
 
   const filters = useMemo(() => {
-    const range = getDateRange(preset);
+    const range = getDashboardDateRange(preset);
     return {
       ...(activeAccountId ? { accountId: activeAccountId } : {}),
       ...range,

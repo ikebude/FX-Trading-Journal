@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.3] — 2026-04-18
+
+### Fixed
+- **Critical: Dashboard never loaded on v1.0.2.** The default `30D` preset (and
+  every other relative preset — `7D`, `90D`, `YTD`) produced `dateFrom`/`dateTo`
+  values in `YYYY-MM-DD` format, but `TradeFiltersSchema.utcString` requires the
+  full ISO-8601 `YYYY-MM-DDTHH:MM:SS...` format. Zod rejected the filter object,
+  the handler caught the error, and the UI showed "Failed to load dashboard
+  data." on every install. Fix: presets now emit full ISO datetime strings with
+  start-of-day / end-of-day UTC boundaries (mirrors how `BlotterFilters` has
+  always done it). Extracted `getDashboardDateRange` into
+  `src/lib/dashboard-presets.ts` with 9 regression tests in
+  `tests/dashboard-date-range.test.ts`.
+
+---
+
 ## [1.0.2] — 2026-04-18
 
 ### Added
