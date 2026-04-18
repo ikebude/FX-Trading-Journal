@@ -370,7 +370,12 @@ async function restoreBackup(
 // ─────────────────────────────────────────────────────────────
 
 export function registerBackupHandlers(ctx: IpcContext): void {
-  const configPath = join(app.getPath('userData'), 'config.json');
+  // Derive config path from the authoritative data directory (ctx.config.data_dir),
+  // which matches where electron/main.ts's atomicSaveConfig actually writes
+  // config.json. Using app.getPath('userData') would resolve to %APPDATA%/FXLedger
+  // (from productName) on fresh v1.1 installs, but config lives in
+  // %APPDATA%/Ledger because main.ts uses DATA_FOLDER_NAME = 'Ledger'.
+  const configPath = join(ctx.config.data_dir, 'config.json');
 
   ipcMain.removeHandler('backup:now');
   ipcMain.removeHandler('backup:list');

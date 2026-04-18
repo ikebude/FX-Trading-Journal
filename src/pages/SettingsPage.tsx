@@ -176,7 +176,7 @@ function GeneralSection() {
 
       <Row
         label="Launch on Windows startup"
-        description="Start Ledger automatically when you log in"
+        description="Start FXLedger automatically when you log in"
       >
         <Toggle
           checked={autoLaunch}
@@ -198,7 +198,7 @@ function GeneralSection() {
 
       <Row
         label="Check for updates"
-        description="Manually check for a newer version of Ledger"
+        description="Manually check for a newer version of FXLedger"
       >
         <UpdateCheckButton />
       </Row>
@@ -566,7 +566,7 @@ export function SettingsPage() {
         <div>
           <h1 className="text-base font-semibold text-foreground">Settings</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Configure Ledger to match your trading workflow.
+            Configure FXLedger to match your trading workflow.
           </p>
         </div>
 
@@ -580,7 +580,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-6">
           <div className="flex items-center gap-2">
             <Info className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold text-foreground">About Ledger</h2>
+            <h2 className="text-sm font-semibold text-foreground">About FXLedger</h2>
           </div>
           <div className="flex flex-col gap-1 text-xs text-muted-foreground">
             <p>Local-first forex trading journal for Windows.</p>

@@ -9,7 +9,7 @@
  * Falls back gracefully if the target element is not in the DOM.
  *
  * Steps:
- *  1. Welcome — overview of Ledger
+ *  1. Welcome — overview of FXLedger
  *  2. New Trade button — how to log a trade
  *  3. Blotter — what the trade list shows
  *  4. Dashboard — performance analytics
@@ -36,8 +36,8 @@ interface TourStep {
 
 const STEPS: TourStep[] = [
   {
-    title: 'Welcome to Ledger 👋',
-    body: 'Ledger is your local-first forex trading journal. Everything lives on your machine — no cloud, no subscriptions.',
+    title: 'Welcome to FXLedger 👋',
+    body: 'FXLedger is your local-first forex trading journal. Everything lives on your machine — no cloud, no subscriptions.',
     position: 'center',
   },
   {

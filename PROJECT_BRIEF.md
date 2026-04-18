@@ -1,6 +1,6 @@
 # Forex Trading Journal — Production Specification
 
-**Codename:** Ledger
+**Codename:** FXLedger (renamed from "Ledger" in v1.1; see T1.2)
 **Audience:** Any forex trader on Windows. Single-user, local-first, no cloud.
 **Status:** Complete spec. Build everything in this document. Nothing in here is optional or deferred.
 
@@ -538,7 +538,7 @@ Cloud sync is not built in. Instead, the user is offered to point their data fol
 
 Tabbed interface:
 
-- **General** — theme (dark/light/system), display timezone (IANA dropdown), display currency, win/loss color preference, density (comfortable/compact), launch Ledger on Windows startup (toggle, default off), start minimized to tray (toggle, default off when launched manually).
+- **General** — theme (dark/light/system), display timezone (IANA dropdown), display currency, win/loss color preference, density (comfortable/compact), launch FXLedger on Windows startup (toggle, default off), start minimized to tray (toggle, default off when launched manually).
 - **Accounts** — full CRUD with prop firm rule configuration.
 - **Instruments** — full CRUD; pip_size validation prevents incorrect entries.
 - **Tags** — manage CONFLUENCE / MISTAKE / CUSTOM tag categories.
@@ -579,7 +579,7 @@ The Trade Detail page has a "History" tab showing the chronological audit log fo
 
 On first launch, before any UI is shown:
 
-1. **Welcome screen** — short explanation of what Ledger does.
+1. **Welcome screen** — short explanation of what FXLedger does.
 2. **Data folder** — choose where to store data. Default `%APPDATA%\Ledger`. Tip: *"Pick a folder inside OneDrive, Dropbox, or Google Drive to get free automatic backup."*
 3. **Display timezone** — IANA dropdown, defaults to system tz.
 4. **First account** — name (default "My Account"), broker (free text), currency (dropdown), starting balance (optional), account type (LIVE/DEMO/PROP). For PROP, an inline rule configurator.
@@ -631,13 +631,13 @@ A multi-step illustrated guide with numbered steps:
 4. Drag it onto any chart (symbol does not matter — it monitors all trades)
 5. In the EA settings dialog, ensure "Allow DLL imports" and "Allow automated trading" are enabled
 6. Click OK — the EA is now running. A green smiley face appears in the chart corner.
-7. Return to Ledger → Settings → Live Bridge → enter the MQL5/Files/Ledger path shown in MetaTrader → Save
+7. Return to FXLedger → Settings → Live Bridge → enter the MQL5/Files/Ledger path shown in MetaTrader → Save
 8. The status indicator turns green: "Bridge active — watching for trades"
 
 Each step includes a description of what the user should see on screen. The guide detects whether MT4 or MT5 files are being watched and adjusts instructions accordingly.
 
 **In-app update notifications:**
-When `electron-updater` detects a new version (check triggered manually from Settings → About or automatically on launch if the user has enabled it), a non-blocking banner appears at the top of every page: *"Ledger 1.1.0 is available — [View changelog] [Update now] [Dismiss]"*. Clicking "Update now" downloads in the background and prompts to restart. The changelog is a markdown file bundled with the update. Auto-update is off by default; the user enables it in Settings → About.
+When `electron-updater` detects a new version (check triggered manually from Settings → About or automatically on launch if the user has enabled it), a non-blocking banner appears at the top of every page: *"FXLedger 1.1.0 is available — [View changelog] [Update now] [Dismiss]"*. Clicking "Update now" downloads in the background and prompts to restart. The changelog is a markdown file bundled with the update. Auto-update is off by default; the user enables it in Settings → About.
 
 ### 6.24 Risk & lot-size calculator
 
@@ -678,24 +678,24 @@ The calculator lives in `src/lib/risk-calc.ts` and is covered by Vitest tests fo
 
 ### 6.25 System tray, auto-launch, and startup behavior
 
-The global hotkey and live bridge must work even when the trader has no visible Ledger window open — they are in MetaTrader or TradingView and want to capture a trade without switching apps.
+The global hotkey and live bridge must work even when the trader has no visible FXLedger window open — they are in MetaTrader or TradingView and want to capture a trade without switching apps.
 
 **System tray:**
 - On launch, Electron creates a system tray icon (a small "L" or ledger icon) visible in the Windows taskbar notification area.
 - **Closing the main window** (clicking the × button) **hides the window**, it does not quit the app. The tray icon remains. The hotkey remains registered. The bridge watcher keeps running.
 - The tray icon has a right-click context menu:
-  - **Show Ledger** — restores the main window
+  - **Show FXLedger** — restores the main window
   - **New trade** (`Ctrl+N`) — opens main window focused on the new trade form
   - **Capture overlay** (`Ctrl+Alt+L`) — triggers the hotkey overlay directly
   - **Separator**
   - **Today's P&L**: "+$142.50" (read-only, updated every minute)
   - **Separator**
-  - **Quit Ledger** — the only way to fully exit the process
+  - **Quit FXLedger** — the only way to fully exit the process
 - Double-clicking the tray icon shows the main window.
-- A tray tooltip on hover shows: "Ledger — Bridge: active | Today: +$142.50"
+- A tray tooltip on hover shows: "FXLedger — Bridge: active | Today: +$142.50"
 
 **Auto-launch on Windows startup:**
-- Settings → General → "Launch Ledger when Windows starts" toggle (default: off).
+- Settings → General → "Launch FXLedger when Windows starts" toggle (default: off).
 - Implemented via `app.setLoginItemSettings({ openAtLogin: true })` (Electron's built-in API — no registry manipulation needed).
 - When auto-launched, the app starts **hidden** (no window shown). The tray icon appears. The bridge and hotkey are active. The trader opens the window only when they need to review trades.
 
@@ -724,7 +724,7 @@ A step-by-step overlay tour using a spotlight technique: the rest of the screen 
 1. **The blotter** — *"This is your trade journal. Every trade you log or import appears here as a row. Click any row to open the full trade detail."*
 2. **+ New Trade button** — *"Click this — or press Ctrl+N — to manually log a trade. Use this for historical trades or when you want to record context before the broker confirms."*
 3. **The hotkey** — *"Press Ctrl+Alt+L from anywhere on your screen — even while TradingView is open — to instantly capture a screenshot and log a trade in under 12 seconds."*
-4. **Import** — *"Already have a history? Drag your MT4 or MT5 statement HTML onto the Import page and Ledger will parse every trade automatically."*
+4. **Import** — *"Already have a history? Drag your MT4 or MT5 statement HTML onto the Import page and FXLedger will parse every trade automatically."*
 5. **The dashboard** — *"Once you have trades logged, this page reveals your edge: win rate, profit factor, best setups, best sessions, mistake patterns."*
 6. **The risk calculator** — *"Use this before every trade — press Ctrl+Shift+R — to calculate the exact lot size that risks only 1% (or your chosen %) of your account."*
 7. **The prop firm banner** — *"If this account is a prop account, a warning banner appears here when you approach your daily loss or drawdown limit."*
@@ -879,7 +879,7 @@ These rules are not negotiable.
 16. **The TradeForm component is reused** across manual entry, hotkey overlay, and trade detail. Build once.
 17. **Tests run in CI on every commit.** Vitest in pre-commit hook is recommended.
 18. **All user-facing form validation uses Zod schemas.** Errors surface as inline messages below the relevant field — never as `window.alert()`, never as a generic "Something went wrong." Every Zod schema lives in `src/lib/schemas.ts`. The same schemas validate IPC handler inputs in the main process.
-19. **The system tray icon is always present when the app is running.** Closing the main window hides it; it does not quit the process. The only way to fully quit is via the tray context menu → "Quit Ledger" or `app.quit()` from the about page.
+19. **The system tray icon is always present when the app is running.** Closing the main window hides it; it does not quit the process. The only way to fully quit is via the tray context menu → "Quit FXLedger" or `app.quit()` from the about page.
 
 ---
 
@@ -908,7 +908,7 @@ The journal is done when a trader can do all of the following on a clean Windows
 19. Generate a per-trade PDF and a date-range summary PDF that look professional enough to email to a mentor.
 20. Open the History tab on any trade and see every change ever made to it.
 
-21. Close the main window — confirm the tray icon remains in the taskbar. Press `Ctrl+Alt+L` — confirm the capture overlay appears. Right-click the tray icon → confirm "Today's P&L" shows the correct amount. Select "Quit Ledger" → confirm the process exits fully.
+21. Close the main window — confirm the tray icon remains in the taskbar. Press `Ctrl+Alt+L` — confirm the capture overlay appears. Right-click the tray icon → confirm "Today's P&L" shows the correct amount. Select "Quit FXLedger" → confirm the process exits fully.
 22. Open the risk calculator (`Ctrl+Shift+R`), enter account balance $10,000, risk 1%, entry 1.0850, stop 1.0800 on EURUSD — confirm it outputs 0.20 lots. Click "Use this lot size" — confirm the Volume field in the open trade form is filled with 0.20.
 23. Hover over the "R-multiple" column header in the blotter — confirm a tooltip appears explaining what R-multiple means. Hover over "Profit factor" on the dashboard — confirm a tooltip appears with a plain-language definition and example.
 24. Import a broker statement with 500+ trades — confirm a progress bar is visible during parsing and the UI does not appear frozen at any point.

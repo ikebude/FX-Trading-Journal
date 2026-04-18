@@ -88,7 +88,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: 'Commission',
     definition:
-      'A fixed fee charged per lot traded by ECN/raw-spread brokers. Appears as a negative value on each trade leg in Ledger.',
+      'A fixed fee charged per lot traded by ECN/raw-spread brokers. Appears as a negative value on each trade leg in FXLedger.',
     example: '$7/lot round-trip = −$3.50 on entry leg, −$3.50 on exit leg.',
   },
   {
@@ -137,7 +137,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: 'Setup',
     definition:
-      'A defined, repeatable set of conditions that must be met before you take a trade. Examples: "Order Block Retest", "FVG Fill", "Breakout Retest". Ledger tracks performance per setup.',
+      'A defined, repeatable set of conditions that must be met before you take a trade. Examples: "Order Block Retest", "FVG Fill", "Breakout Retest". FXLedger tracks performance per setup.',
   },
   {
     term: 'Entry Model',

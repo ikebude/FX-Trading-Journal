@@ -1,7 +1,9 @@
 /**
- * Ledger — Electron preload script
+ * FXLedger — Electron preload script
  *
  * Exposes a typed `window.ledger` API to the renderer.
+ * NOTE: the `window.ledger` bridge name is an internal identifier and is
+ * intentionally preserved across the v1.1 brand rename.
  * Every IPC channel is whitelisted here. The renderer never has direct
  * Node access; it goes through this bridge.
  */
