@@ -3,6 +3,14 @@
   "version": "1.0.2",
   "description": "Ledger — local-first forex trading journal for Windows",
   "author": "ikebude",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ikebude/FX-Trading-Journal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ikebude/FX-Trading-Journal/issues"
+  },
+  "homepage": "https://github.com/ikebude/FX-Trading-Journal#readme",
   "main": "dist-electron/main.cjs",
   "type": "module",
   "scripts": {
