@@ -146,7 +146,7 @@ type ProcessResult = { message: string; trade: BridgeEvent['trade'] | null; trad
 async function processMt4File(data: MT4BridgeFile, dataDir: string): Promise<ProcessResult> {
   const db = getDb();
   const accountId = await resolveAccountId(data.account);
-  if (!accountId) throw new Error('No accounts configured in Ledger');
+  if (!accountId) throw new Error('No accounts configured in FXLedger');
 
   const externalTicket = String(data.ticket);
   const direction = data.type === 'buy' ? 'LONG' : 'SHORT';
@@ -275,7 +275,7 @@ async function processMt4File(data: MT4BridgeFile, dataDir: string): Promise<Pro
 async function processMt5File(data: MT5BridgeFile): Promise<ProcessResult> {
   const db = getDb();
   const accountId = await resolveAccountId(data.account);
-  if (!accountId) throw new Error('No accounts configured in Ledger');
+  if (!accountId) throw new Error('No accounts configured in FXLedger');
 
   const positionId = String(data.position_id);
   const symbol = data.symbol?.toUpperCase() ?? data.deals[0]?.symbol?.toUpperCase();

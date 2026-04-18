@@ -103,7 +103,7 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, EBState> {
 if (typeof window !== 'undefined' && typeof (window as Window & { ledger?: unknown }).ledger === 'undefined') {
   // eslint-disable-next-line no-console
   console.error(
-    '[Ledger] window.ledger is undefined — preload script did not execute. ' +
+    '[FXLedger] window.ledger is undefined — preload script did not execute. ' +
     'Check that preload.cjs is present in the dist-electron directory.',
   );
 }
