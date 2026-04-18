@@ -1,8 +1,24 @@
 # Changelog
 
-All notable changes to **Ledger** are documented here.
+All notable changes to **FXLedger** (renamed from "Ledger" in v1.1) are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [Unreleased] — renaming to FXLedger for v1.1
+
+### Changed
+- **Product rename:** "Ledger" → "FXLedger" at every user-visible surface
+  (installer, window title, tray tooltip, sidebar logo, update banner, guided
+  tour, EA install guide, glossary, Settings "About" card, docs). See T1.2 in
+  `docs/superpowers/plans/2026-04-19-v1.1-implementation.md`. The data folder
+  (`%APPDATA%\Ledger\`), the EA files (`LedgerBridge.mq4` / `.mq5`), the
+  electron-builder `appId` (`com.ledger.journal`), the `window.ledger` preload
+  bridge, and internal TypeScript/Drizzle identifiers are intentionally
+  preserved to keep v1.0 installs upgrading cleanly.
+- Historical entries below this note continue to reference the original
+  "Ledger" name and are left untouched for fidelity.
 
 ---
 
