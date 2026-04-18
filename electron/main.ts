@@ -1,5 +1,5 @@
 /**
- * Ledger — Electron main process
+ * FXLedger — Electron main process
  *
  * Responsibilities:
  *  - Create the main BrowserWindow
@@ -28,8 +28,12 @@ import { initAutoUpdateService, runAutoUpdateCheck } from './services/auto-updat
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const APP_NAME = 'Ledger';
-const DEFAULT_DATA_DIR = join(app.getPath('appData'), APP_NAME);
+const APP_NAME = 'FXLedger';
+// Data folder name remains 'Ledger' for the v1.1 rename to keep existing
+// installs pointing at %APPDATA%\Ledger\. A silent auto-backup + optional
+// folder migration is planned for T1.3; do not change this literal here.
+const DATA_FOLDER_NAME = 'Ledger';
+const DEFAULT_DATA_DIR = join(app.getPath('appData'), DATA_FOLDER_NAME);
 const CONFIG_FILENAME = 'config.json';
 
 interface AppConfig {
@@ -263,7 +267,7 @@ function createTray() {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip('Ledger — Forex Trading Journal');
+  tray.setToolTip('FXLedger — Forex Trading Journal');
 
   // F-4: Build a fresh context menu each time it is shown so Today's P&L is live.
   async function buildTrayMenu() {
@@ -286,7 +290,7 @@ function createTray() {
       { label: pnlLabel, enabled: false },
       { type: 'separator' },
       {
-        label: 'Open Ledger',
+        label: 'Open FXLedger',
         click: () => {
           if (!mainWindow) {
             createMainWindow();
@@ -337,6 +341,11 @@ function createTray() {
 // ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // Set the app's display name so window title, tray tooltip, and
+  // taskbar entries show the product brand (FXLedger) even though the
+  // npm package name is lowercase.
+  app.setName(APP_NAME);
+
   ensureDataFolderLayout(config.data_dir);
 
   // schema.sql is an extraResource bundled alongside the app in production.
@@ -355,12 +364,12 @@ app.whenReady().then(async () => {
     // (missing VC++ runtime, locked db file, etc.).
     dialog.showMessageBoxSync({
       type: 'error',
-      title: 'Ledger — Startup Failed',
+      title: 'FXLedger — Startup Failed',
       message: 'Could not initialize the database.',
       detail:
         `Data folder: ${config.data_dir}\n\n` +
         `Error: ${err instanceof Error ? err.message : String(err)}\n\n` +
-        'Check that the data folder is accessible and that no other instance of Ledger is running.',
+        'Check that the data folder is accessible and that no other instance of FXLedger is running.',
       buttons: ['Quit'],
     });
     app.quit();
