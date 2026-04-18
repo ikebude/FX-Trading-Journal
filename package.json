@@ -1,7 +1,7 @@
 {
-  "name": "ledger",
+  "name": "fxledger",
   "version": "1.0.3",
-  "description": "Ledger — local-first forex trading journal for Windows",
+  "description": "FXLedger — local-first forex trading journal for Windows",
   "author": "ikebude",
   "repository": {
     "type": "git",
@@ -94,7 +94,7 @@
   },
   "build": {
     "appId": "com.ledger.journal",
-    "productName": "Ledger",
+    "productName": "FXLedger",
     "directories": {
       "output": "release"
     },
@@ -124,7 +124,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ledger"
+      "shortcutName": "FXLedger"
     },
     "publish": {
       "provider": "github",

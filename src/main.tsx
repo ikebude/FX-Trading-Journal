@@ -59,7 +59,7 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, EBState> {
         </h1>
         <p style={{ color: '#888', maxWidth: '480px', margin: 0, lineHeight: 1.6 }}>
           {isBridgeMissing
-            ? 'The Ledger preload script did not load. This usually means the app was packaged incorrectly. Please reinstall using the latest installer.'
+            ? 'The FXLedger preload script did not load. This usually means the app was packaged incorrectly. Please reinstall using the latest installer.'
             : error.message}
         </p>
         <pre
@@ -103,7 +103,7 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, EBState> {
 if (typeof window !== 'undefined' && typeof (window as Window & { ledger?: unknown }).ledger === 'undefined') {
   // eslint-disable-next-line no-console
   console.error(
-    '[Ledger] window.ledger is undefined — preload script did not execute. ' +
+    '[FXLedger] window.ledger is undefined — preload script did not execute. ' +
     'Check that preload.cjs is present in the dist-electron directory.',
   );
 }

@@ -23,7 +23,7 @@ export function UpdateBanner() {
     return (
       <div className="flex items-center justify-between border-b border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs text-amber-400">
         <span>
-          Ledger <strong>{version}</strong> is available
+          FXLedger <strong>{version}</strong> is available
         </span>
         <div className="flex items-center gap-3">
           <button type="button" onClick={download} className="font-medium underline">
@@ -68,7 +68,7 @@ export function UpdateBanner() {
     return (
       <div className="flex items-center justify-between border-b border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-xs text-emerald-400">
         <span>
-          Ledger <strong>{version}</strong> is ready to install
+          FXLedger <strong>{version}</strong> is ready to install
         </span>
         <button type="button" onClick={install} className="font-medium underline">
           Restart now

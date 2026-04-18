@@ -2,7 +2,7 @@
  * Capture IPC handler — Milestone 10.
  *
  * Provides screen capture for the hotkey overlay:
- *  capture:foreground-window → captures the top-most non-Ledger window,
+ *  capture:foreground-window → captures the top-most non-FXLedger window,
  *    encodes as WebP q85 via sharp, saves to screenshots/unmatched/<uuid>.webp,
  *    returns { dataUrl, savedPath } for the overlay UI to display.
  *  capture:show → shows the overlay window (delegates to main via ctx)
@@ -29,11 +29,11 @@ export function registerCaptureHandlers(ctx: IpcContext): void {
         thumbnailSize: { width: 1920, height: 1080 },
       });
 
-      // Prefer the first non-Ledger window source
+      // Prefer the first non-FXLedger window source
       const source =
         sources.find(
           (s) =>
-            s.name !== 'Ledger' &&
+            s.name !== 'FXLedger' &&
             !s.name.toLowerCase().includes('ledger') &&
             s.thumbnail.getSize().width > 0,
         ) ?? sources[0];

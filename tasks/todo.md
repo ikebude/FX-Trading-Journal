@@ -1,4 +1,4 @@
-# Ledger — Task Tracker
+# FXLedger — Task Tracker
 
 The current phase of work is tracked here. Each session should update this file.
 

@@ -1,4 +1,4 @@
-# Ledger — Forex Trading Journal
+# FXLedger — Forex Trading Journal
 
 > A local-first, institutional-grade trading journal for Windows. No cloud, no login, no subscription, no telemetry. Your data never leaves your machine.
 
@@ -8,9 +8,9 @@
 
 ---
 
-## What Is Ledger?
+## What Is FXLedger?
 
-Ledger is a professional forex trading journal designed for serious traders who want full control of their data. It runs entirely on your Windows PC — no account required, no internet needed after installation.
+FXLedger is a professional forex trading journal designed for serious traders who want full control of their data. It runs entirely on your Windows PC — no account required, no internet needed after installation.
 
 **Key principles:**
 
@@ -35,23 +35,23 @@ Ledger is a professional forex trading journal designed for serious traders who 
 
 ### Download
 
-**[⬇ Download Ledger Setup (latest release)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)**
+**[⬇ Download FXLedger Setup (latest release)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)**
 
-Download `Ledger-Setup-x.x.x.exe` from the Assets section of the latest release.
+Download `FXLedger-Setup-x.x.x.exe` from the Assets section of the latest release.
 
 ### Installation Steps
 
-1. Run `Ledger-Setup-x.x.x.exe`.
-2. If Windows shows a SmartScreen warning ("Windows protected your PC"), click **More info → Run anyway**. Ledger is not digitally signed (no subscription required for the certificate), but the source code is fully open and auditable.
-3. Choose your installation directory (default: `C:\Program Files\Ledger`).
+1. Run `FXLedger-Setup-x.x.x.exe`.
+2. If Windows shows a SmartScreen warning ("Windows protected your PC"), click **More info → Run anyway**. FXLedger is not digitally signed (no subscription required for the certificate), but the source code is fully open and auditable.
+3. Choose your installation directory (default: `C:\Program Files\FXLedger`).
 4. Click **Install**. The installer creates a desktop shortcut and Start Menu entry.
-5. Launch **Ledger** from the desktop shortcut.
+5. Launch **FXLedger** from the desktop shortcut.
 
-On first launch, Ledger runs the guided setup tour (about 30 seconds). After that, you're in the main blotter.
+On first launch, FXLedger runs the guided setup tour (about 30 seconds). After that, you're in the main blotter.
 
 ### Uninstalling
 
-Go to **Settings → Apps → Ledger → Uninstall**, or run `Uninstall Ledger.exe` in your installation folder. Your data folder (`%APPDATA%\Ledger\`) is **not** deleted during uninstall — your trades are preserved. Delete the folder manually if you want a clean removal.
+Go to **Settings → Apps → FXLedger → Uninstall**, or run `Uninstall FXLedger.exe` in your installation folder. Your data folder (`%APPDATA%\Ledger\`) is **not** deleted during uninstall — your trades are preserved. Delete the folder manually if you want a clean removal.
 
 ---
 
@@ -80,7 +80,7 @@ Click **Save**. The trade appears in the blotter immediately.
 
 ### 3. Import a Statement
 
-Go to **Import** (sidebar) and drag your MT4 or MT5 HTML statement onto the import area. Ledger parses the statement, shows you a preview of what will be imported, and lets you confirm before committing. Any rows that can't be parsed are listed separately so nothing is silently dropped.
+Go to **Import** (sidebar) and drag your MT4 or MT5 HTML statement onto the import area. FXLedger parses the statement, shows you a preview of what will be imported, and lets you confirm before committing. Any rows that can't be parsed are listed separately so nothing is silently dropped.
 
 ### 4. Set Up the Live Bridge (Optional)
 
@@ -137,7 +137,7 @@ Go to **Reviews** to write daily or weekly trade reviews with markdown support. 
 
 ### Calendar
 
-Go to **Calendar** to see your trades alongside high-impact economic news events. Import the ForexFactory calendar CSV (downloadable from their website) and Ledger will automatically tag trades that occurred within 15 minutes of a news event.
+Go to **Calendar** to see your trades alongside high-impact economic news events. Import the ForexFactory calendar CSV (downloadable from their website) and FXLedger will automatically tag trades that occurred within 15 minutes of a news event.
 
 ### Reports
 
@@ -159,7 +159,7 @@ Change the hotkey in **Settings → General**.
 
 ### Backup & Restore
 
-- **Auto-backup:** Ledger creates a ZIP backup of your database automatically when you close the app.
+- **Auto-backup:** FXLedger creates a ZIP backup of your database automatically when you close the app.
 - **Manual backup:** Settings → Backup → Backup Now creates an immediate backup.
 - **Restore:** Settings → Backup → select a backup → Restore. The backup ZIP contains your full database and all screenshots.
 
@@ -169,14 +169,14 @@ Your backups live in `%APPDATA%\Ledger\backups\`. For cloud redundancy, move you
 
 ## Live Bridge Setup
 
-The live bridge lets MetaTrader 4 or 5 send trades to Ledger in real time using a bundled Expert Advisor (EA). When you open a position in MT4/MT5, Ledger sees it within seconds and creates an OPEN trade. You add your "why" notes, screenshots, and setup details while the trade is live. When you close the position, Ledger updates the same trade record with the exit price and P&L — all your annotations are preserved.
+The live bridge lets MetaTrader 4 or 5 send trades to FXLedger in real time using a bundled Expert Advisor (EA). When you open a position in MT4/MT5, FXLedger sees it within seconds and creates an OPEN trade. You add your "why" notes, screenshots, and setup details while the trade is live. When you close the position, FXLedger updates the same trade record with the exit price and P&L — all your annotations are preserved.
 
 ### Step 1: Copy the Expert Advisor
 
-After installing Ledger, the EA files are at:
+After installing FXLedger, the EA files are at:
 ```
-%USERPROFILE%\Documents\Ledger\mql\LedgerBridge.mq5   (for MT5)
-%USERPROFILE%\Documents\Ledger\mql\LedgerBridge.mq4   (for MT4)
+%USERPROFILE%\Documents\FXLedger\mql\LedgerBridge.mq5   (for MT5)
+%USERPROFILE%\Documents\FXLedger\mql\LedgerBridge.mq4   (for MT4)
 ```
 
 **For MetaTrader 5:**
@@ -194,9 +194,9 @@ After installing Ledger, the EA files are at:
 **For MetaTrader 4:**
 Same steps but use `MQL4\Experts\` and `LedgerBridge.mq4`.
 
-### Step 2: Configure the Bridge in Ledger
+### Step 2: Configure the Bridge in FXLedger
 
-1. In Ledger, go to **Settings → Live Bridge**.
+1. In FXLedger, go to **Settings → Live Bridge**.
 2. In the **Watch Directory** field, enter the path to the `Ledger` folder inside your MT4/MT5 data directory. Example:
    ```
    C:\Users\YourName\AppData\Roaming\MetaQuotes\Terminal\<hash>\MQL5\Files\Ledger
@@ -207,7 +207,7 @@ Same steps but use `MQL4\Experts\` and `LedgerBridge.mq4`.
 ### Step 3: Verify It's Working
 
 1. Open a position in MT4/MT5 on any symbol.
-2. Within 5 seconds, you should see a toast notification in Ledger: *"EURUSD LONG — position opened"*.
+2. Within 5 seconds, you should see a toast notification in FXLedger: *"EURUSD LONG — position opened"*.
 3. The trade appears in the blotter with a pulsing green LIVE badge.
 4. Add your notes and screenshots now, while the trade is live.
 5. When you close the position in MT4/MT5, the trade updates automatically with the exit price and P&L.
@@ -229,12 +229,12 @@ Same steps but use `MQL4\Experts\` and `LedgerBridge.mq4`.
 |---|---|
 | Theme | Dark / Light / System |
 | Display Timezone | All timestamps in the app are displayed in this IANA timezone |
-| Launch on startup | Start Ledger when Windows logs in |
+| Launch on startup | Start FXLedger when Windows logs in |
 | Auto-update | Check for new versions on startup (off by default; requires internet) |
 | Hotkey | Global shortcut to open the capture overlay (default: Ctrl+Alt+L) |
 | Watch Directory | MT4/5 files folder for the live bridge |
 | Backup | Manual backup and restore controls |
-| Data Folder | Location of your Ledger data (database + screenshots + backups) |
+| Data Folder | Location of your FXLedger data (database + screenshots + backups) |
 
 ---
 
@@ -275,13 +275,13 @@ To move your data folder to a different location (e.g., OneDrive or a different 
 1. Go to **Settings → Data → Open Folder**.
 2. Copy the entire `Ledger\` folder to the new location.
 3. In Settings → Data → Data Folder path, paste the new path and click Save.
-4. Restart Ledger. It will use the new location on next launch.
+4. Restart FXLedger. It will use the new location on next launch.
 
 ---
 
 ## Privacy & Security
 
-- **No network calls** — Ledger makes zero outbound connections unless you enable auto-update in Settings.
+- **No network calls** — FXLedger makes zero outbound connections unless you enable auto-update in Settings.
 - **No telemetry, no analytics.** Period. The source code is public — verify for yourself.
 - **No login required.** There is no account, no email, no password.
 - **All data is on your machine.** The database is a standard SQLite file you can open with any SQLite browser.
@@ -308,7 +308,7 @@ npm run build        # Build renderer + main (no installer)
 npm run package:win  # Build Windows NSIS installer → release/
 ```
 
-The packaged installer will be at `release/Ledger Setup x.x.x.exe`.
+The packaged installer will be at `release/FXLedger Setup x.x.x.exe`.
 
 ### Project Structure
 
@@ -344,11 +344,11 @@ schema.sql         ← SQLite DDL source of truth
 
 ## FAQ
 
-**Q: Can I use Ledger with a broker other than MetaTrader?**
+**Q: Can I use FXLedger with a broker other than MetaTrader?**
 > Yes. The statement importer supports MT4 HTML statements, MT5 HTML statements, and generic CSV. For live tracking you need MT4 or MT5. Other platforms can be logged manually or imported via CSV.
 
 **Q: Is there a mobile app?**
-> No. Ledger is a Windows desktop app only. The data folder can be synced to a phone via OneDrive/Dropbox for viewing, but the app itself is Windows-only.
+> No. FXLedger is a Windows desktop app only. The data folder can be synced to a phone via OneDrive/Dropbox for viewing, but the app itself is Windows-only.
 
 **Q: Can I have multiple trading accounts?**
 > Yes. Create as many accounts as you need in Settings → Accounts. Each account has its own analytics, and the account selector in the top bar filters the entire app to that account.
@@ -363,9 +363,9 @@ schema.sql         ← SQLite DDL source of truth
 > Yes. Deleting from the blotter moves it to Trash (soft-delete). Go to **Trash** in the sidebar to permanently delete trades. Hard-delete cannot be undone.
 
 **Q: Why does the installer show a SmartScreen warning?**
-> Ledger is not code-signed with an Extended Validation certificate (these cost hundreds of dollars per year). The source code is fully public — you can review, build, and verify it yourself. Click "More info → Run anyway" to proceed.
+> FXLedger is not code-signed with an Extended Validation certificate (these cost hundreds of dollars per year). The source code is fully public — you can review, build, and verify it yourself. Click "More info → Run anyway" to proceed.
 
-**Q: Does Ledger work without MetaTrader?**
+**Q: Does FXLedger work without MetaTrader?**
 > Fully. You can log every trade manually and import statements. The live bridge is optional.
 
 **Q: How do I report a bug or request a feature?**

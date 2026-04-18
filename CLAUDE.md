@@ -1,11 +1,11 @@
-# Ledger — Developer Guide
+# FXLedger — Developer Guide
 
 ## Project Identity
 
-**App name:** Ledger  
+**App name:** FXLedger (renamed from "Ledger" in v1.1; see T1.2)  
 **What it is:** A native Windows desktop trading journal for forex traders. Local-first, no cloud, no telemetry, single `.exe` installer.  
 **Full spec:** See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — 780 lines, nothing in it is optional or deferred.  
-**Data location:** `%APPDATA%\Ledger\` (configurable, moveable)  
+**Data location:** `%APPDATA%\Ledger\` (configurable, moveable; data folder name intentionally preserved for v1.0 → v1.1 upgrade; see T1.3)  
 **Status:** Core libraries done. UI + IPC handlers remain.
 
 ---
