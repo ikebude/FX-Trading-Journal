@@ -6,6 +6,47 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.2] — 2026-04-18
+
+### Added
+- **In-app help — metric tooltips.** Every headline metric on the Dashboard (Net P&L,
+  Win rate, Profit factor, Expectancy, Avg R, Max DD, equity curve header) and every
+  sortable Blotter column header now shows a glossary tooltip on hover, defined once
+  in `src/lib/glossary-entries.ts` and rendered via the reusable `<MetricTooltip>`
+  component.
+- **Glossary drawer.** A new Glossary button in the top bar opens a Radix Dialog
+  containing searchable definitions for all metrics and trade-lifecycle terms,
+  grouped by category.
+- **EA install guide.** `/settings/ea-guide` walks through MT4/MT5 Expert Advisor
+  installation with per-platform paths, DLL-imports enablement, and troubleshooting.
+  Linked from Settings → Bridge.
+- **Auto-update UX (Phase 2).** Yellow banner surfaces when a newer Ledger is on
+  GitHub Releases: "Available → Download" → progress → "Ready → Restart now". A
+  manual "Check for updates now" button sits in Settings → General, and shows
+  "last checked X minutes ago" via `date-fns`. `autoDownload=false` and a 4-hour
+  cooldown protect against runaway checks. All wiring flows through
+  `electron/services/auto-update.ts` + `electron/ipc/updater.ts` + `useUpdater` hook.
+- **E2E acceptance suite.** 20 Playwright-Electron tests in
+  `tests/e2e/acceptance-criteria.spec.ts` covering AC-02, AC-04–AC-15, AC-18–AC-20,
+  AC-22–AC-24. Shared helpers (`tests/e2e/helpers.ts`) give every test an isolated
+  `APPDATA` temp dir so runs never share DB state. Fixtures include MT4/MT5 HTML
+  samples, generic broker CSV, ForexFactory calendar CSV, and MT bridge events.
+- **Manual acceptance-test playbook.** `docs/acceptance-test-playbook.md` —
+  sign-off template for the 6 criteria that require real Windows interactions
+  (clean install timing, Ctrl+Alt+L overlay, multi-machine backup, OneDrive data-
+  folder move, system-tray behavior, hotkey-while-in-tray) plus the post-v1.0.3
+  auto-update verification.
+
+### Changed
+- `CLAUDE.md` — replaced the stale "Remaining (Build in Order Below)" list with a
+  concise 3-item deferred list plus a completion status table reflecting v1.0.2.
+
+### Notes
+- Auto-update end-to-end verification (AC-U) cannot be signed off until v1.0.3 is
+  published. Not a v1.0.2 ship blocker — the playbook captures the gate.
+
+---
+
 ## [1.0.1] — 2026-04-17
 
 ### Fixed
