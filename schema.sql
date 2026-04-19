@@ -32,11 +32,32 @@ CREATE TABLE accounts (
   prop_profit_target_pct   REAL,
   prop_phase               TEXT CHECK(prop_phase IN ('PHASE_1','PHASE_2','FUNDED','VERIFIED')),
 
+  -- Broker metadata (v1.1 — T1.3).
+  -- All nullable to preserve forward-compat for v1.0.x DBs; T1.6 account UI
+  -- will prompt users to fill these in. Used downstream for:
+  --   * prop firm preset matching          (broker + platform + broker_type)
+  --   * server-time drift detection        (server + timezone)
+  --   * MT4/MT5 account lookup from bridge (platform + server + login)
+  server                   TEXT,                                          -- e.g. "ICMarkets-Live04"
+  platform                 TEXT CHECK(platform IN
+                           ('MT4','MT5','cTrader','MatchTrader','DXtrade','IBKR','OANDA','CRYPTO','OTHER')),
+  leverage                 INTEGER,                                       -- e.g. 100 for 1:100
+  timezone                 TEXT,                                          -- IANA string, e.g. "America/New_York"
+  login                    TEXT,                                          -- Broker login (string to support alphanumerics)
+  broker_type              TEXT CHECK(broker_type IN
+                           ('RETAIL','PROP','ECN','MARKET_MAKER','CRYPTO_EXCHANGE')),
+
   created_at_utc           TEXT NOT NULL,
   updated_at_utc           TEXT NOT NULL
 );
 
 CREATE INDEX idx_accounts_active ON accounts(is_active);
+
+-- One broker login maps to exactly one FXLedger account.
+-- Partial uniqueness: rows with NULL platform/server/login are excluded,
+-- so legacy v1.0.x accounts without broker metadata are never blocked.
+CREATE UNIQUE INDEX idx_accounts_login ON accounts(platform, server, login)
+  WHERE login IS NOT NULL AND platform IS NOT NULL AND server IS NOT NULL;
 
 -- ─────────────────────────────────────────────────────────────
 -- Instruments — per-symbol metadata for correct pip math.
@@ -251,6 +272,72 @@ CREATE TABLE balance_snapshots (
 CREATE INDEX idx_balance_account_time ON balance_snapshots(account_id, timestamp_utc);
 
 -- ─────────────────────────────────────────────────────────────
+-- Balance operations — full ledger of non-trade cash movements.
+-- Deposits, withdrawals, bonuses, credits, charges, corrections, interest,
+-- commissions, payouts. Makes accounts reconcilable as true ledgers rather
+-- than bare trade-P&L sums.
+--
+-- op_type taxonomy follows MT5 DEAL_TYPE plus manual-entry needs.
+-- amount is signed in account currency (negative = debit, positive = credit).
+-- occurred_at_utc = when broker booked it; recorded_at_utc = when FXLedger saw it.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE balance_operations (
+  id                 TEXT PRIMARY KEY,
+  account_id         TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+
+  op_type            TEXT NOT NULL CHECK(op_type IN (
+                       'DEPOSIT',
+                       'WITHDRAWAL',
+                       'BONUS',
+                       'CREDIT',
+                       'CHARGE',
+                       'CORRECTION',
+                       'COMMISSION',
+                       'INTEREST',
+                       'PAYOUT',
+                       'OTHER'
+                     )),
+
+  amount             REAL NOT NULL,                      -- signed; in account currency
+  currency           TEXT NOT NULL,                      -- ISO 4217 — stored redundantly for audit
+
+  occurred_at_utc    TEXT NOT NULL,                      -- ISO-8601 UTC: when broker booked it
+  recorded_at_utc    TEXT NOT NULL,                      -- ISO-8601 UTC: when FXLedger saw it
+
+  -- Provenance
+  source             TEXT NOT NULL CHECK(source IN
+                       ('MANUAL','BRIDGE','IMPORT','MT4_HTML','MT5_HTML','CSV','BROKER_PDF','RECONCILIATION')),
+  external_id        TEXT,                               -- broker deal/ticket ID for dedup; NULL for manual
+  external_ticket    TEXT,                               -- MT4/MT5 ticket if linked
+  related_trade_id   TEXT REFERENCES trades(id) ON DELETE SET NULL,  -- optional: op tied to a specific trade
+
+  -- Human context
+  note               TEXT,
+  tags               TEXT,                               -- JSON array of strings
+
+  -- Soft delete (same convention as trades)
+  deleted_at_utc     TEXT,
+
+  created_at_utc     TEXT NOT NULL,
+  updated_at_utc     TEXT NOT NULL
+);
+
+-- Partial-unique: one broker-sourced op can appear at most once per account,
+-- excluding soft-deleted rows so a deleted op can be re-imported cleanly.
+CREATE UNIQUE INDEX idx_balance_ops_external ON balance_operations(account_id, source, external_id)
+  WHERE external_id IS NOT NULL AND deleted_at_utc IS NULL;
+
+-- Common query paths: ledger view, date-range reconciliation, soft-delete sweep.
+CREATE INDEX idx_balance_ops_account_occurred ON balance_operations(account_id, occurred_at_utc);
+CREATE INDEX idx_balance_ops_soft_delete      ON balance_operations(deleted_at_utc);
+CREATE INDEX idx_balance_ops_type             ON balance_operations(op_type);
+
+-- FK index — prevents O(n) scan on every trades hard-delete with SET NULL cascade.
+CREATE INDEX idx_balance_ops_related_trade
+  ON balance_operations(related_trade_id)
+  WHERE related_trade_id IS NOT NULL;
+
+-- ─────────────────────────────────────────────────────────────
 -- Reviews — daily and weekly guided post-market reflections.
 -- ─────────────────────────────────────────────────────────────
 CREATE TABLE reviews (
@@ -315,11 +402,12 @@ CREATE INDEX idx_tne_trade ON trade_news_events(trade_id);
 CREATE TABLE audit_log (
   id              TEXT PRIMARY KEY,
   entity_type     TEXT NOT NULL CHECK(entity_type IN
-                  ('TRADE','LEG','SCREENSHOT','NOTE','TAG_LINK','TRADE_TAGS','REVIEW','ACCOUNT')),
+                  ('TRADE','LEG','SCREENSHOT','NOTE','TAG_LINK','TRADE_TAGS','REVIEW','ACCOUNT','BALANCE_OP')),
   entity_id       TEXT NOT NULL,
   trade_id        TEXT REFERENCES trades(id) ON DELETE SET NULL,  -- denormalized; SET NULL preserves history after hard-delete
   action          TEXT NOT NULL CHECK(action IN
-                  ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE','HARD_DELETE')),
+                  ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE','HARD_DELETE',
+                   'BALANCE_OP_CREATE','BALANCE_OP_UPDATE','BALANCE_OP_DELETE','BALANCE_OP_RESTORE')),
   changed_fields  TEXT,                              -- JSON: { field: [old, new] }
   actor           TEXT NOT NULL DEFAULT 'user',
   timestamp_utc   TEXT NOT NULL

@@ -76,6 +76,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration002(sqlite);
   }
 
+  if (currentVersion < 3) {
+    applyMigration003(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -257,6 +261,128 @@ function applyMigration002(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 002 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 003 — balance_operations + accounts broker metadata + audit_log CHECK extension
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Adds:
+ *  1. Six new nullable columns to accounts (server, platform, leverage, timezone, login, broker_type).
+ *  2. Partial unique index idx_accounts_login on (platform, server, login).
+ *  3. balance_operations table with 5 indexes (including FK index for related_trade_id).
+ *  4. Rebuild audit_log to add BALANCE_OP entity_type + BALANCE_OP_* action values.
+ *
+ * Existing v1.0.x users land here (user_version = 2) on first launch of v1.1+.
+ * SQLite ALTER TABLE ADD COLUMN does not support inline CHECK in older versions,
+ * so CHECK constraints for the new columns are omitted here — app-layer Zod
+ * validates enum values before insertion. New DBs get the full CHECKs from schema.sql.
+ */
+function applyMigration003(sqlite: Database.Database): void {
+  log.info('Database: applying migration 003 (balance_operations + accounts broker metadata + audit_log CHECK extension)');
+
+  sqlite.pragma('foreign_keys = OFF');
+  const migrate = sqlite.transaction(() => {
+    // 1. Add 6 new nullable columns to accounts.
+    sqlite.exec(`
+      ALTER TABLE accounts ADD COLUMN server TEXT;
+      ALTER TABLE accounts ADD COLUMN platform TEXT;
+      ALTER TABLE accounts ADD COLUMN leverage INTEGER;
+      ALTER TABLE accounts ADD COLUMN timezone TEXT;
+      ALTER TABLE accounts ADD COLUMN login TEXT;
+      ALTER TABLE accounts ADD COLUMN broker_type TEXT;
+    `);
+
+    // 2. Partial unique index: one broker login per (platform, server) combination.
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_login
+        ON accounts(platform, server, login)
+        WHERE login IS NOT NULL AND platform IS NOT NULL AND server IS NOT NULL;
+    `);
+
+    // 3. Create balance_operations table.
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS balance_operations (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        op_type TEXT NOT NULL CHECK(op_type IN (
+          'DEPOSIT','WITHDRAWAL','BONUS','CREDIT','CHARGE',
+          'CORRECTION','COMMISSION','INTEREST','PAYOUT','OTHER'
+        )),
+        amount REAL NOT NULL,
+        currency TEXT NOT NULL,
+        occurred_at_utc TEXT NOT NULL,
+        recorded_at_utc TEXT NOT NULL,
+        source TEXT NOT NULL CHECK(source IN (
+          'MANUAL','BRIDGE','IMPORT','MT4_HTML','MT5_HTML',
+          'CSV','BROKER_PDF','RECONCILIATION'
+        )),
+        external_id TEXT,
+        external_ticket TEXT,
+        related_trade_id TEXT REFERENCES trades(id) ON DELETE SET NULL,
+        note TEXT,
+        tags TEXT,
+        deleted_at_utc TEXT,
+        created_at_utc TEXT NOT NULL,
+        updated_at_utc TEXT NOT NULL
+      );
+    `);
+
+    // 4. Indexes for balance_operations (including FK index for O(log n) cascades).
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_balance_ops_external
+        ON balance_operations(account_id, source, external_id)
+        WHERE external_id IS NOT NULL AND deleted_at_utc IS NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_balance_ops_account_occurred
+        ON balance_operations(account_id, occurred_at_utc);
+
+      CREATE INDEX IF NOT EXISTS idx_balance_ops_soft_delete
+        ON balance_operations(deleted_at_utc);
+
+      CREATE INDEX IF NOT EXISTS idx_balance_ops_type
+        ON balance_operations(op_type);
+
+      CREATE INDEX IF NOT EXISTS idx_balance_ops_related_trade
+        ON balance_operations(related_trade_id)
+        WHERE related_trade_id IS NOT NULL;
+    `);
+
+    // 5. Rebuild audit_log to add BALANCE_OP entity_type + BALANCE_OP_* actions.
+    //    Follows the same CREATE-new / INSERT-SELECT / DROP / RENAME pattern as migration002.
+    sqlite.exec(`
+      CREATE TABLE audit_log_v3 (
+        id              TEXT PRIMARY KEY,
+        entity_type     TEXT NOT NULL CHECK(entity_type IN
+                        ('TRADE','LEG','SCREENSHOT','NOTE','TAG_LINK','TRADE_TAGS','REVIEW','ACCOUNT','BALANCE_OP')),
+        entity_id       TEXT NOT NULL,
+        trade_id        TEXT REFERENCES trades(id) ON DELETE SET NULL,
+        action          TEXT NOT NULL CHECK(action IN
+                        ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE','HARD_DELETE',
+                         'BALANCE_OP_CREATE','BALANCE_OP_UPDATE','BALANCE_OP_DELETE','BALANCE_OP_RESTORE')),
+        changed_fields  TEXT,
+        actor           TEXT NOT NULL DEFAULT 'user',
+        timestamp_utc   TEXT NOT NULL
+      );
+
+      INSERT INTO audit_log_v3 SELECT * FROM audit_log;
+
+      DROP TABLE audit_log;
+
+      ALTER TABLE audit_log_v3 RENAME TO audit_log;
+
+      CREATE INDEX IF NOT EXISTS idx_audit_trade  ON audit_log(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_time   ON audit_log(timestamp_utc);
+      CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
+    `);
+
+    sqlite.pragma('user_version = 3');
+  });
+
+  migrate();
+  sqlite.pragma('foreign_keys = ON');
+  log.info('Database: migration 003 complete');
 }
 
 /**
