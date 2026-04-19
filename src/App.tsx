@@ -23,6 +23,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { PropFirmBanner } from '@/components/layout/PropFirmBanner';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
+import { DriftBanner } from '@/components/session-header/DriftBanner';
 import { KeyboardShortcuts } from '@/components/help/KeyboardShortcuts';
 import { Glossary } from '@/components/help/Glossary';
 import { EAInstallGuide } from '@/components/help/EAInstallGuide';
@@ -32,6 +33,7 @@ import { NewTradeDialog } from '@/components/trade-form/NewTradeDialog';
 import { TradeDetailDrawer } from '@/components/trade-detail/TradeDetailDrawer';
 import { ToastProvider, useToast } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { useAppStore } from '@/stores/app-store';
 import { BlotterPage } from '@/pages/BlotterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ReviewsPage } from '@/pages/ReviewsPage';
@@ -113,6 +115,7 @@ function AppShell() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
   const [tourActive, setTourActive] = useState(false);
+  const activeAccountId = useAppStore((s) => s.activeAccountId);
   useGlobalKeys({ onShortcuts: () => setShortcutsOpen(true) });
 
   // Show tour on first run
@@ -138,6 +141,7 @@ function AppShell() {
         />
         <PropFirmBanner />
         <UpdateBanner />
+        {activeAccountId && <DriftBanner accountId={activeAccountId} />}
         <main className="flex flex-1 flex-col overflow-hidden">
           <Outlet />
         </main>
