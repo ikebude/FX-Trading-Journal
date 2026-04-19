@@ -54,6 +54,7 @@ import { format } from 'date-fns';
 import log from 'electron-log/main.js';
 
 import { backupDatabaseTo, closeDatabase, initializeDatabase } from '../../src/lib/db/client';
+import { validateZipEntryPath } from '../../src/lib/security/zip-slip';
 import type { IpcContext } from './index';
 
 // ─────────────────────────────────────────────────────────────
@@ -324,9 +325,21 @@ async function restoreBackup(
     mkdirSync(stageDir, { recursive: true });
 
     for (const [name, data] of extracted) {
-      const dest = join(stageDir, name);
-      mkdirSync(join(stageDir, name.includes('/') ? name.split('/').slice(0, -1).join('/') : '.'), { recursive: true });
-      writeFileSync(dest, data);
+      // T1.8: Zip-slip protection — validate entry doesn't escape stageDir
+      let safePath: string;
+      try {
+        safePath = validateZipEntryPath(name, stageDir);
+      } catch (err) {
+        return {
+          success: false,
+          error: `Zip-slip security violation: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+
+      // Create parent directories if needed
+      const parentDir = safePath.split(/[/\\]/).slice(0, -1).join('/');
+      mkdirSync(parentDir, { recursive: true });
+      writeFileSync(safePath, data);
     }
 
     // Close the live DB connection before touching the file — required on Windows

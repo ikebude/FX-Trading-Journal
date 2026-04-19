@@ -25,7 +25,7 @@ import {
   UpdateTradeSchema,
 } from '../../src/lib/schemas';
 import { detectSession } from '../../src/lib/tz';
-import { invalidateDashboardCache } from './dashboard';
+import { invalidateDashboardCache, invalidateTradeMetricsCache } from './dashboard';
 
 export function registerTradeHandlers(): void {
   ipcMain.handle('trades:list', async (_e, filters: unknown) => {
@@ -115,6 +115,7 @@ export function registerTradeHandlers(): void {
       });
 
       invalidateDashboardCache();
+      invalidateTradeMetricsCache(tradeId);
       return await getTrade(tradeId);
     } catch (err) {
       log.error('trades:create', err);
@@ -128,6 +129,7 @@ export function registerTradeHandlers(): void {
       await updateTrade(id, parsed as Parameters<typeof updateTrade>[1]);
       await recomputeAndSaveTrade(id);
       invalidateDashboardCache();
+      invalidateTradeMetricsCache(id);
       return await getTrade(id);
     } catch (err) {
       log.error('trades:update', err);
@@ -139,6 +141,7 @@ export function registerTradeHandlers(): void {
     try {
       await softDeleteTrades(ids);
       invalidateDashboardCache();
+      for (const id of ids) invalidateTradeMetricsCache(id);
     } catch (err) {
       log.error('trades:soft-delete', err);
       throw new Error('Failed to delete trades');
@@ -149,6 +152,7 @@ export function registerTradeHandlers(): void {
     try {
       await restoreTrades(ids);
       invalidateDashboardCache();
+      for (const id of ids) invalidateTradeMetricsCache(id);
     } catch (err) {
       log.error('trades:restore', err);
       throw new Error('Failed to restore trades');
@@ -159,6 +163,7 @@ export function registerTradeHandlers(): void {
     try {
       await hardDeleteTrades(ids);
       invalidateDashboardCache();
+      for (const id of ids) invalidateTradeMetricsCache(id);
     } catch (err) {
       log.error('trades:permanently-delete', err);
       throw new Error('Failed to permanently delete trades');
@@ -169,6 +174,7 @@ export function registerTradeHandlers(): void {
     try {
       await bulkUpdateTrades(ids, patch as Parameters<typeof bulkUpdateTrades>[1]);
       invalidateDashboardCache();
+      for (const id of ids) invalidateTradeMetricsCache(id);
     } catch (err) {
       log.error('trades:bulk-update', err);
       throw new Error('Failed to bulk update trades');

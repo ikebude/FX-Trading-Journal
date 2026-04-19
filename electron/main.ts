@@ -10,7 +10,7 @@
  *  - Handle clean shutdown (auto-backup)
  */
 
-import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage, session } from 'electron';
 import log from 'electron-log/main.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -340,11 +340,47 @@ function createTray() {
 // App lifecycle
 // ─────────────────────────────────────────────────────────────
 
+// T1.8 (S1): Permission handler — block all dangerous permissions
+function setupPermissionHandler() {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    // Allowed: none. Block all permissions including camera, microphone, notifications, etc.
+    // FXLedger has zero need for external permissions.
+    log.warn(`Permission request blocked: ${permission}`);
+    callback(false);
+  });
+}
+
+// T1.8 (S2): CSP headers — prevent inline scripts, restrict resource loading
+function setupContentSecurityPolicy() {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'none';",
+          "script-src 'self';",
+          "style-src 'self' 'unsafe-inline';", // Necessary for Tailwind
+          "img-src 'self' data:;",
+          "font-src 'self' data:;",
+          "connect-src 'self';",
+          "frame-ancestors 'none';",
+          "base-uri 'none';",
+          "form-action 'none';",
+        ].join(' '),
+      },
+    });
+  });
+}
+
 app.whenReady().then(async () => {
   // Set the app's display name so window title, tray tooltip, and
   // taskbar entries show the product brand (FXLedger) even though the
   // npm package name is lowercase.
   app.setName(APP_NAME);
+
+  // T1.8: Security setup
+  setupPermissionHandler();
+  setupContentSecurityPolicy();
 
   ensureDataFolderLayout(config.data_dir);
 
@@ -430,6 +466,15 @@ app.whenReady().then(async () => {
     log.error('Bridge watcher failed to start', err);
   });
 
+  // T1.10: Initialize calendar auto-sync service
+  try {
+    const { initializeCalendarSync } = await import('./services/calendar-sync');
+    await initializeCalendarSync();
+    log.info('Calendar auto-sync service initialized');
+  } catch (err) {
+    log.error('Calendar auto-sync service initialization failed', err);
+  }
+
   // Sync Windows auto-launch setting based on stored config.
   try {
     app.setLoginItemSettings({ openAtLogin: config.auto_launch ?? false });
@@ -466,6 +511,16 @@ app.on('window-all-closed', async () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+});
+
+// T1.10: Cleanup calendar-sync service on app quit
+app.on('quit', async () => {
+  try {
+    const { stopCalendarSync } = await import('./services/calendar-sync');
+    stopCalendarSync();
+  } catch (err) {
+    log.error('Failed to stop calendar-sync service', err);
+  }
 });
 
 app.on('will-quit', () => {
