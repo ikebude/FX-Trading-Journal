@@ -20,6 +20,7 @@ import {
   GitMerge,
   Copy,
   XCircle,
+  AlertTriangle,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/cn';
+import { useAppStore } from '@/stores/app-store';
 import type { Account } from '@/lib/db/schema';
 import type { ReconcileAction, ReconcileCandidate, ReconcileChoice } from '@/lib/reconcile';
 
@@ -64,15 +66,34 @@ interface CommitResult {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Drop zone
+// Drop zone with account selection
 // ─────────────────────────────────────────────────────────────
 
-function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
+function DropZone({ 
+  onFilePicked, 
+  selectedAccountId, 
+  onAccountChange,
+}: { 
+  onFilePicked: (path: string) => void;
+  selectedAccountId: string | null;
+  onAccountChange: (id: string | null) => void;
+}) {
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: accounts = [] } = useQuery<Account[]>({
+    queryKey: ['accounts'],
+    queryFn: () => window.ledger.accounts.list(),
+  });
+
+  const activeAccount = accounts.find((a) => a.id === selectedAccountId);
+
   async function handlePath(path: string) {
+    if (!selectedAccountId) {
+      setError('Please select an account first');
+      return;
+    }
     setParsing(true);
     setError(null);
     try {
@@ -115,8 +136,47 @@ function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <div className="text-center">
+    <div className="flex flex-1 flex-col gap-6 p-8">
+      {/* Account selection banner */}
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <p className="text-sm font-medium text-amber-200">Select Target Account</p>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Trades will be imported to this account. Make sure you've selected the correct one.
+        </p>
+        <Select value={selectedAccountId ?? ''} onValueChange={(v) => onAccountChange(v || null)}>
+          <SelectTrigger className="w-full">
+            <div className="flex items-center gap-2">
+              {activeAccount && (
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: activeAccount.displayColor }}
+                />
+              )}
+              <SelectValue placeholder="Select an account…" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ backgroundColor: a.displayColor }}
+                  />
+                  <span>{a.name}</span>
+                  {a.broker && <span className="text-xs text-muted-foreground">({a.broker})</span>}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* File upload area */}
+      <div>
         <h2 className="text-lg font-semibold text-foreground">Import Statement</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Supports MT4 HTML, MT5 HTML, and generic CSV formats
@@ -125,10 +185,11 @@ function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
 
       <div
         className={cn(
-          'flex w-full max-w-md flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-12 transition-colors',
+          'flex w-full max-w-md flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-12 transition-colors mx-auto',
           dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-border/60',
+          !selectedAccountId && 'opacity-50 cursor-not-allowed pointer-events-none',
         )}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => { if (selectedAccountId) e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
       >
@@ -142,8 +203,9 @@ function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
             Drop your statement file here, or{' '}
             <button
               type="button"
-              className="text-primary hover:underline"
+              className="text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleBrowse}
+              disabled={!selectedAccountId || parsing}
             >
               browse
             </button>
@@ -281,13 +343,21 @@ function PreviewStep({
   onReconcileAction,
   onBack,
   onNext,
+  importTargetAccountId,
 }: {
   preview: ParsePreview;
   reconcileActions: Map<string, ReconcileAction>;
   onReconcileAction: (positionId: string, action: ReconcileAction) => void;
   onBack: () => void;
   onNext: () => void;
+  importTargetAccountId: string | null;
 }) {
+  const { data: accounts = [] } = useQuery<Account[]>({
+    queryKey: ['accounts'],
+    queryFn: () => window.ledger.accounts.list(),
+  });
+  const targetAccount = accounts.find((a) => a.id === importTargetAccountId);
+
   const formatLabel: Record<string, string> = {
     MT4_HTML: 'MetaTrader 4 HTML',
     MT5_HTML: 'MetaTrader 5 HTML',
@@ -300,6 +370,19 @@ function PreviewStep({
 
   return (
     <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
+      {/* Account context banner */}
+      {targetAccount && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-2">
+          <div
+            className="h-3 w-3 rounded-full shrink-0"
+            style={{ backgroundColor: targetAccount.displayColor }}
+          />
+          <span className="text-sm text-foreground">
+            Importing to <span className="font-semibold">{targetAccount.name}</span>
+          </span>
+        </div>
+      )}
+      
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-3">
         <div className="rounded-lg border border-border bg-card p-3 text-center">
@@ -475,28 +558,29 @@ function CommitStep({
   reconcileActions,
   onBack,
   onCommit,
+  defaultAccountId,
 }: {
   preview: ParsePreview;
   reconcileActions: Map<string, ReconcileAction>;
   onBack: () => void;
   onCommit: (accountId: string) => void;
+  defaultAccountId?: string | null;
 }) {
   const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => window.ledger.accounts.list(),
   });
 
-  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState(defaultAccountId || '');
   const [committing, setCommitting] = useState(false);
 
-  // Auto-select the first account once the query resolves.
-  // useState() initial value runs before the query returns (accounts is [] at mount),
-  // so we must sync via useEffect when data arrives.
+  // Auto-select the first account once the query resolves, or use the default if provided.
   useEffect(() => {
     if (!selectedAccountId && accounts.length > 0) {
-      setSelectedAccountId(accounts[0].id);
+      const idToSelect = defaultAccountId || accounts[0].id;
+      setSelectedAccountId(idToSelect);
     }
-  }, [accounts, selectedAccountId]);
+  }, [accounts, selectedAccountId, defaultAccountId]);
   const [progress, setProgress] = useState(0);
 
   const mergeCount = [...reconcileActions.values()].filter((a) => a === 'merge').length;
@@ -642,10 +726,15 @@ function DoneStep({ result, onReset }: { result: CommitResult; onReset: () => vo
 
 export function ImporterPage() {
   const queryClient = useQueryClient();
+  const { activeAccountId } = useAppStore();
   const [step, setStep] = useState<Step>('drop');
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   const [result, setResult] = useState<CommitResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  // Track which account we're importing to (default to active account from app store)
+  const [importTargetAccountId, setImportTargetAccountId] = useState<string | null>(
+    activeAccountId ?? null,
+  );
   // Default action for each candidate is 'merge' (best guess)
   const [reconcileActions, setReconcileActions] = useState<Map<string, ReconcileAction>>(
     new Map(),
@@ -710,6 +799,7 @@ export function ImporterPage() {
     setResult(null);
     setParseError(null);
     setReconcileActions(new Map());
+    // Keep the selected account across resets so user can import multiple files to same account
   }
 
   return (
@@ -733,7 +823,11 @@ export function ImporterPage() {
       {/* Steps */}
       {step === 'drop' && (
         <>
-          <DropZone onFilePicked={handleFilePicked} />
+          <DropZone 
+            onFilePicked={handleFilePicked}
+            selectedAccountId={importTargetAccountId}
+            onAccountChange={setImportTargetAccountId}
+          />
           {parseError && (
             <div className="mx-6 mb-6 flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -749,6 +843,7 @@ export function ImporterPage() {
           onReconcileAction={handleReconcileAction}
           onBack={reset}
           onNext={() => setStep('commit')}
+          importTargetAccountId={importTargetAccountId}
         />
       )}
       {step === 'commit' && preview && (
@@ -757,6 +852,7 @@ export function ImporterPage() {
           reconcileActions={reconcileActions}
           onBack={() => setStep('preview')}
           onCommit={handleCommit}
+          defaultAccountId={importTargetAccountId}
         />
       )}
       {step === 'done' && result && <DoneStep result={result} onReset={reset} />}
