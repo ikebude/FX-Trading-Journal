@@ -27,6 +27,13 @@ function makeAccount(overrides: Partial<Account> = {}): Account {
     propProfitTarget: null,
     propProfitTargetPct: null,
     propPhase: 'PHASE_1',
+    // Broker metadata (v1.1 — T1.3); all nullable for forward-compat.
+    server: null,
+    platform: null,
+    leverage: null,
+    timezone: null,
+    login: null,
+    brokerType: null,
     createdAtUtc: NOW,
     updatedAtUtc: NOW,
     ...overrides,
