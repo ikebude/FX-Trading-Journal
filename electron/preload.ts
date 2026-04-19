@@ -211,6 +211,14 @@ const api = {
       return () => ipcRenderer.off('updater:event', handler);
     },
   },
+
+  // ── Reconciliation ────────────────────────────────
+  reconciliation: {
+    detectDrift: (accountId: string) =>
+      ipcRenderer.invoke('reconciliation:detect-drift', accountId),
+    createCorrection: (accountId: string, driftAmount: number, note?: string) =>
+      ipcRenderer.invoke('reconciliation:create-correction', accountId, driftAmount, note),
+  },
 };
 
 contextBridge.exposeInMainWorld('ledger', api);
