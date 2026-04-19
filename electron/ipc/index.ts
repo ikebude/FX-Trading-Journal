@@ -26,6 +26,7 @@ import { registerStubHandlers } from './stubs';
 import { registerTagHandlers } from './tags';
 import { registerTradeHandlers } from './trades';
 import { registerUpdaterHandlers } from './updater';
+import { registerReconciliationHandlers } from './reconciliation';
 
 interface AppConfig {
   data_dir: string;
@@ -67,6 +68,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   registerImportHandlers(ctx);
   registerStubHandlers();
   registerUpdaterHandlers();
+  registerReconciliationHandlers();
 
   log.info('IPC: all handlers registered');
 }
