@@ -56,6 +56,7 @@ interface ParsePreview {
   failed: Array<{ rowIndex: number; reason: string }>;
   rowsTotal: number;
   candidates: ReconcileCandidate[];
+  accountId: string | null;
 }
 
 interface CommitResult {
@@ -82,7 +83,7 @@ function DropZone({
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: accounts = [] } = useQuery<Account[]>({
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => window.ledger.accounts.list(),
   });
@@ -155,24 +156,35 @@ function DropZone({
                   style={{ backgroundColor: activeAccount.displayColor }}
                 />
               )}
-              <SelectValue placeholder="Select an account…" />
+              <SelectValue placeholder={accountsLoading ? 'Loading accounts…' : 'Select an account…'} />
             </div>
           </SelectTrigger>
           <SelectContent>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="h-2 w-2 rounded-full shrink-0"
-                    style={{ backgroundColor: a.displayColor }}
-                  />
-                  <span>{a.name}</span>
-                  {a.broker && <span className="text-xs text-muted-foreground">({a.broker})</span>}
-                </div>
+            {accounts.length === 0 ? (
+              <SelectItem value="" disabled>
+                No accounts available
               </SelectItem>
-            ))}
+            ) : (
+              accounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full shrink-0"
+                      style={{ backgroundColor: a.displayColor }}
+                    />
+                    <span>{a.name}</span>
+                    {a.broker && <span className="text-xs text-muted-foreground">({a.broker})</span>}
+                  </div>
+                </SelectItem>
+              ))
+            )}
           </SelectContent>
         </Select>
+        {accounts.length === 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            No accounts found. Add an account in Settings before importing.
+          </p>
+        )}
       </div>
 
       {/* File upload area */}
@@ -558,29 +570,21 @@ function CommitStep({
   reconcileActions,
   onBack,
   onCommit,
-  defaultAccountId,
+  accountId,
 }: {
   preview: ParsePreview;
   reconcileActions: Map<string, ReconcileAction>;
   onBack: () => void;
-  onCommit: (accountId: string) => void;
-  defaultAccountId?: string | null;
+  onCommit: () => void;
+  accountId: string | null;
 }) {
   const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => window.ledger.accounts.list(),
   });
 
-  const [selectedAccountId, setSelectedAccountId] = useState(defaultAccountId || '');
+  const selectedAccount = accounts.find((a) => a.id === accountId) ?? null;
   const [committing, setCommitting] = useState(false);
-
-  // Auto-select the first account once the query resolves, or use the default if provided.
-  useEffect(() => {
-    if (!selectedAccountId && accounts.length > 0) {
-      const idToSelect = defaultAccountId || accounts[0].id;
-      setSelectedAccountId(idToSelect);
-    }
-  }, [accounts, selectedAccountId, defaultAccountId]);
   const [progress, setProgress] = useState(0);
 
   const mergeCount = [...reconcileActions.values()].filter((a) => a === 'merge').length;
@@ -592,30 +596,30 @@ function CommitStep({
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Choose account</h3>
+        <h3 className="text-sm font-semibold text-foreground">Import target account</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Select which account these trades belong to.
+          Trades will be imported to this account. To change it, go back to the import step.
         </p>
       </div>
 
-      <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-        <SelectTrigger className="max-w-sm">
-          <SelectValue placeholder="Select account…" />
-        </SelectTrigger>
-        <SelectContent>
-          {accounts.map((a) => (
-            <SelectItem key={a.id} value={a.id}>
-              <div className="flex items-center gap-2">
-                <span
-                  className="h-2 w-2 rounded-full shrink-0"
-                  style={{ backgroundColor: a.displayColor }}
-                />
-                {a.name}
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="rounded-lg border border-border bg-card p-4 max-w-sm">
+        {selectedAccount ? (
+          <div className="flex items-center gap-3">
+            <span
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: selectedAccount.displayColor }}
+            />
+            <div>
+              <div className="font-semibold text-foreground">{selectedAccount.name}</div>
+              {selectedAccount.broker && (
+                <div className="text-xs text-muted-foreground">{selectedAccount.broker}</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">No account selected.</div>
+        )}
+      </div>
 
       <div className="rounded-md border border-border bg-card p-4 text-sm">
         <p className="font-medium text-foreground">Import summary</p>
@@ -659,17 +663,15 @@ function CommitStep({
         </Button>
         <Button
           className="flex-1"
-          disabled={!selectedAccountId || committing}
+          disabled={!selectedAccount || committing}
           onClick={async () => {
             setCommitting(true);
             setProgress(0);
-            // Animate progress to ~90% while the IPC call runs
             const interval = setInterval(() => {
               setProgress((p) => (p < 88 ? p + Math.random() * 8 : p));
             }, 180);
             try {
-              await onCommit(selectedAccountId);
-              setProgress(100);
+              await onCommit();
             } finally {
               clearInterval(interval);
               setTimeout(() => setCommitting(false), 300);
@@ -735,6 +737,12 @@ export function ImporterPage() {
   const [importTargetAccountId, setImportTargetAccountId] = useState<string | null>(
     activeAccountId ?? null,
   );
+
+  useEffect(() => {
+    if (!importTargetAccountId && activeAccountId) {
+      setImportTargetAccountId(activeAccountId);
+    }
+  }, [activeAccountId, importTargetAccountId]);
   // Default action for each candidate is 'merge' (best guess)
   const [reconcileActions, setReconcileActions] = useState<Map<string, ReconcileAction>>(
     new Map(),
@@ -743,13 +751,19 @@ export function ImporterPage() {
   async function handleFilePicked(path: string) {
     setParseError(null);
     try {
-      const data = await window.ledger.imports.parseFile(path);
+      if (!importTargetAccountId) {
+        throw new Error('Please select an account before importing.');
+      }
+      const data = await window.ledger.imports.parseFile(path, importTargetAccountId);
       if (!data.id) {
         setParseError('Could not detect format. Make sure this is an MT4/MT5 HTML or CSV file.');
         return;
       }
       const p = data as ParsePreview;
       setPreview(p);
+      if (p.accountId && p.accountId !== importTargetAccountId) {
+        setImportTargetAccountId(p.accountId);
+      }
       // Pre-populate reconcile actions: default to 'merge'
       const actions = new Map<string, ReconcileAction>();
       for (const c of p.candidates ?? []) {
@@ -766,8 +780,8 @@ export function ImporterPage() {
     setReconcileActions((prev) => new Map(prev).set(positionId, action));
   }
 
-  async function handleCommit(accountId: string) {
-    if (!preview?.id) return;
+  async function handleCommit() {
+    if (!preview?.id || !importTargetAccountId) return;
 
     const reconcileChoices: ReconcileChoice[] = [];
     for (const candidate of preview.candidates ?? []) {
@@ -780,7 +794,7 @@ export function ImporterPage() {
     }
 
     const res = await window.ledger.imports.commit(preview.id, {
-      accountId,
+      accountId: importTargetAccountId,
       reconcileChoices,
     });
     setResult(res as CommitResult);
@@ -852,7 +866,7 @@ export function ImporterPage() {
           reconcileActions={reconcileActions}
           onBack={() => setStep('preview')}
           onCommit={handleCommit}
-          defaultAccountId={importTargetAccountId}
+          accountId={importTargetAccountId}
         />
       )}
       {step === 'done' && result && <DoneStep result={result} onReset={reset} />}

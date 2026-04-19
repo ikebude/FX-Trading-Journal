@@ -49,6 +49,8 @@ interface TradeFormProps {
   onSuccess?: () => void;
   /** Called when the user cancels. */
   onCancel?: () => void;
+  /** Optional custom submit handler. If provided, replaces the default submit logic. */
+  customSubmitHandler?: (data: FullFormValues | QuickFormValues) => Promise<void>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -131,12 +133,14 @@ function QuickForm({
   setups,
   onSuccess,
   onCancel,
+  customSubmitHandler,
 }: {
   accounts: Account[];
   instruments: Instrument[];
   setups: Setup[];
   onSuccess?: () => void;
   onCancel?: () => void;
+  customSubmitHandler?: (data: QuickFormValues) => Promise<void>;
 }) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -167,23 +171,28 @@ function QuickForm({
 
   const direction = watch('direction');
   const confidence = watch('confidence');
+  const preEmotion = watch('preTradeEmotion');
 
   async function onSubmit(data: QuickFormValues) {
     setSaving(true);
     setError(null);
     try {
-      await window.ledger.trades.create({
-        ...data,
-        entryLeg: {
-          timestampUtc: new Date().toISOString(),
-          price: data.price,
-          volumeLots: data.volumeLots,
-          commission: 0,
-          swap: 0,
-        },
-        source: 'HOTKEY',
-      });
-      queryClient.invalidateQueries({ queryKey: ['trades'] });
+      if (customSubmitHandler) {
+        await customSubmitHandler(data);
+      } else {
+        await window.ledger.trades.create({
+          ...data,
+          entryLeg: {
+            timestampUtc: new Date().toISOString(),
+            price: data.price,
+            volumeLots: data.volumeLots,
+            commission: 0,
+            swap: 0,
+          },
+          source: 'HOTKEY',
+        });
+        queryClient.invalidateQueries({ queryKey: ['trades'] });
+      }
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -302,7 +311,31 @@ function QuickForm({
         </Field>
       </div>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {/* Pre-trade emotion */}
+      <Field label="Pre-trade emotion">
+        <div className="flex flex-wrap gap-1">
+          {(['CALM', 'NEUTRAL', 'ANXIOUS', 'EXCITED', 'FRUSTRATED', 'TIRED'] as const).map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() =>
+                setValue(
+                  'preTradeEmotion',
+                  preEmotion === e ? undefined : (e as QuickFormValues['preTradeEmotion']),
+                )
+              }
+              className={cn(
+                'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+                preEmotion === e
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:border-border/60',
+              )}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      </Field>
 
       <div className="flex gap-2 pt-1">
         {onCancel && (
@@ -329,6 +362,7 @@ function FullForm({
   existingTrade,
   onSuccess,
   onCancel,
+  customSubmitHandler,
 }: {
   accounts: Account[];
   instruments: Instrument[];
@@ -336,6 +370,7 @@ function FullForm({
   existingTrade?: Trade;
   onSuccess?: () => void;
   onCancel?: () => void;
+  customSubmitHandler?: (data: FullFormValues) => Promise<void>;
 }) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -399,26 +434,30 @@ function FullForm({
     setSaving(true);
     setError(null);
     try {
-      if (isEdit && existingTrade) {
-        await window.ledger.trades.update(existingTrade.id, {
-          symbol: data.symbol.toUpperCase(),
-          direction: data.direction,
-          initialStopPrice: data.initialStopPrice,
-          initialTargetPrice: data.initialTargetPrice,
-          plannedRr: data.plannedRr,
-          plannedRiskAmount: data.plannedRiskAmount,
-          plannedRiskPct: data.plannedRiskPct,
-          setupName: data.setupName,
-          marketCondition: data.marketCondition,
-          entryModel: data.entryModel,
-          confidence: data.confidence,
-          preTradeEmotion: data.preTradeEmotion,
-          postTradeEmotion: data.postTradeEmotion,
-        });
+      if (customSubmitHandler) {
+        await customSubmitHandler(data);
       } else {
-        await window.ledger.trades.create(data);
+        if (isEdit && existingTrade) {
+          await window.ledger.trades.update(existingTrade.id, {
+            symbol: data.symbol.toUpperCase(),
+            direction: data.direction,
+            initialStopPrice: data.initialStopPrice,
+            initialTargetPrice: data.initialTargetPrice,
+            plannedRr: data.plannedRr,
+            plannedRiskAmount: data.plannedRiskAmount,
+            plannedRiskPct: data.plannedRiskPct,
+            setupName: data.setupName,
+            marketCondition: data.marketCondition,
+            entryModel: data.entryModel,
+            confidence: data.confidence,
+            preTradeEmotion: data.preTradeEmotion,
+            postTradeEmotion: data.postTradeEmotion,
+          });
+        } else {
+          await window.ledger.trades.create(data);
+        }
+        queryClient.invalidateQueries({ queryKey: ['trades'] });
       }
-      queryClient.invalidateQueries({ queryKey: ['trades'] });
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -712,7 +751,7 @@ function FullForm({
 // Public component
 // ─────────────────────────────────────────────────────────────
 
-export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel }: TradeFormProps) {
+export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel, customSubmitHandler }: TradeFormProps) {
   const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => window.ledger.accounts.list(),
@@ -736,6 +775,7 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel }:
         setups={setups}
         onSuccess={onSuccess}
         onCancel={onCancel}
+        customSubmitHandler={customSubmitHandler}
       />
     );
   }
@@ -748,6 +788,7 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel }:
       existingTrade={existingTrade}
       onSuccess={onSuccess}
       onCancel={onCancel}
+      customSubmitHandler={customSubmitHandler}
     />
   );
 }

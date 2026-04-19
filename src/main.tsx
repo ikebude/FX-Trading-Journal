@@ -24,7 +24,6 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, EBState> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // eslint-disable-next-line no-console
     console.error('[RootErrorBoundary]', error, info.componentStack);
   }
 
@@ -101,7 +100,6 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, EBState> {
 // fail immediately with a clear message rather than letting the app start and
 // crash on the first IPC call.
 if (typeof window !== 'undefined' && typeof (window as Window & { ledger?: unknown }).ledger === 'undefined') {
-  // eslint-disable-next-line no-console
   console.error(
     '[FXLedger] window.ledger is undefined — preload script did not execute. ' +
     'Check that preload.cjs is present in the dist-electron directory.',

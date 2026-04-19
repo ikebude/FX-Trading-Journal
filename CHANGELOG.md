@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.0.5] — 2026-04-19 — Foundation Milestone Complete (T1.1–T1.10) ✅
+## [1.0.6] — 2026-04-19 — TradeForm Consistency Fix
+
+### Fixed
+- **TradeForm Reuse Compliance** — Fixed Rule 15 violation where OverlayPage implemented custom quick-entry form instead of reusing `<TradeForm>`. Overlay now uses shared TradeForm component with custom submit handler for screenshot attachment and note functionality.
+- **Pre-trade Emotion Field** — Added pre-trade emotion dropdown to quick trade form for consistent emotional tracking across all trade entry methods.
+
+### Technical
+- **Component Architecture** — TradeForm now supports `customSubmitHandler` prop for specialized submit logic while maintaining shared validation and UI.
+- **Type Safety** — All TypeScript compilation errors resolved (0 errors).
+- **Test Coverage** — All 260 unit tests passing, production build succeeds.
+
+---
 
 ### 🎯 Major Achievement
 **Week 1 of v1.1.0 sprint complete:** All 10 foundation tasks (T1.1–T1.10) fully implemented and tested.

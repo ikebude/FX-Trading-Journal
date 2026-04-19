@@ -25,29 +25,29 @@ All 33 bugs across 12 files fixed. See plan at:
 
 ---
 
-## Phase 4 — Build Foundation (Current) 🏗️
+## Phase 4 — Build Foundation ✅ COMPLETE
 
-Build in this exact order (from CLAUDE.md §Build Order):
+**TradeForm Consistency Fix** — Critical Rule 15 violation resolved:
+- [x] OverlayPage refactored to use shared `<TradeForm>` component
+- [x] Custom submit handler added for overlay-specific logic (screenshot attachment, notes)
+- [x] Pre-trade emotion field added to quick form for consistency
+- [x] All TypeScript errors resolved (0 errors)
+- [x] All 260 unit tests passing
+- [x] Production build succeeds
 
-### Step 1: Environment verification
-- [ ] Confirm `node --version` ≥ 22 (LTS) and `npm --version` ≥ 10
-- [ ] Run `npm install` — install all locked dependencies
-- [ ] Run `npm test` — all 34 tests must pass before any UI work begins
-- [ ] Run `npm run typecheck` — zero type errors
+**Release v1.0.6** — Patch release for TradeForm compliance:
+- [x] Version bumped to 1.0.6
+- [x] CHANGELOG updated with fix details
+- [x] Ready for git tag and release
 
-### Step 2: Electron dev shell
-- [ ] Run `npm run dev` — Electron window must open
-- [ ] Confirm preload bridge loads without errors (DevTools console clean)
+---
 
-### Step 3: DB client + migration runner (`src/lib/db/client.ts`)
-- [ ] Create `src/lib/db/client.ts` — better-sqlite3 + drizzle bootstrap
-- [ ] Add first-launch migration: run `schema.sql` DDL + partial unique indexes
-- [ ] Seed instrument table with ~30 common FX pairs + metals
-- [ ] Verify DB file is created at `%APPDATA%\Ledger\ledger.db`
+## Phase 5 — v1.1 Sprint (Week 2) 🏗️
 
-### Step 4: IPC handler skeleton (`electron/ipc/`)
-- [ ] Create `electron/ipc/index.ts` — barrel that registers all handlers
-- [ ] Stub all 15 IPC namespaces (trades, legs, accounts, instruments, imports, bridge, capture, reviews, calendar, reports, backup, audit, shell, settings, tags/setups)
+Next: T2.1 Setup library CRUD + versioning (2.5 days)
+- Add `setup_versions` table for change tracking
+- UI at `/settings/setups` for setup management
+- Setup dropdown everywhere (already implemented)
 - [ ] Wire `registerIpcHandlers` in `electron/main.ts`
 
 ### Step 5: DB queries layer (`src/lib/db/queries.ts`)

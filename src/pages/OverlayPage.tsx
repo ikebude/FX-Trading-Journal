@@ -21,60 +21,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { X, Camera, CameraOff, Star, Loader2 } from 'lucide-react';
+import { X, Camera, CameraOff, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/cn';
+import { TradeForm } from '@/components/trade-form/TradeForm';
 import { QuickTradeSchema } from '@/lib/schemas';
 import type { Account, Instrument } from '@/lib/db/schema';
 import type { z } from 'zod';
 
 type QuickForm = z.input<typeof QuickTradeSchema>;
-
-const EMOTIONS = [
-  { value: 'CALM', label: 'Calm' },
-  { value: 'NEUTRAL', label: 'Neutral' },
-  { value: 'ANXIOUS', label: 'Anxious' },
-  { value: 'EXCITED', label: 'Excited' },
-  { value: 'FRUSTRATED', label: 'Frustrated' },
-  { value: 'TIRED', label: 'Tired' },
-] as const;
-
-// ─────────────────────────────────────────────────────────────
-// Star rating
-// ─────────────────────────────────────────────────────────────
-
-function StarRating({
-  value,
-  onChange,
-}: {
-  value: number | undefined;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n === value ? 0 : n)}
-          className="focus:outline-none"
-        >
-          <Star
-            className={cn(
-              'h-4 w-4 transition-colors',
-              n <= (value ?? 0)
-                ? 'fill-amber-400 text-amber-400'
-                : 'text-muted-foreground',
-            )}
-          />
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // Main overlay page
@@ -97,29 +52,6 @@ export function OverlayPage() {
     queryKey: ['instruments'],
     queryFn: () => window.ledger.instruments.list(),
   });
-
-  const defaultAccountId = accounts[0]?.id ?? '';
-  const symbolList = instruments.map((i) => i.symbol);
-
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    formState: { errors, isSubmitting },
-  } = useForm<QuickForm>({
-    resolver: zodResolver(QuickTradeSchema),
-    defaultValues: {
-      accountId: defaultAccountId,
-      direction: 'LONG',
-      volumeLots: 0.01,
-    },
-  });
-
-  // Update accountId when accounts load
-  useEffect(() => {
-    if (defaultAccountId) setValue('accountId', defaultAccountId);
-  }, [defaultAccountId, setValue]);
 
   // Capture screenshot on mount
   useEffect(() => {
@@ -159,6 +91,7 @@ export function OverlayPage() {
         confidence: values.confidence ?? undefined,
         preTradeEmotion: values.preTradeEmotion ?? undefined,
         initialStopPrice: values.initialStopPrice ?? undefined,
+        initialTargetPrice: values.initialTargetPrice ?? undefined,
         entryLeg: {
           timestampUtc: now,
           price: values.price,
@@ -200,18 +133,6 @@ export function OverlayPage() {
       setTimeout(() => window.ledger.capture.hide(), 800);
     },
   });
-
-  const direction = watch('direction');
-  const entryPrice = watch('price');
-  const stopPrice = watch('initialStopPrice');
-  const symbol = watch('symbol');
-
-  // Compute pip distance for display
-  const instrument = instruments.find((i) => i.symbol === symbol?.toUpperCase());
-  const pipDistance =
-    entryPrice && stopPrice && instrument
-      ? Math.abs(entryPrice - stopPrice) / instrument.pipSize
-      : null;
 
   if (saved) {
     return (
@@ -266,145 +187,18 @@ export function OverlayPage() {
       </div>
 
       {/* Form */}
-      <form
-        onSubmit={handleSubmit((v) => saveMutation.mutate(v))}
-        className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3"
-      >
-        {/* Symbol + Direction */}
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="mb-0.5 block text-[10px] text-muted-foreground">Symbol</label>
-            <input
-              {...register('symbol')}
-              ref={(e) => {
-                register('symbol').ref(e);
-                (symbolInputRef as React.MutableRefObject<HTMLInputElement | null>).current = e;
-              }}
-              list="overlay-symbols"
-              placeholder="EURUSD"
-              className={cn(
-                'h-7 w-full rounded border bg-input px-2 text-xs uppercase focus:outline-none focus:ring-1 focus:ring-primary',
-                errors.symbol ? 'border-destructive' : 'border-border',
-              )}
-            />
-            <datalist id="overlay-symbols">
-              {symbolList.map((s) => <option key={s} value={s} />)}
-            </datalist>
-          </div>
-          <div>
-            <label className="mb-0.5 block text-[10px] text-muted-foreground">Dir</label>
-            <div className="flex h-7 rounded border border-border overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setValue('direction', 'LONG')}
-                className={cn(
-                  'flex-1 px-3 text-xs font-bold transition-colors',
-                  direction === 'LONG'
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-muted/20 text-muted-foreground hover:text-emerald-400',
-                )}
-              >
-                BUY
-              </button>
-              <button
-                type="button"
-                onClick={() => setValue('direction', 'SHORT')}
-                className={cn(
-                  'flex-1 px-3 text-xs font-bold transition-colors',
-                  direction === 'SHORT'
-                    ? 'bg-rose-600 text-white'
-                    : 'bg-muted/20 text-muted-foreground hover:text-rose-400',
-                )}
-              >
-                SELL
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Entry price + Volume */}
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="mb-0.5 block text-[10px] text-muted-foreground">Entry price</label>
-            <input
-              {...register('price', { valueAsNumber: true })}
-              type="number"
-              step="any"
-              placeholder="1.08500"
-              className={cn(
-                'h-7 w-full rounded border bg-input px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary',
-                errors.price ? 'border-destructive' : 'border-border',
-              )}
-            />
-          </div>
-          <div className="w-20">
-            <label className="mb-0.5 block text-[10px] text-muted-foreground">Lots</label>
-            <input
-              {...register('volumeLots', { valueAsNumber: true })}
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="0.10"
-              className={cn(
-                'h-7 w-full rounded border bg-input px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary',
-                errors.volumeLots ? 'border-destructive' : 'border-border',
-              )}
-            />
-          </div>
-        </div>
-
-        {/* Stop loss */}
-        <div>
-          <label className="mb-0.5 block text-[10px] text-muted-foreground">
-            Stop loss
-            {pipDistance !== null && (
-              <span className="ml-2 text-muted-foreground/60">
-                {pipDistance.toFixed(1)} pips
-              </span>
-            )}
-          </label>
-          <input
-            {...register('initialStopPrice', { valueAsNumber: true })}
-            type="number"
-            step="any"
-            placeholder="1.08100"
-            className="h-7 w-full rounded border border-border bg-input px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-
-        {/* Setup */}
-        <div>
-          <label className="mb-0.5 block text-[10px] text-muted-foreground">Setup</label>
-          <input
-            {...register('setupName')}
-            placeholder="e.g. BOS + FVG"
-            className="h-7 w-full rounded border border-border bg-input px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-
-        {/* Confidence + Emotion */}
-        <div className="flex items-start gap-4">
-          <div>
-            <label className="mb-1 block text-[10px] text-muted-foreground">Confidence</label>
-            <StarRating
-              value={watch('confidence')}
-              onChange={(v) => setValue('confidence', v || undefined)}
-            />
-          </div>
-          <div className="flex-1">
-            <label className="mb-0.5 block text-[10px] text-muted-foreground">Emotion</label>
-            <select
-              {...register('preTradeEmotion')}
-              className="h-7 w-full rounded border border-border bg-input px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="">—</option>
-              {EMOTIONS.map((e) => (
-                <option key={e.value} value={e.value}>{e.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
+        <TradeForm
+          mode="quick"
+          customSubmitHandler={async (data) => {
+            await saveMutation.mutateAsync(data as QuickForm);
+          }}
+          onSuccess={() => {
+            setSaved(true);
+            setTimeout(() => window.ledger.capture.hide(), 800);
+          }}
+          onCancel={() => window.ledger.capture.hide()}
+        />
         {/* Note */}
         <div>
           <label className="mb-0.5 block text-[10px] text-muted-foreground">Note</label>
@@ -416,21 +210,6 @@ export function OverlayPage() {
           />
         </div>
 
-        {/* Account selector (hidden if only one account) */}
-        {accounts.length > 1 && (
-          <div>
-            <label className="mb-0.5 block text-[10px] text-muted-foreground">Account</label>
-            <select
-              {...register('accountId')}
-              className="h-7 w-full rounded border border-border bg-input px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Error display */}
         {saveMutation.isError && (
           <p className="text-[10px] text-destructive">
@@ -439,26 +218,7 @@ export function OverlayPage() {
               : 'Save failed'}
           </p>
         )}
-
-        {/* Save button */}
-        <div className="mt-auto pt-1">
-          <Button
-            type="submit"
-            className="w-full"
-            size="sm"
-            disabled={isSubmitting || saveMutation.isPending}
-          >
-            {saveMutation.isPending ? (
-              <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Saving…</>
-            ) : (
-              'Save trade  ↵'
-            )}
-          </Button>
-          <p className="mt-1 text-center text-[10px] text-muted-foreground">
-            Tab to navigate · Enter to save · Esc to cancel
-          </p>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }
