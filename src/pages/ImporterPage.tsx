@@ -8,7 +8,7 @@
  *  Step 4: Result summary
  */
 
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FileUp,
@@ -71,7 +71,6 @@ function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   async function handlePath(path: string) {
     setParsing(true);
@@ -82,6 +81,36 @@ function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
       setError(err instanceof Error ? err.message : 'Failed to read file');
     } finally {
       setParsing(false);
+    }
+  }
+
+  async function handleBrowse() {
+    try {
+      const filePath = await window.ledger.file.pickFile();
+      if (filePath) handlePath(filePath);
+    } catch (err) {
+      setError('Failed to open file picker');
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      // In Electron, dragged files have a .path property
+      const filePath = (file as File & { path?: string }).path;
+      if (filePath) {
+        handlePath(filePath);
+      } else {
+        // Fallback: if .path is not available, use the file picker
+        try {
+          const picked = await window.ledger.file.pickFile();
+          if (picked) handlePath(picked);
+        } catch (err) {
+          setError('Failed to read dragged file');
+        }
+      }
     }
   }
 
@@ -101,15 +130,7 @@ function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
         )}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          const file = e.dataTransfer.files[0];
-          if (file) {
-            const filePath = (file as File & { path?: string }).path ?? file.name;
-            handlePath(filePath);
-          }
-        }}
+        onDrop={handleDrop}
       >
         {parsing ? (
           <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
@@ -122,26 +143,13 @@ function DropZone({ onFilePicked }: { onFilePicked: (path: string) => void }) {
             <button
               type="button"
               className="text-primary hover:underline"
-              onClick={() => inputRef.current?.click()}
+              onClick={handleBrowse}
             >
               browse
             </button>
           </p>
           <p className="mt-1 text-xs text-muted-foreground/60">.html, .htm, .csv</p>
         </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".html,.htm,.csv"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              const filePath = (file as File & { path?: string }).path ?? file.name;
-              handlePath(filePath);
-            }
-          }}
-        />
       </div>
 
       {error && (

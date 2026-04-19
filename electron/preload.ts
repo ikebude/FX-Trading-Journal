@@ -224,6 +224,12 @@ const api = {
     createCorrection: (accountId: string, driftAmount: number, note?: string) =>
       ipcRenderer.invoke('reconciliation:create-correction', accountId, driftAmount, note),
   },
+
+  // ── File dialogs ──────────────────────────────────
+  file: {
+    pickFile: (filters?: Array<{ name: string; extensions: string[] }>) =>
+      ipcRenderer.invoke('file:pick', filters) as Promise<string | null>,
+  },
 };
 
 contextBridge.exposeInMainWorld('ledger', api);

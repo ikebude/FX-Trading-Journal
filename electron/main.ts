@@ -10,7 +10,7 @@
  *  - Handle clean shutdown (auto-backup)
  */
 
-import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage, session } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage, session, ipcMain } from 'electron';
 import log from 'electron-log/main.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -420,6 +420,18 @@ app.whenReady().then(async () => {
       log.warn('seed: sample data population failed (non-fatal)', err);
     });
   }
+
+  // File picker handler — returns full file path for import workflows
+  ipcMain.handle('file:pick', async (_e, filters?: Array<{ name: string; extensions: string[] }>) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      filters: filters || [
+        { name: 'Statement Files', extensions: ['html', 'htm', 'csv'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
 
   registerIpcHandlers({
     config,
