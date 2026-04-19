@@ -315,7 +315,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
   ipcMain.removeHandler('imports:commit');
   ipcMain.removeHandler('imports:history');
 
-  ipcMain.handle('imports:parse-file', async (_e, filePath: string) => {
+  ipcMain.handle('imports:parse-file', async (_e, filePath: string, accountId?: string) => {
     try {
       if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
 
@@ -324,7 +324,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
       const { format, result } = detectAndParse(content, filename);
 
       if (format === 'UNKNOWN') {
-        return { id: null, format, trades: [], failed: [], rowsTotal: 0, candidates: [] };
+        return { id: null, format, trades: [], failed: [], rowsTotal: 0, candidates: [], accountId: null };
       }
 
       // Copy file to imports/ folder for provenance
@@ -334,14 +334,21 @@ export function registerImportHandlers(ctx: IpcContext): void {
       const storedPath = join(importsDir, storedFilename);
       copyFileSync(filePath, storedPath);
 
-      // Get default account
       const accounts = await listAccounts();
       const defaultAccountId = accounts[0]?.id ?? '';
+      const selectedAccountId = accountId != null
+        ? (() => {
+            if (accountId !== '' && !accounts.some((a) => a.id === accountId)) {
+              throw new Error(`Selected account not found: ${accountId}`);
+            }
+            return accountId;
+          })()
+        : defaultAccountId;
 
-      // Find reconcile candidates for each parsed trade
+      // Find reconcile candidates for each parsed trade using the selected account.
       const allCandidates: ReconcileCandidate[] = [];
       for (const parsedTrade of result.trades) {
-        const cs = await findReconcileCandidates(parsedTrade, defaultAccountId);
+        const cs = await findReconcileCandidates(parsedTrade, selectedAccountId);
         allCandidates.push(...cs);
       }
 
@@ -351,7 +358,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
         filename,
         filePath,
         storedPath: `imports/${storedFilename}`,
-        accountId: defaultAccountId,
+        accountId: selectedAccountId,
         trades: result.trades,
         failed: result.failed,
         rowsTotal: result.rowsTotal,
@@ -365,6 +372,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
         failed: result.failed,
         rowsTotal: result.rowsTotal,
         candidates: allCandidates,
+        accountId: selectedAccountId,
       };
     } catch (err) {
       log.error('imports:parse-file', err);

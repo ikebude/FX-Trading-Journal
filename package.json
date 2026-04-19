@@ -1,6 +1,6 @@
 {
   "name": "fxledger",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "FXLedger — local-first forex trading journal for Windows",
   "author": "ikebude",
   "repository": {

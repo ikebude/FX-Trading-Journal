@@ -123,7 +123,8 @@ const api = {
 
   // ── Imports ───────────────────────────────────────
   imports: {
-    parseFile: (filePath: string) => ipcRenderer.invoke('imports:parse-file', filePath),
+    parseFile: (filePath: string, accountId?: string) =>
+      ipcRenderer.invoke('imports:parse-file', filePath, accountId),
     commit: (parseResultId: string, choices: unknown) =>
       ipcRenderer.invoke('imports:commit', parseResultId, choices),
     history: () => ipcRenderer.invoke('imports:history'),
