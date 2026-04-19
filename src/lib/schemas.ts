@@ -145,6 +145,7 @@ export const QuickTradeSchema = z.object({
   price: positiveReal,
   volumeLots: positiveReal,
   initialStopPrice: positiveReal.optional(),
+  initialTargetPrice: positiveReal.optional(),
   setupName: z.string().max(100).optional(),
   confidence: z.number().int().min(1).max(5).optional(),
   preTradeEmotion: z
