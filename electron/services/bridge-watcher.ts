@@ -7,10 +7,18 @@
  *  1. Reads + validates the JSON (MT4 flat or MT5 deal-array format)
  *  2. Finds or matches the account (by broker account number)
  *  3. Deduplicates against existing trades via external_ticket / external_position_id
- *  4. Inserts new trade + legs, recomputes P&L via pnl.ts
+ *  4. Inserts new trade + legs (or balance_op for v2 balance events), recomputes P&L
  *  5. Moves the file to bridge/processed/<YYYY-MM-DD>/ on success
  *     or bridge/failed/ on any error
  *  6. Sends a toast notification to all open renderer windows
+ *
+ * v2 balance_op events (ea_version >= 2, event_type === 'balance_op'):
+ *  - Validated via BalanceOpFileSchema (Zod)
+ *  - Inserted into balance_operations table (not trades)
+ *  - Audit row written per hard rule #14
+ *
+ * // v1 EA events (ea_version < 2 or missing): handled below.
+ * // 30-day backward-compat window expires 2026-05-19.
  *
  * The watcher is started once after DB initialisation and lives for the
  * whole process lifetime.  `stopBridgeWatcher()` is called on will-quit.
@@ -24,9 +32,10 @@ import { BrowserWindow } from 'electron';
 import { nanoid } from 'nanoid';
 import { eq, and, isNull } from 'drizzle-orm';
 import { format } from 'date-fns';
+import { z } from 'zod';
 
 import { getDb, withAsyncTransaction } from '../../src/lib/db/client';
-import { trades, tradeLegs, bridgeFiles } from '../../src/lib/db/schema';
+import { trades, tradeLegs, bridgeFiles, balanceOperations } from '../../src/lib/db/schema';
 import { getInstrument, listAccounts, writeAudit, updateTrade } from '../../src/lib/db/queries';
 import { computeTradeMetrics } from '../../src/lib/pnl';
 import { detectSession } from '../../src/lib/tz';
@@ -112,6 +121,92 @@ interface MT5BridgeFile {
   symbol: string;
   status: 'open' | 'closed';
   deals: MT5Deal[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// v2 balance_op Zod schema (exported for tests)
+// ─────────────────────────────────────────────────────────────
+
+export const BalanceOpFileSchema = z.object({
+  ea_version: z.number().int().min(2),
+  event_type: z.literal('balance_op'),
+  platform: z.enum(['MT4', 'MT5']),
+  account: z.number(),
+  login: z.string().optional(),
+  account_currency: z.string().optional(),
+  broker: z.string().optional(),
+  server: z.string().optional(),
+  deal_id: z.number().int(),
+  op_type: z.enum([
+    'DEPOSIT',
+    'WITHDRAWAL',
+    'BONUS',
+    'CREDIT',
+    'CHARGE',
+    'CORRECTION',
+    'COMMISSION',
+    'INTEREST',
+    'OTHER',
+  ]),
+  amount: z.number(),
+  commission: z.number().optional(),
+  currency: z.string(),
+  symbol: z.string().optional(),
+  occurred_at_utc: z.string(),
+  comment: z.string().optional(),
+});
+
+export type BalanceOpFile = z.infer<typeof BalanceOpFileSchema>;
+
+/**
+ * Determine event routing for an incoming JSON payload.
+ *
+ * Returns:
+ *   'balance_op' — v2 balance_op event → insert into balance_operations
+ *   'trade'      — v1 or v2 trade event OR missing event_type → existing trade path
+ *
+ * Exported for unit testing without Electron dependencies.
+ */
+export function classifyBridgeEvent(json: Record<string, unknown>): 'balance_op' | 'trade' {
+  if (json['event_type'] === 'balance_op') return 'balance_op';
+  // v2 file without event_type → treat as trade for backward compat
+  return 'trade';
+}
+
+/**
+ * Resolve an account ID for a balance-op file.
+ * Primary: match accounts.login (string) against payload.login or String(payload.account),
+ *          filtered to the correct platform.
+ * Fallback: first active account (same as legacy resolveAccountId).
+ *
+ * Exported for unit testing.
+ */
+export async function resolveAccountIdForBalanceOp(
+  payload: BalanceOpFile,
+): Promise<string | null> {
+  const accounts = await listAccounts();
+  if (accounts.length === 0) return null;
+
+  const loginStr = payload.login ?? String(payload.account);
+
+  // Try exact match on login + platform
+  const match = accounts.find(
+    (a) =>
+      a.login === loginStr &&
+      (a.platform === payload.platform || !a.platform),
+  );
+  if (match) return match.id;
+
+  // Fallback: broker / name substring match (legacy)
+  const legacyMatch = accounts.find(
+    (a) =>
+      a.broker?.includes(String(payload.account)) ||
+      a.name.includes(String(payload.account)),
+  );
+  if (legacyMatch) return legacyMatch.id;
+
+  // Last resort: first account
+  return accounts[0].id;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -429,6 +524,76 @@ async function processMt5File(data: MT5BridgeFile): Promise<ProcessResult> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// v2 balance_op processing
+// ─────────────────────────────────────────────────────────────
+
+type BalanceOpResult = { message: string; accountId: string | null; balanceOpId: string | null };
+
+async function processBalanceOpFile(data: BalanceOpFile): Promise<BalanceOpResult> {
+  const db = getDb();
+  const accountId = await resolveAccountIdForBalanceOp(data);
+  if (!accountId) throw new Error('No accounts configured in FXLedger');
+
+  const now = new Date().toISOString();
+  const externalId = String(data.deal_id);
+
+  // Deduplicate: skip if this deal_id+account is already in balance_operations.
+  const existing = await db
+    .select({ id: balanceOperations.id })
+    .from(balanceOperations)
+    .where(
+      and(
+        eq(balanceOperations.accountId, accountId),
+        eq(balanceOperations.externalId, externalId),
+        isNull(balanceOperations.deletedAtUtc),
+      ),
+    );
+  if (existing.length > 0) {
+    return {
+      message: `Skipped duplicate balance_op deal_id=${externalId}`,
+      accountId,
+      balanceOpId: existing[0].id,
+    };
+  }
+
+  const balanceOpId = nanoid();
+
+  await db.insert(balanceOperations).values({
+    id: balanceOpId,
+    accountId,
+    opType: data.op_type as typeof balanceOperations.$inferInsert['opType'],
+    amount: data.amount,
+    currency: data.currency,
+    occurredAtUtc: data.occurred_at_utc,
+    recordedAtUtc: now,
+    source: 'BRIDGE',
+    externalId,
+    note: data.comment || null,
+    deletedAtUtc: null,
+    createdAtUtc: now,
+    updatedAtUtc: now,
+  });
+
+  // Hard rule #14: every trade mutation (and balance_op creation) creates an audit row.
+  await writeAudit('BALANCE_OP', balanceOpId, 'BALANCE_OP_CREATE', null, {
+    source: ['', 'BRIDGE'],
+    platform: ['', data.platform],
+    deal_id: ['', externalId],
+    op_type: ['', data.op_type],
+    amount: ['', data.amount],
+  });
+
+  // Format a human-readable amount for the toast
+  const sign = data.amount >= 0 ? '+' : '';
+  const formattedAmount = `${sign}${data.amount.toFixed(2)} ${data.currency}`;
+  return {
+    message: `Balance op recorded: ${formattedAmount} ${data.op_type}`,
+    accountId,
+    balanceOpId,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // P&L recompute helper
 // ─────────────────────────────────────────────────────────────
 
@@ -501,13 +666,58 @@ async function processFile(filePath: string, dataDir: string): Promise<void> {
 
   try {
     const raw = readFileSync(filePath, 'utf-8');
-    const json = JSON.parse(raw);
+    const json = JSON.parse(raw) as Record<string, unknown>;
 
+    // ── v2 balance_op path ───────────────────────────────────────────
+    // event_type === 'balance_op' routes to balance_operations insert.
+    // v1 EA events (ea_version < 2 or missing): handled below.
+    // 30-day backward-compat window expires 2026-05-19.
+    if (classifyBridgeEvent(json) === 'balance_op') {
+      const parsed = BalanceOpFileSchema.safeParse(json);
+      if (!parsed.success) {
+        throw new Error(
+          `Invalid balance_op file: ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+        );
+      }
+      const balResult = await processBalanceOpFile(parsed.data);
+
+      renameSync(filePath, join(processedDir, filename));
+      log.info(`bridge-watcher: ${balResult.message}`);
+
+      try {
+        await getDb()
+          .insert(bridgeFiles)
+          .values({
+            filename,
+            status: 'PROCESSED',
+            accountId: balResult.accountId,
+            tradeId: null,
+            errorMessage: null,
+            processedAtUtc: new Date().toISOString(),
+          })
+          .onConflictDoUpdate({
+            target: bridgeFiles.filename,
+            set: {
+              status: 'PROCESSED',
+              tradeId: null,
+              errorMessage: null,
+              processedAtUtc: new Date().toISOString(),
+            },
+          });
+      } catch (dbErr) {
+        log.warn('bridge-watcher: failed to record bridge_files entry for balance_op', dbErr);
+      }
+
+      broadcastEvent({ message: balResult.message, variant: 'success' });
+      return;
+    }
+
+    // ── trade path (v1 and v2 trade events) ─────────────────────────
     let result: ProcessResult;
-    if (json.platform === 'MT5') {
-      result = await processMt5File(json as MT5BridgeFile);
+    if (json['platform'] === 'MT5') {
+      result = await processMt5File(json as unknown as MT5BridgeFile);
     } else {
-      result = await processMt4File(json as MT4BridgeFile, dataDir);
+      result = await processMt4File(json as unknown as MT4BridgeFile, dataDir);
     }
 
     // Move to processed
