@@ -6,15 +6,27 @@
 //|  Compile in MetaEditor (F7), then drag onto any chart.            |
 //|  Allow "Algo Trading" / "Auto Trading" in MT4 toolbar.            |
 //|                                                                    |
+//|  v2 CHANGES (ea_version: 2):                                      |
+//|   - Output subfolder renamed from "Ledger" to "FXLedger".         |
+//|     Re-configure your file-sync / MT4 Files mapping accordingly.  |
+//|   - Balance (OP_BALANCE=6) and credit (OP_CREDIT=7) orders are    |
+//|     now emitted as separate "balance_op" events (bal_<ticket>.json)|
+//|     Note: MT4 balance-op detection is best-effort via startup      |
+//|     history scan + OnTimer polling. Real-time detection is limited |
+//|     because MT4 has no OnTradeTransaction equivalent.              |
+//|   - Trade files now include "ea_version": 2 and "event_type".     |
+//|                                                                    |
 //|  On every closed trade, writes a JSON file to                     |
-//|  <MT4 Data Folder>/MQL4/Files/Ledger/<ticket>.json                |
-//|  which the Ledger desktop app watches and ingests.                |
+//|  <MT4 Data Folder>/MQL4/Files/FXLedger/<ticket>.json              |
+//|  On every balance/credit order detected, writes:                   |
+//|  <MT4 Data Folder>/MQL4/Files/FXLedger/bal_<ticket>.json          |
+//|  which the FXLedger desktop app watches and ingests.              |
 //+------------------------------------------------------------------+
 #property copyright "Ledger"
-#property version   "1.01"
+#property version   "2.00"
 #property strict
 
-input string InpSubfolder = "Ledger"; // Subfolder under MQL4/Files/
+input string InpSubfolder = "FXLedger"; // Subfolder under MQL4/Files/
 
 int g_lastHistoryTotal = 0;
 
@@ -34,7 +46,13 @@ int OnInit()
    FileWriteString(handle, "active\n");
    FileClose(handle);
 
-   Print("LedgerBridge MT4 initialized. Output folder: MQL4/Files/", InpSubfolder);
+   Print("LedgerBridge MT4 v2 initialized. Output folder: MQL4/Files/", InpSubfolder);
+
+   // On startup: scan existing history for balance/credit orders that
+   // have not been exported yet (file does not exist). This catches any
+   // ops that occurred while the EA was not running.
+   ScanBalanceHistory(0, g_lastHistoryTotal);
+
    EventSetTimer(2);
    return INIT_SUCCEEDED;
 }
@@ -63,12 +81,48 @@ void OnTimer()
          continue;
       }
       int type = OrderType();
-      // Only export real trades (BUY/SELL), not balance/credit operations.
+
+      // OP_BALANCE (6) and OP_CREDIT (7) are non-trade account events.
+      // Export them as balance_op JSON files.
+      if(type == 6 || type == 7)
+      {
+         ExportBalanceOp();
+         continue;
+      }
+
+      // Only export real trades (BUY/SELL).
       if(type != OP_BUY && type != OP_SELL) continue;
       ExportOrder();
    }
 
    g_lastHistoryTotal = total;
+}
+
+//+------------------------------------------------------------------+
+//| Scan a range of history orders for balance/credit ops.           |
+//| Used on startup to catch ops that occurred while EA was offline.  |
+//| Skips tickets where bal_<ticket>.json already exists.            |
+//+------------------------------------------------------------------+
+void ScanBalanceHistory(int fromIndex, int toIndex)
+{
+   for(int i = fromIndex; i < toIndex; i++)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+         continue;
+      int type = OrderType();
+      if(type != 6 && type != 7) continue; // OP_BALANCE=6, OP_CREDIT=7
+
+      // Check if already exported (file exists).
+      string checkFile = InpSubfolder + "\\bal_" + IntegerToString(OrderTicket()) + ".json";
+      // FileIsExist is not available in MQL4 retail — use FileOpen to test.
+      int fh = FileOpen(checkFile, FILE_READ | FILE_TXT | FILE_ANSI);
+      if(fh != INVALID_HANDLE)
+      {
+         FileClose(fh);
+         continue; // Already exported — skip.
+      }
+      ExportBalanceOp();
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -102,11 +156,15 @@ void ExportOrder()
    string typeStr = (type == OP_BUY) ? "buy" : "sell";
 
    string json = "{\n";
-   json += "  \"version\": 1,\n";
+   json += "  \"ea_version\": 2,\n";
+   json += "  \"event_type\": \"trade\",\n";
+   json += "  \"version\": 2,\n";
    json += "  \"platform\": \"MT4\",\n";
    json += "  \"account\": " + IntegerToString(AccountNumber()) + ",\n";
+   json += "  \"login\": \"" + IntegerToString(AccountNumber()) + "\",\n";
    json += "  \"account_currency\": \"" + AccountCurrency() + "\",\n";
    json += "  \"broker\": \"" + EscapeJson(AccountCompany()) + "\",\n";
+   json += "  \"server\": \"" + EscapeJson(AccountServer()) + "\",\n";
    json += "  \"ticket\": " + IntegerToString(ticket) + ",\n";
    json += "  \"symbol\": \"" + symbol + "\",\n";
    json += "  \"type\": \"" + typeStr + "\",\n";
@@ -140,6 +198,74 @@ void ExportOrder()
    }
 
    Print("LedgerBridge: exported ticket ", ticket, " (", symbol, " ", typeStr, ")");
+}
+
+//+------------------------------------------------------------------+
+//| Export the currently selected balance/credit order as JSON        |
+//| MT4 balance ops: OP_BALANCE (6) → DEPOSIT/WITHDRAWAL             |
+//|                  OP_CREDIT  (7) → CREDIT                         |
+//+------------------------------------------------------------------+
+void ExportBalanceOp()
+{
+   int    ticket   = OrderTicket();
+   int    type     = OrderType();
+   double profit   = OrderProfit();
+   string comment  = OrderComment();
+   string symbol   = OrderSymbol();   // usually empty for balance ops
+   datetime opTime = OrderOpenTime(); // balance ops use open time
+
+   // Map order type to op_type string.
+   // OP_BALANCE (6): positive profit → DEPOSIT, negative → WITHDRAWAL
+   // OP_CREDIT  (7): → CREDIT
+   string opType;
+   if(type == 6)
+      opType = (profit >= 0) ? "DEPOSIT" : "WITHDRAWAL";
+   else if(type == 7)
+      opType = "CREDIT";
+   else
+      opType = "OTHER";
+
+   string filename = InpSubfolder + "\\bal_" + IntegerToString(ticket) + ".json.tmp";
+   int handle = FileOpen(filename, FILE_WRITE | FILE_TXT | FILE_ANSI);
+   if(handle == INVALID_HANDLE)
+   {
+      Print("LedgerBridge: ExportBalanceOp failed to open ", filename, " err=", GetLastError());
+      return;
+   }
+
+   string json = "{\n";
+   json += "  \"ea_version\": 2,\n";
+   json += "  \"event_type\": \"balance_op\",\n";
+   json += "  \"platform\": \"MT4\",\n";
+   json += "  \"account\": " + IntegerToString(AccountNumber()) + ",\n";
+   json += "  \"login\": \"" + IntegerToString(AccountNumber()) + "\",\n";
+   json += "  \"account_currency\": \"" + AccountCurrency() + "\",\n";
+   json += "  \"broker\": \"" + EscapeJson(AccountCompany()) + "\",\n";
+   json += "  \"server\": \"" + EscapeJson(AccountServer()) + "\",\n";
+   json += "  \"deal_id\": " + IntegerToString(ticket) + ",\n";
+   json += "  \"op_type\": \"" + opType + "\",\n";
+   json += "  \"amount\": " + DoubleToStr(profit, 2) + ",\n";
+   json += "  \"currency\": \"" + AccountCurrency() + "\",\n";
+   json += "  \"symbol\": \"" + EscapeJson(symbol) + "\",\n";
+   json += "  \"occurred_at_utc\": \"" + TimeToIso(opTime) + "\",\n";
+   json += "  \"comment\": \"" + EscapeJson(comment) + "\"\n";
+   json += "}\n";
+
+   FileWriteString(handle, json);
+   FileClose(handle);
+
+   // Atomic rename.
+   string finalName = InpSubfolder + "\\bal_" + IntegerToString(ticket) + ".json";
+   FileDelete(finalName);
+   if(!FileMove(filename, FILE_TXT, finalName, FILE_TXT))
+   {
+      Print("LedgerBridge: ExportBalanceOp FileMove failed for ticket ", ticket,
+            " src=", filename, " dst=", finalName, " err=", GetLastError());
+      return;
+   }
+
+   Print("LedgerBridge: exported balance_op ticket=", ticket,
+         " op_type=", opType, " amount=", DoubleToStr(profit, 2));
 }
 
 string TimeToIso(datetime t)
