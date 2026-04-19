@@ -6,19 +6,28 @@
 //|  Compile in MetaEditor (F7), then drag onto any chart.            |
 //|  Allow "Algo Trading" in MT5 toolbar.                             |
 //|                                                                    |
-//|  On every deal (open OR close), writes a JSON file to             |
-//|  <MT5 Data Folder>/MQL5/Files/Ledger/<position_id>.json           |
-//|  which the Ledger desktop app watches and ingests.                |
+//|  v2 CHANGES (ea_version: 2):                                      |
+//|   - Output subfolder renamed from "Ledger" to "FXLedger".         |
+//|     Re-configure your file-sync / MT5 Files mapping accordingly.  |
+//|   - Balance/credit/bonus/charge/correction deals are now emitted  |
+//|     as separate "balance_op" events (bal_<deal>.json).            |
+//|   - Trade files now include "ea_version": 2 and "event_type".     |
 //|                                                                    |
-//|  "status" field in the JSON is "open" when only entry deals exist |
-//|  and "closed" once an exit deal is present. Ledger uses this to   |
-//|  display live open positions before they close.                    |
+//|  On every trade deal (open OR close), writes a JSON file to       |
+//|  <MT5 Data Folder>/MQL5/Files/FXLedger/<position_id>.json         |
+//|  On every balance-op deal, writes:                                 |
+//|  <MT5 Data Folder>/MQL5/Files/FXLedger/bal_<deal_id>.json         |
+//|  which the FXLedger desktop app watches and ingests.              |
+//|                                                                    |
+//|  "status" field in the trade JSON is "open" when only entry deals |
+//|  exist and "closed" once an exit deal is present. Ledger uses     |
+//|  this to display live open positions before they close.           |
 //+------------------------------------------------------------------+
 #property copyright "Ledger"
-#property version   "1.02"
+#property version   "2.00"
 #property strict
 
-input string InpSubfolder = "Ledger"; // Subfolder under MQL5/Files/
+input string InpSubfolder = "FXLedger"; // Subfolder under MQL5/Files/
 
 //+------------------------------------------------------------------+
 //| Initialization                                                    |
@@ -37,7 +46,7 @@ int OnInit()
    FileWriteString(handle, "active\n");
    FileClose(handle);
 
-   Print("LedgerBridge MT5 initialized. Output folder: MQL5/Files/", InpSubfolder);
+   Print("LedgerBridge MT5 v2 initialized. Output folder: MQL5/Files/", InpSubfolder);
    return INIT_SUCCEEDED;
 }
 
@@ -68,6 +77,15 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    }
 
    long entryType = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+
+   // DEAL_ENTRY_STATE (3) indicates a non-trade account event
+   // (balance, credit, bonus, charge, correction, etc.).
+   // Route these to ExportBalanceOp instead of the position path.
+   if(entryType == DEAL_ENTRY_STATE)
+   {
+      ExportBalanceOp(dealTicket);
+      return;
+   }
 
    // T6-6: Export on IN deals too — enables live open-position tracking.
    // Ledger reads "status":"open" and shows the position in the blotter
@@ -133,11 +151,15 @@ void ExportPosition(ulong positionId)
 
    // Build JSON — second pass through deals.
    string json = "{\n";
-   json += "  \"version\": 1,\n";
+   json += "  \"ea_version\": 2,\n";
+   json += "  \"event_type\": \"trade\",\n";
+   json += "  \"version\": 2,\n";
    json += "  \"platform\": \"MT5\",\n";
    json += "  \"account\": " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ",\n";
    json += "  \"account_currency\": \"" + AccountInfoString(ACCOUNT_CURRENCY) + "\",\n";
    json += "  \"broker\": \"" + EscapeJson(AccountInfoString(ACCOUNT_COMPANY)) + "\",\n";
+   json += "  \"server\": \"" + EscapeJson(AccountInfoString(ACCOUNT_SERVER)) + "\",\n";
+   json += "  \"login\": \"" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "\",\n";
    json += "  \"position_id\": " + IntegerToString(positionId) + ",\n";
    json += "  \"status\": \"" + statusStr + "\",\n";
    json += "  \"deals\": [\n";
@@ -212,6 +234,90 @@ void ExportPosition(ulong positionId)
 
    Print("LedgerBridge: exported position ", positionId,
          " status=", statusStr, " deals=", dealsCount);
+}
+
+//+------------------------------------------------------------------+
+//| Export a balance/credit/bonus/charge/correction deal as JSON     |
+//| These are DEAL_ENTRY_STATE deals — non-trade account events.     |
+//+------------------------------------------------------------------+
+void ExportBalanceOp(ulong dealTicket)
+{
+   long   dealType   = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+   double amount     = HistoryDealGetDouble(dealTicket,  DEAL_PROFIT);
+   string symbol     = HistoryDealGetString(dealTicket,  DEAL_SYMBOL);   // usually empty
+   string comment    = HistoryDealGetString(dealTicket,  DEAL_COMMENT);
+   datetime dealTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
+   double commission = HistoryDealGetDouble(dealTicket,  DEAL_COMMISSION);
+
+   // Map MT5 DEAL_TYPE to op_type string.
+   // DEAL_TYPE_BALANCE (2): positive → DEPOSIT, negative → WITHDRAWAL
+   // DEAL_TYPE_CREDIT (3)  → CREDIT
+   // DEAL_TYPE_CHARGE (4)  → CHARGE
+   // DEAL_TYPE_CORRECTION (5) → CORRECTION
+   // DEAL_TYPE_BONUS (6)   → BONUS
+   // DEAL_TYPE_COMMISSION (7), COMMISSION_DAILY (8), COMMISSION_MONTHLY (9) → COMMISSION
+   // DEAL_TYPE_INTEREST (14) → INTEREST
+   // anything else → OTHER
+   string opType;
+   if(dealType == 2)       // DEAL_TYPE_BALANCE
+      opType = (amount >= 0) ? "DEPOSIT" : "WITHDRAWAL";
+   else if(dealType == 3)  // DEAL_TYPE_CREDIT
+      opType = "CREDIT";
+   else if(dealType == 4)  // DEAL_TYPE_CHARGE
+      opType = "CHARGE";
+   else if(dealType == 5)  // DEAL_TYPE_CORRECTION
+      opType = "CORRECTION";
+   else if(dealType == 6)  // DEAL_TYPE_BONUS
+      opType = "BONUS";
+   else if(dealType == 7 || dealType == 8 || dealType == 9)  // DEAL_TYPE_COMMISSION*
+      opType = "COMMISSION";
+   else if(dealType == 14) // DEAL_TYPE_INTEREST
+      opType = "INTEREST";
+   else
+      opType = "OTHER";
+
+   string filename = InpSubfolder + "\\bal_" + IntegerToString(dealTicket) + ".json.tmp";
+   int handle = FileOpen(filename, FILE_WRITE | FILE_TXT | FILE_ANSI);
+   if(handle == INVALID_HANDLE)
+   {
+      Print("LedgerBridge: ExportBalanceOp failed to open ", filename, " err=", GetLastError());
+      return;
+   }
+
+   string json = "{\n";
+   json += "  \"ea_version\": 2,\n";
+   json += "  \"event_type\": \"balance_op\",\n";
+   json += "  \"platform\": \"MT5\",\n";
+   json += "  \"account\": " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ",\n";
+   json += "  \"login\": \"" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "\",\n";
+   json += "  \"account_currency\": \"" + AccountInfoString(ACCOUNT_CURRENCY) + "\",\n";
+   json += "  \"broker\": \"" + EscapeJson(AccountInfoString(ACCOUNT_COMPANY)) + "\",\n";
+   json += "  \"server\": \"" + EscapeJson(AccountInfoString(ACCOUNT_SERVER)) + "\",\n";
+   json += "  \"deal_id\": " + IntegerToString(dealTicket) + ",\n";
+   json += "  \"op_type\": \"" + opType + "\",\n";
+   json += "  \"amount\": " + DoubleToString(amount, 2) + ",\n";
+   json += "  \"commission\": " + DoubleToString(commission, 2) + ",\n";
+   json += "  \"currency\": \"" + AccountInfoString(ACCOUNT_CURRENCY) + "\",\n";
+   json += "  \"symbol\": \"" + EscapeJson(symbol) + "\",\n";
+   json += "  \"occurred_at_utc\": \"" + TimeToIso(dealTime) + "\",\n";
+   json += "  \"comment\": \"" + EscapeJson(comment) + "\"\n";
+   json += "}\n";
+
+   FileWriteString(handle, json);
+   FileClose(handle);
+
+   // Atomic rename: write to .tmp then rename so watcher never reads a partial file.
+   string finalName = InpSubfolder + "\\bal_" + IntegerToString(dealTicket) + ".json";
+   FileDelete(finalName);
+   if(!FileMove(filename, 0, finalName, 0))
+   {
+      Print("LedgerBridge: ExportBalanceOp FileMove failed for deal ", dealTicket,
+            " src=", filename, " dst=", finalName, " err=", GetLastError());
+      return;
+   }
+
+   Print("LedgerBridge: exported balance_op deal=", dealTicket,
+         " op_type=", opType, " amount=", DoubleToString(amount, 2));
 }
 
 //+------------------------------------------------------------------+
