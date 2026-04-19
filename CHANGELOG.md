@@ -6,9 +6,39 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased] — renaming to FXLedger for v1.1
+## [1.0.5] — 2026-04-19
+
+### Added
+- **Balance reconciliation engine (T1.5).** Detects mismatch between actual account equity (from the `balance_operations` ledger, which records real broker deposits/withdrawals/credits/charges) and computed equity (from trade P&L). Persistent banner alerts users when drift > 0.01%. One-click correction workflow creates a CORRECTION balance op to zero out drift. Fully tested: 23 reconciliation scenarios (balance op summation, equity computation, drift detection thresholds, soft-delete handling, closed-trade filtering). Hard rule #14 (audit logging) applies to all corrections.
+- **Drift banner + correction modal UI.** DriftBanner component in session header shows drift amount and % when detected. DriftModal provides detailed breakdown (actual vs computed) and button to create correction in one click.
 
 ### Changed
+- **Account metadata extended (T1.3).** Accounts table now includes `server` (TEXT), `platform` (ENUM: 'mt4'|'mt5'), `leverage` (INT), `timezone` (TEXT, IANA format), `login` (TEXT), `broker_type` (ENUM: 'market_maker'|'ecn'|'stp'). Login combined with server and platform form a partial unique index for duplicate-entry detection during bridge import.
+- **Expert Advisor v2.00 (T1.4).** MT4 and MT5 EAs now emit balance operations (`bal_<ticket>.json`) alongside trade events. Bridge-watcher classifies events as `balance_op` or `trade` and routes accordingly. 30-day backward compatibility window for v1 trade events expires 2026-05-19.
+- **FXLedger branding (T1.2).** Renamed "Ledger" → "FXLedger" at all user-facing surfaces: window title, tray tooltip, installer UI, sidebar logo, update banner, help components, EA install guide, settings about card, documentation. Internal identifiers (`%APPDATA%\Ledger\`, `com.ledger.journal`, `window.ledger`, MQL filenames) preserved for seamless upgrade from v1.0 → v1.1.
+
+### Fixed
+- Schema migrations: new tables and columns correctly applied on first launch with no data loss. Runtime migration003 runs only once (checked via `user_version`), idempotent by design.
+- Drift calculation ensures only *closed* trades (where `closed_at_utc IS NOT NULL`) contribute to computed equity; open trades are excluded until they close.
+
+### Technical
+- **Tests:** 232/232 passing (9 suites, +23 new reconciliation scenarios).
+- **TypeScript:** Clean, no errors.
+- **Database:** 18 tables, WAL mode, FK ON, FTS5. Migrations via `user_version` counter (v1.0.3→1.0.5 updates from v=2 to v=3). Soft-delete only from UI; hard-delete only from Trash.
+- **Hard rules verified:** UTC ISO-8601 timestamps, Drizzle-only writes, audit logging for mutations, no hardcoded timezone offsets, no network calls (except optional auto-update, off by default).
+
+---
+
+## [Unreleased] — roadmap for v1.1+
+
+### Planned (T1.6–T1.10)
+- **T1.6:** Account creation + edit UI (broker metadata form)
+- **T1.7:** Trade-form P0 (symbol/setup/TP combobox)
+- **T1.8:** Security P0 sweep (zip-slip, CSP, permission, EXIF)
+- **T1.9:** Incremental dashboard compute (performance optimization)
+- **T1.10:** News calendar auto-sync (ForexFactory integration)
+
+### Changed (v1.1 renaming)
 - **Product rename:** "Ledger" → "FXLedger" at every user-visible surface
   (installer, window title, tray tooltip, sidebar logo, update banner, guided
   tour, EA install guide, glossary, Settings "About" card, docs). See T1.2 in
