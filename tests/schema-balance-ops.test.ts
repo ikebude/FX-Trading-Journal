@@ -533,6 +533,7 @@ describe('accounts — idx_accounts_login (partial unique)', () => {
 // 6. FK cascade: deleting an account removes its balance ops
 // ─────────────────────────────────────────────────────────────
 
+
 describe('balance_operations — FK cascade on account delete', () => {
   it('cascades delete from accounts to balance_operations', async () => {
     const harness = makeDb();
@@ -559,5 +560,219 @@ describe('balance_operations — FK cascade on account delete', () => {
 
     // Silences "unused import" warning for instruments type if any.
     void instruments;
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// 7. Migration 003 — existing v1.0.x DB gets balance_operations + accounts columns
+// ─────────────────────────────────────────────────────────────
+
+describe('migration 003 — upgrading an existing v1.0.x database', () => {
+  /**
+   * Simulates a v1.0.x (user_version = 2) database by applying only the tables
+   * that existed before T1.3 (no balance_operations, no broker metadata columns on
+   * accounts). Then applies migration003's SQL inline to verify the upgrade path.
+   */
+  function makeV102Db(): Database.Database {
+    const raw = new Database(':memory:');
+    raw.pragma('foreign_keys = ON');
+
+    // Minimal schema that mirrors a post-migration002 v1.0.x database:
+    // accounts WITHOUT the 6 new columns; NO balance_operations table.
+    raw.exec(`
+      CREATE TABLE accounts (
+        id                TEXT PRIMARY KEY,
+        name              TEXT NOT NULL UNIQUE,
+        broker            TEXT,
+        account_currency  TEXT NOT NULL DEFAULT 'USD',
+        initial_balance   REAL NOT NULL DEFAULT 0,
+        account_type      TEXT NOT NULL DEFAULT 'LIVE',
+        display_color     TEXT NOT NULL DEFAULT '#3b82f6',
+        is_active         INTEGER NOT NULL DEFAULT 1,
+        opened_at_utc     TEXT,
+        created_at_utc    TEXT NOT NULL,
+        updated_at_utc    TEXT NOT NULL
+      );
+
+      CREATE TABLE instruments (
+        symbol        TEXT PRIMARY KEY,
+        display_name  TEXT,
+        asset_class   TEXT NOT NULL DEFAULT 'FOREX',
+        pip_size      REAL NOT NULL,
+        contract_size REAL NOT NULL DEFAULT 100000,
+        digits        INTEGER NOT NULL DEFAULT 5,
+        is_active     INTEGER NOT NULL DEFAULT 1
+      );
+
+      CREATE TABLE trades (
+        id              TEXT PRIMARY KEY,
+        account_id      TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        symbol          TEXT NOT NULL,
+        direction       TEXT NOT NULL,
+        status          TEXT NOT NULL DEFAULT 'OPEN',
+        source          TEXT NOT NULL DEFAULT 'MANUAL',
+        deleted_at_utc  TEXT,
+        created_at_utc  TEXT NOT NULL,
+        updated_at_utc  TEXT NOT NULL
+      );
+
+      CREATE TABLE audit_log (
+        id              TEXT PRIMARY KEY,
+        entity_type     TEXT NOT NULL CHECK(entity_type IN
+                        ('TRADE','LEG','SCREENSHOT','NOTE','TAG_LINK','TRADE_TAGS','REVIEW','ACCOUNT')),
+        entity_id       TEXT NOT NULL,
+        trade_id        TEXT REFERENCES trades(id) ON DELETE SET NULL,
+        action          TEXT NOT NULL CHECK(action IN
+                        ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE','HARD_DELETE')),
+        changed_fields  TEXT,
+        actor           TEXT NOT NULL DEFAULT 'user',
+        timestamp_utc   TEXT NOT NULL
+      );
+
+      PRAGMA user_version = 2;
+    `);
+
+    return raw;
+  }
+
+  function applyMig003Sql(raw: Database.Database): void {
+    raw.pragma('foreign_keys = OFF');
+    const migrate = raw.transaction(() => {
+      // Step 1: Add 6 columns to accounts.
+      raw.exec(`
+        ALTER TABLE accounts ADD COLUMN server TEXT;
+        ALTER TABLE accounts ADD COLUMN platform TEXT;
+        ALTER TABLE accounts ADD COLUMN leverage INTEGER;
+        ALTER TABLE accounts ADD COLUMN timezone TEXT;
+        ALTER TABLE accounts ADD COLUMN login TEXT;
+        ALTER TABLE accounts ADD COLUMN broker_type TEXT;
+      `);
+
+      // Step 2: Partial unique index for broker login.
+      raw.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_login
+          ON accounts(platform, server, login)
+          WHERE login IS NOT NULL AND platform IS NOT NULL AND server IS NOT NULL;
+      `);
+
+      // Step 3: Create balance_operations table.
+      raw.exec(`
+        CREATE TABLE IF NOT EXISTS balance_operations (
+          id TEXT PRIMARY KEY,
+          account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          op_type TEXT NOT NULL CHECK(op_type IN (
+            'DEPOSIT','WITHDRAWAL','BONUS','CREDIT','CHARGE',
+            'CORRECTION','COMMISSION','INTEREST','PAYOUT','OTHER'
+          )),
+          amount REAL NOT NULL,
+          currency TEXT NOT NULL,
+          occurred_at_utc TEXT NOT NULL,
+          recorded_at_utc TEXT NOT NULL,
+          source TEXT NOT NULL CHECK(source IN (
+            'MANUAL','BRIDGE','IMPORT','MT4_HTML','MT5_HTML',
+            'CSV','BROKER_PDF','RECONCILIATION'
+          )),
+          external_id TEXT,
+          external_ticket TEXT,
+          related_trade_id TEXT REFERENCES trades(id) ON DELETE SET NULL,
+          note TEXT,
+          tags TEXT,
+          deleted_at_utc TEXT,
+          created_at_utc TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        );
+      `);
+
+      // Step 4: Indexes for balance_operations.
+      raw.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_balance_ops_external
+          ON balance_operations(account_id, source, external_id)
+          WHERE external_id IS NOT NULL AND deleted_at_utc IS NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_balance_ops_account_occurred
+          ON balance_operations(account_id, occurred_at_utc);
+
+        CREATE INDEX IF NOT EXISTS idx_balance_ops_soft_delete
+          ON balance_operations(deleted_at_utc);
+
+        CREATE INDEX IF NOT EXISTS idx_balance_ops_type
+          ON balance_operations(op_type);
+
+        CREATE INDEX IF NOT EXISTS idx_balance_ops_related_trade
+          ON balance_operations(related_trade_id)
+          WHERE related_trade_id IS NOT NULL;
+      `);
+
+      // Step 5: Rebuild audit_log with BALANCE_OP entity_type + BALANCE_OP_* actions.
+      raw.exec(`
+        CREATE TABLE audit_log_v3 (
+          id              TEXT PRIMARY KEY,
+          entity_type     TEXT NOT NULL CHECK(entity_type IN
+                          ('TRADE','LEG','SCREENSHOT','NOTE','TAG_LINK','TRADE_TAGS','REVIEW','ACCOUNT','BALANCE_OP')),
+          entity_id       TEXT NOT NULL,
+          trade_id        TEXT REFERENCES trades(id) ON DELETE SET NULL,
+          action          TEXT NOT NULL CHECK(action IN
+                          ('CREATE','UPDATE','DELETE','RESTORE','MERGE','BULK_UPDATE','HARD_DELETE',
+                           'BALANCE_OP_CREATE','BALANCE_OP_UPDATE','BALANCE_OP_DELETE','BALANCE_OP_RESTORE')),
+          changed_fields  TEXT,
+          actor           TEXT NOT NULL DEFAULT 'user',
+          timestamp_utc   TEXT NOT NULL
+        );
+
+        INSERT INTO audit_log_v3 SELECT * FROM audit_log;
+
+        DROP TABLE audit_log;
+
+        ALTER TABLE audit_log_v3 RENAME TO audit_log;
+
+        CREATE INDEX IF NOT EXISTS idx_audit_trade  ON audit_log(trade_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_time   ON audit_log(timestamp_utc);
+        CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
+      `);
+
+      raw.pragma('user_version = 3');
+    });
+    migrate();
+    raw.pragma('foreign_keys = ON');
+  }
+
+  it('creates balance_operations table and adds 6 new columns to accounts after migration', () => {
+    const raw = makeV102Db();
+    applyMig003Sql(raw);
+
+    // Verify balance_operations table was created.
+    const tableRow = raw
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'balance_operations'")
+      .get() as { name: string } | undefined;
+    expect(tableRow?.name).toBe('balance_operations');
+
+    // Verify all 6 new columns exist on accounts by querying table_info.
+    const cols = raw
+      .prepare('PRAGMA table_info(accounts)')
+      .all()
+      .map((r) => (r as { name: string }).name);
+
+    expect(cols).toContain('server');
+    expect(cols).toContain('platform');
+    expect(cols).toContain('leverage');
+    expect(cols).toContain('timezone');
+    expect(cols).toContain('login');
+    expect(cols).toContain('broker_type');
+
+    // Verify user_version bumped to 3.
+    const version = raw.pragma('user_version', { simple: true }) as number;
+    expect(version).toBe(3);
+  });
+
+  it('creates idx_balance_ops_related_trade FK index after migration', () => {
+    const raw = makeV102Db();
+    applyMig003Sql(raw);
+
+    const indexNames = raw
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'balance_operations'")
+      .all()
+      .map((r) => (r as { name: string }).name);
+
+    expect(indexNames).toContain('idx_balance_ops_related_trade');
   });
 });
