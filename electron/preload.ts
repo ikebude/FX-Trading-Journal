@@ -162,6 +162,11 @@ const api = {
     list: (range: { from: string; to: string }) =>
       ipcRenderer.invoke('calendar:list', range),
     retagTrades: () => ipcRenderer.invoke('calendar:retag-trades'),
+    // T1.10: Auto-sync handlers
+    autoSyncToggle: (enabled: boolean) => ipcRenderer.invoke('calendar:auto-sync-toggle', enabled),
+    setSyncInterval: (hours: number) => ipcRenderer.invoke('calendar:set-sync-interval', hours),
+    syncNow: () => ipcRenderer.invoke('calendar:sync-now'),
+    getSyncSettings: () => ipcRenderer.invoke('calendar:get-sync-settings'),
   },
 
   // ── Reports ───────────────────────────────────────

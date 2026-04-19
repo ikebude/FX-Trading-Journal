@@ -116,10 +116,11 @@ All 18 core milestones complete. Production-ready features shipped:
 | EA bridge v2.00 (balance ops) (T1.4) | v1.0.5 | ✅ Done |
 | Account metadata extended (T1.3) | v1.0.5 | ✅ Done |
 | Trade-form P0 combobox + TP (T1.7) | v1.0.6 | ✅ Done |
+| Calendar auto-sync service (T1.10) | v1.1.0 | ✅ Done |
 
 ### v1.1.0 In Development (42-day sprint, target May 30, 2026)
 
-**Status:** Week 1 (T1.1–T1.7) ✅ COMPLETE. Week 2–6 (T2.1–T6.11) in pipeline.
+**Status:** Week 1 (T1.1–T1.10) ✅ COMPLETE. Week 2–6 (T2.1–T6.11) in pipeline.
 
 **Completion:** T1.1–T1.10 (foundation) + T2.1–T2.10 (libraries) + T3.1–T3.10 (analytics) + T4.1–T4.15 (imports/UX) + T5.1–T5.10 (portfolio) + T6.1–T6.11 (intelligence/release).
 

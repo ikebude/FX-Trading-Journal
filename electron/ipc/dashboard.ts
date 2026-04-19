@@ -7,6 +7,7 @@
  * Fixes applied:
  *  C-3: All trades are fetched via pagination loop — no 10k cap.
  *  P-2: Results are cached in-process with a 60-second TTL keyed by filter hash.
+ *  T1.9: Per-trade metrics cache with delta detection — recompute only on new/changed trades.
  *  H-3: Errors are sanitised before reaching the renderer.
  */
 
@@ -29,8 +30,11 @@ import {
   computeCalendarHeatmap,
   computeStreakInfo,
   computeMonthlyPnl,
+  computeTradeMetrics,
+  extractCacheableMetrics,
   type TradeBundle,
 } from '../../src/lib/pnl';
+import { metricsCache } from '../../src/lib/dashboard-metrics-cache';
 import { TradeFiltersSchema } from '../../src/lib/schemas';
 import { listTrades } from '../../src/lib/db/queries';
 
@@ -62,6 +66,21 @@ function pruneCache(): void {
 /** Invalidate all dashboard cache entries. Called by trades/imports handlers after mutations. */
 export function invalidateDashboardCache(): void {
   dashboardCache.clear();
+}
+
+/**
+ * Invalidate metrics cache for a specific trade (called when trade is updated/deleted).
+ * T1.9: Called by trades.ts, imports.ts, reconciliation.ts after mutations.
+ */
+export function invalidateTradeMetricsCache(tradeId: string): void {
+  metricsCache.invalidateTradeAll(tradeId);
+}
+
+/**
+ * Clear all per-trade metrics cache (called on bulk operations like import).
+ */
+export function clearTradeMetricsCache(): void {
+  metricsCache.clear();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -151,6 +170,9 @@ export function registerDashboardHandlers(): void {
         legsByTrade.get(leg.tradeId)!.push(leg);
       }
 
+      // T1.9: Track which trades are new/changed (deltas) for incremental compute
+      let deltaCount = 0;
+
       // Build TradeBundle[] — one bundle per trade, with legs
       const bundles: TradeBundle[] = [];
       for (const trade of tradeRows) {
@@ -162,7 +184,51 @@ export function registerDashboardHandlers(): void {
 
         const legs = legsByTrade.get(trade.id) ?? [];
 
-        bundles.push({
+        // T1.9: Check cache using trade.updated_at as version key
+        const cacheVersion = trade.updatedAtUtc; // ISO-8601 string
+        const cachedMetrics = metricsCache.get(trade.id, cacheVersion);
+        
+        // If metrics not cached, compute and cache them (delta)
+        if (!cachedMetrics) {
+          deltaCount++;
+          const tradeMetrics = computeTradeMetrics(
+            {
+              id: trade.id,
+              account_id: trade.accountId,
+              symbol: trade.symbol,
+              direction: trade.direction as 'LONG' | 'SHORT',
+              status: trade.status as 'OPEN' | 'PARTIAL' | 'CLOSED' | 'CANCELLED',
+              initial_stop_price: trade.initialStopPrice ?? null,
+              initial_target_price: trade.initialTargetPrice ?? null,
+              setup_name: trade.setupName ?? null,
+              session: trade.session ?? null,
+              confidence: trade.confidence ?? null,
+            },
+            legs.map((l) => ({
+              id: l.id,
+              trade_id: l.tradeId,
+              leg_type: l.legType as 'ENTRY' | 'EXIT',
+              timestamp_utc: l.timestampUtc,
+              price: l.price,
+              volume_lots: l.volumeLots,
+              commission: l.commission,
+              swap: l.swap,
+              broker_profit: l.brokerProfit ?? null,
+            })),
+            instrument,
+          );
+          const cacheable = extractCacheableMetrics(tradeMetrics, startingBalance);
+          metricsCache.set(trade.id, cacheVersion, {
+            rMultiple: cacheable.rMultiple,
+            pnl: cacheable.pnl,
+            pnlPercent: cacheable.pnlPercent,
+            maePercent: cacheable.maePercent,
+            mfePercent: cacheable.mfePercent,
+            holdingTimeSeconds: cacheable.holdingTimeSeconds,
+          });
+        }
+
+        const bundle: TradeBundle = {
           trade: {
             id: trade.id,
             account_id: trade.accountId,
@@ -187,7 +253,13 @@ export function registerDashboardHandlers(): void {
             broker_profit: l.brokerProfit ?? null,
           })),
           instrument,
-        });
+        };
+        bundles.push(bundle);
+      }
+
+      // T1.9: Log delta count for diagnostics
+      if (deltaCount > 0 && tradeRows.length > 0) {
+        log.debug(`Dashboard incremental compute: ${deltaCount}/${tradeRows.length} trades were deltas`);
       }
 
       // Compute all widget metrics

@@ -10,7 +10,7 @@
  *  - Each event: time, currency, impact badge, title
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   format,
@@ -22,8 +22,15 @@ import {
   isSameDay,
   parseISO,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Upload, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Upload, RefreshCw, Settings, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/cn';
 
 // ─────────────────────────────────────────────────────────────
@@ -149,10 +156,18 @@ function DayColumn({ day, events }: { day: Date; events: NewsEvent[] }) {
 // Main CalendarPage
 // ─────────────────────────────────────────────────────────────
 
+interface SyncSettings {
+  enabled: boolean;
+  intervalHours: number;
+  lastSyncUtc: string | null;
+}
+
 export function CalendarPage() {
   const queryClient = useQueryClient();
   const [anchor, setAnchor] = useState<Date>(new Date());
   const [dragOver, setDragOver] = useState(false);
+  const [syncSettingsOpen, setSyncSettingsOpen] = useState(false);
+  const [syncSettings, setSyncSettings] = useState<SyncSettings | null>(null);
 
   const weekStart = startOfWeek(anchor, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(anchor, { weekStartsOn: 1 });
@@ -161,6 +176,19 @@ export function CalendarPage() {
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd }).filter(
     (d) => d.getDay() !== 0 && d.getDay() !== 6,
   );
+
+  // Load sync settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settings = await window.ledger.calendar.getSyncSettings();
+        setSyncSettings(settings);
+      } catch (err) {
+        console.error('Failed to load sync settings:', err);
+      }
+    };
+    loadSettings();
+  }, []);
 
   const { data: events, isLoading } = useQuery<NewsEvent[]>({
     queryKey: ['calendar', weekStart.toISOString(), weekEnd.toISOString()],
@@ -182,6 +210,31 @@ export function CalendarPage() {
     mutationFn: () => window.ledger.calendar.retagTrades(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trades'] });
+    },
+  });
+
+  // T1.10: Auto-sync mutations
+  const syncNowMutation = useMutation({
+    mutationFn: () => window.ledger.calendar.syncNow(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      // Update last sync time
+      const now = new Date().toISOString();
+      setSyncSettings((prev) => prev ? { ...prev, lastSyncUtc: now } : null);
+    },
+  });
+
+  const autoSyncToggleMutation = useMutation({
+    mutationFn: (enabled: boolean) => window.ledger.calendar.autoSyncToggle(enabled),
+    onSuccess: (_, enabled) => {
+      setSyncSettings((prev) => prev ? { ...prev, enabled } : null);
+    },
+  });
+
+  const setIntervalMutation = useMutation({
+    mutationFn: (hours: number) => window.ledger.calendar.setSyncInterval(hours),
+    onSuccess: (_, hours) => {
+      setSyncSettings((prev) => prev ? { ...prev, intervalHours: hours } : null);
     },
   });
 
@@ -216,62 +269,130 @@ export function CalendarPage() {
       onDrop={handleDrop}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setAnchor((a) => subWeeks(a, 1))}
-        >
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </Button>
-        <span className="min-w-52 text-center text-sm font-medium text-foreground">
-          {weekLabel}
-        </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setAnchor((a) => addWeeks(a, 1))}
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-2 h-7 gap-1.5 text-xs"
-          onClick={() => setAnchor(new Date())}
-        >
-          Today
-        </Button>
-
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex shrink-0 flex-col border-b border-border bg-card">
+        {/* Main header row */}
+        <div className="flex items-center gap-2 px-4 py-2">
           <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => retagMutation.mutate()}
-            disabled={retagMutation.isPending}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setAnchor((a) => subWeeks(a, 1))}
           >
-            <RefreshCw className={cn('h-3 w-3', retagMutation.isPending && 'animate-spin')} />
-            Re-tag Trades
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <span className="min-w-52 text-center text-sm font-medium text-foreground">
+            {weekLabel}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setAnchor((a) => addWeeks(a, 1))}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
           </Button>
 
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="h-7 gap-1.5 text-xs"
-            disabled={importMutation.isPending}
-            onClick={() => {
-              // In a real build we'd open a file dialog via IPC
-              // For now, drag-and-drop is the primary interaction
-            }}
+            className="ml-2 h-7 gap-1.5 text-xs"
+            onClick={() => setAnchor(new Date())}
           >
-            <Upload className="h-3 w-3" />
-            {importMutation.isPending ? 'Importing…' : 'Import CSV'}
+            Today
           </Button>
+
+          <div className="ml-auto flex items-center gap-2">
+            {/* T1.10: Sync Now button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => syncNowMutation.mutate()}
+              disabled={syncNowMutation.isPending}
+              title={syncSettings?.lastSyncUtc ? `Last sync: ${format(parseISO(syncSettings.lastSyncUtc), 'MMM d, HH:mm')}` : 'Never synced'}
+            >
+              <RefreshCw className={cn('h-3 w-3', syncNowMutation.isPending && 'animate-spin')} />
+              {syncNowMutation.isPending ? 'Syncing…' : 'Sync Now'}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => retagMutation.mutate()}
+              disabled={retagMutation.isPending}
+            >
+              <RefreshCw className={cn('h-3 w-3', retagMutation.isPending && 'animate-spin')} />
+              Re-tag Trades
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              disabled={importMutation.isPending}
+              onClick={() => {
+                // In a real build we'd open a file dialog via IPC
+                // For now, drag-and-drop is the primary interaction
+              }}
+            >
+              <Upload className="h-3 w-3" />
+              {importMutation.isPending ? 'Importing…' : 'Import CSV'}
+            </Button>
+
+            {/* T1.10: Auto-sync settings button */}
+            <Button
+              variant={syncSettingsOpen ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 w-7"
+              onClick={() => setSyncSettingsOpen(!syncSettingsOpen)}
+            >
+              <Settings className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
+
+        {/* T1.10: Auto-sync settings panel */}
+        {syncSettingsOpen && syncSettings && (
+          <div className="border-t border-border bg-card/50 px-4 py-3">
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={syncSettings.enabled}
+                  onChange={(e) => autoSyncToggleMutation.mutate(e.target.checked)}
+                  disabled={autoSyncToggleMutation.isPending}
+                  className="h-4 w-4 rounded border-border"
+                />
+                <span className="text-foreground">Auto-sync every</span>
+              </label>
+
+              <Select
+                value={String(syncSettings.intervalHours)}
+                onValueChange={(value) => setIntervalMutation.mutate(parseInt(value, 10))}
+                disabled={!syncSettings.enabled || setIntervalMutation.isPending}
+              >
+                <SelectTrigger className="h-7 w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 6, 8, 12, 24].map((h) => (
+                    <SelectItem key={h} value={String(h)}>
+                      {h}h
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {syncSettings.lastSyncUtc && (
+                <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span>Last: {format(parseISO(syncSettings.lastSyncUtc), 'MMM d, HH:mm')}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Import status */}

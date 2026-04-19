@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { getDb } from '../../src/lib/db/client';
 import { screenshots as screenshotsTable } from '../../src/lib/db/schema';
 import { createScreenshot, deleteScreenshot, listScreenshots } from '../../src/lib/db/queries';
+import { stripExif } from '../../src/lib/exif-stripper';
 import type { IpcContext } from './index';
 
 // ─────────────────────────────────────────────────────────────
@@ -64,7 +65,10 @@ export function registerScreenshotHandlers(ctx: IpcContext): void {
         // C-1: ensure dest stays inside data_dir
         assertWithinDataDir(ctx.config.data_dir, destPath);
 
-        const { width, height } = await sharp(buf)
+        // T1.8 (S4): Strip EXIF metadata before saving
+        const cleanBuf = await stripExif(buf, 'webp');
+
+        const { width, height } = await sharp(cleanBuf)
           .webp({ quality: 85 })
           .toFile(destPath);
 
@@ -75,7 +79,7 @@ export function registerScreenshotHandlers(ctx: IpcContext): void {
           caption: safeCaption,
           widthPx: width ?? null,
           heightPx: height ?? null,
-          byteSize: buf.byteLength,
+          byteSize: cleanBuf.byteLength,
         });
       } catch (err) {
         log.error('screenshots:save-from-buffer', err);

@@ -244,6 +244,71 @@ export function computeTradeMetrics(
   };
 }
 
+// T1.9: Extract cacheable per-trade metrics
+// Used by incremental dashboard compute to avoid recomputing metrics for unchanged trades.
+export interface PerTradeMetricsData {
+  rMultiple: number | null;
+  pnl: number | null;
+  pnlPercent: number | null;
+  maePercent: number | null;
+  mfePercent: number | null;
+  holdingTimeSeconds: number | null;
+  openedAtUtc: string | null;
+  closedAtUtc: string | null;
+  netPips: number | null;
+}
+
+/**
+ * Extract per-trade metrics that are cacheable and feed into all dashboard widgets.
+ * Used in incremental compute: cache by (trade_id, updated_at), compute deltas only.
+ */
+export function extractCacheableMetrics(
+  metrics: TradeMetrics,
+  startingBalance: number,
+): PerTradeMetricsData {
+  // Compute MAE/MFE percentages (used by multiple widgets)
+  let maePercent: number | null = null;
+  let mfePercent: number | null = null;
+
+  if (metrics.weightedAvgEntry !== null) {
+    // MAE: worst adverse excursion from entry
+    // For LONG: (entry - lowest) / entry * 100
+    // For SHORT: (highest - entry) / entry * 100
+    // We don't have low/high prices in TradeMetrics, so use a simplified approach:
+    // If we have broker P&L, assume MAE is proportional to remaining unrealized loss.
+    // For simplicity in caching, store null if we don't have enough data.
+    // Detailed MAE/MFE would require tick data which we don't have in the aggregator.
+    maePercent = null;
+    mfePercent = null;
+  }
+
+  // Compute P&L percentage
+  let pnlPercent: number | null = null;
+  if (
+    metrics.netPnl !== null &&
+    startingBalance > 0
+  ) {
+    pnlPercent = (metrics.netPnl / startingBalance) * 100;
+  }
+
+  // Convert holding time from ms to seconds
+  const holdingTimeSeconds = metrics.holdingTimeMs !== null
+    ? Math.round(metrics.holdingTimeMs / 1000)
+    : null;
+
+  return {
+    rMultiple: metrics.rMultiple,
+    pnl: metrics.netPnl,
+    pnlPercent,
+    maePercent,
+    mfePercent,
+    holdingTimeSeconds,
+    openedAtUtc: metrics.openedAtUtc,
+    closedAtUtc: metrics.closedAtUtc,
+    netPips: metrics.netPips,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────
 // Aggregate metrics across many trades
 // ─────────────────────────────────────────────────────────────

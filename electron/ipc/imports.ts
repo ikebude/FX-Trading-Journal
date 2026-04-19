@@ -26,7 +26,7 @@ import { trades, tradeLegs, importRuns } from '../../src/lib/db/schema';
 import { detectSession } from '../../src/lib/tz';
 import { computeTradeMetrics } from '../../src/lib/pnl';
 import { getInstrument, listAccounts, writeAudit } from '../../src/lib/db/queries';
-import { invalidateDashboardCache } from './dashboard';
+import { invalidateDashboardCache, clearTradeMetricsCache } from './dashboard';
 import {
   scoreCandidate,
   extractQualitative,
@@ -617,7 +617,10 @@ export function registerImportHandlers(ctx: IpcContext): void {
         });
 
         pendingParses.delete(parseResultId);
-        if (imported > 0 || merged > 0) invalidateDashboardCache();
+        if (imported > 0 || merged > 0) {
+          invalidateDashboardCache();
+          clearTradeMetricsCache(); // T1.9: bulk import invalidates all trade metrics
+        }
 
         log.info(
           `Import complete: ${imported} imported, ${duplicate} duplicate, ${merged} merged, ${failed} failed`,

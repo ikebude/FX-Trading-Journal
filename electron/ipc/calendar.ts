@@ -20,11 +20,11 @@ import { readFileSync } from 'node:fs';
 import Papa from 'papaparse';
 import log from 'electron-log/main.js';
 import { nanoid } from 'nanoid';
-import { gte, lte, and, isNull, sql } from 'drizzle-orm';
+import { gte, lte, and, isNull, sql, eq } from 'drizzle-orm';
 import { fromZonedTime } from 'date-fns-tz';
 
 import { getDb } from '../../src/lib/db/client';
-import { newsEvents, tradeNewsEvents, trades, tradeLegs } from '../../src/lib/db/schema';
+import { newsEvents, tradeNewsEvents, trades, tradeLegs, settings as settingsTable } from '../../src/lib/db/schema';
 
 // ─────────────────────────────────────────────────────────────
 // ForexFactory CSV row
@@ -274,6 +274,10 @@ export function registerCalendarHandlers(): void {
   ipcMain.removeHandler('calendar:import-csv');
   ipcMain.removeHandler('calendar:list');
   ipcMain.removeHandler('calendar:retag-trades');
+  ipcMain.removeHandler('calendar:auto-sync-toggle');
+  ipcMain.removeHandler('calendar:set-sync-interval');
+  ipcMain.removeHandler('calendar:sync-now');
+  ipcMain.removeHandler('calendar:get-sync-settings');
 
   ipcMain.handle('calendar:import-csv', async (_e, filePath: string) => {
     try {
@@ -301,4 +305,121 @@ export function registerCalendarHandlers(): void {
       throw new Error('Failed to retag trades');
     }
   });
+
+  // T1.10: Auto-sync handlers
+  ipcMain.handle('calendar:auto-sync-toggle', async (_e, enabled: boolean) => {
+    try {
+      const db = getDb();
+      await db
+        .insert(settingsTable)
+        .values({ key: 'calendar_auto_sync_enabled', value: enabled ? 'true' : 'false' })
+        .onConflictDoUpdate({
+          target: [settingsTable.key],
+          set: { value: enabled ? 'true' : 'false' },
+        });
+
+      // Import and start/stop the sync service
+      const { startCalendarSync, stopCalendarSync } = await import('../services/calendar-sync');
+      if (enabled) {
+        const intervalHours = await getSettingValue('calendar_sync_interval_hours', '4');
+        await startCalendarSync(parseInt(intervalHours, 10));
+      } else {
+        stopCalendarSync();
+      }
+
+      return { success: true };
+    } catch (err) {
+      log.error('calendar:auto-sync-toggle', err);
+      throw new Error('Failed to toggle auto-sync');
+    }
+  });
+
+  ipcMain.handle('calendar:set-sync-interval', async (_e, hours: number) => {
+    try {
+      if (hours < 1 || hours > 24) {
+        throw new Error('Sync interval must be between 1 and 24 hours');
+      }
+
+      const db = getDb();
+      await db
+        .insert(settingsTable)
+        .values({ key: 'calendar_sync_interval_hours', value: String(hours) })
+        .onConflictDoUpdate({
+          target: [settingsTable.key],
+          set: { value: String(hours) },
+        });
+
+      // Restart the sync service with the new interval if it's running
+      const enabled = await getSettingValue('calendar_auto_sync_enabled', 'false');
+      if (enabled === 'true') {
+        const { stopCalendarSync, startCalendarSync } = await import('../services/calendar-sync');
+        stopCalendarSync();
+        await startCalendarSync(hours);
+      }
+
+      return { success: true };
+    } catch (err) {
+      log.error('calendar:set-sync-interval', err);
+      throw new Error('Failed to set sync interval');
+    }
+  });
+
+  ipcMain.handle('calendar:sync-now', async () => {
+    try {
+      const { syncCalendarNow } = await import('../services/calendar-sync');
+      const result = await syncCalendarNow();
+      return result;
+    } catch (err) {
+      log.error('calendar:sync-now', err);
+      throw new Error('Failed to sync calendar');
+    }
+  });
+
+  ipcMain.handle('calendar:get-sync-settings', async () => {
+    try {
+      const db = getDb();
+      const enabledRow = await db
+        .select()
+        .from(settingsTable)
+        .where(eq(settingsTable.key, 'calendar_auto_sync_enabled'))
+        .limit(1);
+      const intervalRow = await db
+        .select()
+        .from(settingsTable)
+        .where(eq(settingsTable.key, 'calendar_sync_interval_hours'))
+        .limit(1);
+      const lastSyncRow = await db
+        .select()
+        .from(settingsTable)
+        .where(eq(settingsTable.key, 'calendar_last_sync_utc'))
+        .limit(1);
+
+      return {
+        enabled: (enabledRow?.[0]?.value === 'true') || false,
+        intervalHours: parseInt(intervalRow?.[0]?.value ?? '4', 10),
+        lastSyncUtc: lastSyncRow?.[0]?.value ?? null,
+      };
+    } catch (err) {
+      log.error('calendar:get-sync-settings', err);
+      throw new Error('Failed to get sync settings');
+    }
+  });
 }
+
+// T1.10: Helper to get setting value
+async function getSettingValue(key: string, defaultValue: string): Promise<string> {
+  try {
+    const db = getDb();
+    const row = await db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, key))
+      .limit(1);
+    return row?.[0]?.value ?? defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+// T1.10: Export parsing functions for use by calendar-sync service
+export { parseFFTimestamp, normalizeImpact };
