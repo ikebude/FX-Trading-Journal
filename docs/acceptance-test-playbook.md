@@ -1,10 +1,12 @@
-# Ledger — Manual Acceptance Test Playbook
+# FXLedger — Manual Acceptance Test Playbook
 
-This playbook covers the 6 acceptance criteria that require real Windows interactions
-(NSIS installer, global hotkey, system tray, multi-machine backup) plus one Update
-flow sign-off that can only be executed after a newer release is published.
+This playbook covers the acceptance criteria that require real Windows interactions
+(NSIS installer, global hotkey, system tray, multi-machine backup) plus post-release
+verification steps.
 
 Run this playbook against a **clean install** of the release `.exe` — not the dev server.
+
+**Latest tested version:** v1.0.5 (April 19, 2026)
 
 **Sign-off format for each section:**
 
@@ -15,15 +17,15 @@ Run this playbook against a **clean install** of the release `.exe` — not the 
 ## §1 — AC-01: Clean install under 10 seconds
 
 **Prereqs:**
-- A Windows machine (or VM) with no prior Ledger installation.
-- The `Ledger Setup {version}.exe` installer from the GitHub release.
+- A Windows machine (or VM) with no prior FXLedger installation.
+- The `FXLedger Setup {version}.exe` installer from the GitHub release.
 - A stopwatch (phone timer works).
 
 **Steps:**
-1. Double-click `Ledger Setup {version}.exe`.
+1. Double-click `FXLedger Setup {version}.exe`.
 2. Click through the NSIS installer (one-click or custom path — either is valid).
 3. Start the stopwatch the moment you click "Finish" in the installer.
-4. Watch the screen until the Ledger blotter is fully visible (sidebar + column headers + any empty-state message).
+4. Watch the screen until the FXLedger blotter is fully visible (sidebar + column headers + any empty-state message).
 5. Stop the stopwatch.
 
 **Expected result:** The blotter is fully visible in ≤ 10 seconds from "Finish" click.
@@ -36,7 +38,7 @@ Run this playbook against a **clean install** of the release `.exe` — not the 
 ## §2 — AC-03: Ctrl+Alt+L overlay
 
 **Prereqs:**
-- Ledger installed and running (main window open or minimized to tray).
+- FXLedger installed and running (main window open or minimized to tray).
 - Another application in the foreground (e.g., Notepad, Chrome).
 
 **Steps:**

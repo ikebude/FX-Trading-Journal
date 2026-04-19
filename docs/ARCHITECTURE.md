@@ -1,13 +1,14 @@
-# Ledger — End-to-End Architecture
+# FXLedger — End-to-End Architecture
 
-> **Audience:** Developers building or maintaining Ledger.  
+> **Audience:** Developers building or maintaining FXLedger.  
+> **Status:** v1.0.5 — Foundation complete (T1.1–T1.10). See [CHANGELOG.md](../CHANGELOG.md) for release notes.
 > **Relationship to PROJECT_BRIEF:** This document explains *how* the system is built. PROJECT_BRIEF.md defines *what* it does. Both must be read. When they conflict, PROJECT_BRIEF wins.
 
 ---
 
 ## 1. System Overview
 
-Ledger is a **three-process Electron application**.
+FXLedger is a **three-process Electron application**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
