@@ -41,14 +41,104 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased] — roadmap for v1.1+
+## [Unreleased] — v1.1.0 production release (target: 2026-05-30)
 
-### Planned (T1.6–T1.10)
-- **T1.6:** Account creation + edit UI (broker metadata form)
-- **T1.7:** Trade-form P0 (symbol/setup/TP combobox)
-- **T1.8:** Security P0 sweep (zip-slip, CSP, permission, EXIF)
-- **T1.9:** Incremental dashboard compute (performance optimization)
-- **T1.10:** News calendar auto-sync (ForexFactory integration)
+**Status:** In development. Full 42-calendar-day sprint with 6 weekly gates. See [Implementation Plan](docs/superpowers/plans/2026-04-19-v1.1-implementation.md) for task breakdown and [Real-World Scenarios](docs/superpowers/specs/2026-04-18-v1.1-real-world-scenarios.md) for all 121 features (29 P0 + 92 P1).
+
+### Week 1: Foundation (T1.1–T1.10)
+- **T1.1:** FXLedger name availability + trademark check ✓ (COMPLETED)
+- **T1.2:** Product rename (FXLedger everywhere) ✓ (COMPLETED in v1.0.5–v1.0.6)
+- **T1.3:** Schema: `balance_operations` table + account metadata ✓ (COMPLETED)
+- **T1.4:** EA bridge v2: capture all deal types (BALANCE/CREDIT/CHARGE/CORRECTION/BONUS) ✓ (COMPLETED)
+- **T1.5:** Balance reconciliation engine + drift banner ✓ (COMPLETED in v1.0.5)
+- **T1.6:** Account creation + edit UI (pending, ~1.5d)
+- **T1.7:** Trade-form P0: symbol/setup combobox + TP field ✓ (COMPLETED in v1.0.6)
+- **T1.8:** Security P0 sweep (zip-slip, CSP, permission handler, EXIF strip) (pending, ~2d)
+- **T1.9:** Incremental dashboard compute infrastructure (pending, ~2d)
+- **T1.10:** ForexFactory news calendar auto-sync (pending, ~1d)
+- **Gate W1:** Foundation stable, rename clean, balance-ops recording, schema migrations complete.
+
+### Week 2: Libraries & Taxonomies (T2.1–T2.10, pending)
+- **T2.1:** Setup library CRUD + versioning (S68, S69) ~2.5d
+- **T2.2:** Methodology tag taxonomies (SMC/ICT/Wyckoff/Elliott) (S171–S178) ~2d
+- **T2.3:** Mistake + confluence library (S74, S76) ~1d
+- **T2.4:** Prop firm preset library (FTMO/MFF/Topstep/E8/FundedNext/The5ers) (S11) ~2d
+- **T2.5:** Daily loss circuit breaker + enforcement hooks (S12–S19) ~2d
+- **T2.6:** ForexFactory news blackout + entry block (S14, S48, S49) ~1.5d
+- **T2.7:** Risk-enforcement rules (1% rule, open-risk aggregation) (S24, S25) ~1.5d
+- **T2.8:** Deposit/withdrawal log UI (S04) ~1d
+- **T2.9:** Theme toggle + accessibility (light/dark/system, reduced-motion, color-blind) (S131, S136, S137) ~1.5d
+- **T2.10:** Modified Dietz equity curve with deposit overlays (S05–S09) ~1.5d
+- **Gate W2:** Libraries operational, prop rules enforcing, calendar blackout working.
+
+### Week 3: Analytics Depth + Discipline (T3.1–T3.10, pending)
+- **T3.1:** Sharpe / Sortino / Calmar / Recovery factor (S77–S80, S84) ~2d
+- **T3.2:** MAE / MFE capture + scatter widget (S81) ~3d
+- **T3.3:** Session × DoW cross product, time-of-day curve, duration-vs-outcome (S85, S88, S89) ~2d
+- **T3.4:** Setup-performance per version + edge-degradation alert (S70, S72) ~1.5d
+- **T3.5:** Revenge-trade / tilt / overtrading detector (S56–S58) ~1.5d
+- **T3.6:** Pre-trade ritual + post-trade reflection queue (S60, S61) ~2d
+- **T3.7:** Anxiety slider + mood check-in + cool-down timer (S62, S219, S220) ~1.5d
+- **T3.8:** Post-mortem mode (blown-account autopsy, drawdown root cause) (S241–S244) ~2.5d
+- **T3.9:** Slippage tracker + spread-at-entry (S36, S37, S44) ~1.5d
+- **T3.10:** Commission model config per account (S42) ~1d
+- **Gate W3:** Analytics complete, discipline prompts live, post-mortem works on sample blown account.
+
+### Week 4: Imports, UX Polish, Release (T4.1–T4.15, pending)
+- **T4.1:** cTrader CSV importer (S186) ~1.5d
+- **T4.2:** MatchTrader / DXtrade importer (S190) ~1.5d
+- **T4.3:** IBKR Flex Query importer (S189) ~2d
+- **T4.4:** Monthly trader PDF report + prop submission bundle (S206, S210) ~2d
+- **T4.5:** Tax-prep CSV + broker statement archive (S103, S211) ~1d
+- **T4.6:** Command palette (Cmd-K) + keyboard shortcut overlay (S132, S133) ~2d
+- **T4.7:** Bulk blotter ops (tag / delete / export) (S142) ~1d
+- **T4.8:** First-run sample data + release notes viewer (S146, S160) ~1.5d
+- **T4.9:** Bridge heartbeat + server-time drift alert (S45, S46) ~0.5d
+- **T4.10:** Update rollback + crash reporter (S122, S124) ~2d
+- **T4.11:** SHA-256 verify on auto-update (S114) ~0.5d
+- **T4.12:** Kelly criterion + optimal stop/target analysis (S30, S82, S83) ~1.5d
+- **T4.13–T4.15:** E2E acceptance suite + manual playbook + release (~2.5d)
+- **Gate W4 / Release:** v1.1.0-wk4 dogfood tag, all P0s green, acceptance playbook passing.
+
+### Week 5: Portfolio, Advanced Imports, Multi-Account (T5.1–T5.10, pending)
+- **T5.1:** Multi-account portfolio dashboard (S91–S93, S95) ~3d
+- **T5.2:** Per-account risk dashboard + cross-account hedge detection (S94, S96) ~1.5d
+- **T5.3:** Edgewonk / TradeZella / TraderVue migration importers (S155) ~2d
+- **T5.4:** Broker monthly PDF reconciler (S197) ~2d
+- **T5.5:** Payout tracker + consistency rule + weekend close-all (S15, S17, S22) ~1.5d
+- **T5.6:** Scale-out / partial-close ladder planner (S29, S199) ~2d
+- **T5.7:** Year-end P&L statement + credit segregation (S97, S102) ~1.5d
+- **T5.8:** Notes autosave + Undo/Redo on edits (S140, S141) ~1.5d
+- **T5.9:** Pinnable trades + bulk ops polish (S143) ~1d
+- **T5.10:** Correlation-adjusted risk + margin usage + leverage widget (S26, S34, S35) ~2d
+- **Gate W5:** Multi-account working, all importers operational, portfolio usable.
+
+### Week 6: Intelligence, Global Support, Release Hardening (T6.1–T6.11, pending)
+- **T6.1:** Voice memo → Whisper.cpp local transcript (S144, S167) ~2.5d
+- **T6.2:** Trade-similarity search + natural-language blotter query (S163, S165) ~2.5d
+- **T6.3:** Screenshot OCR indexing (S169) ~1.5d
+- **T6.4:** End-of-day coaching prompt (rule-based insights) (S170) ~1d
+- **T6.5:** Remaining security polish (encryption, Windows Hello, screenshot redaction, audit seal) (S111–S113, S115–S117) ~3d
+- **T6.6:** Global / cultural support (RTL, CJK fonts, regional holidays, locales) (S236–S240) ~2.5d
+- **T6.7:** Feature flags + plugin architecture scaffold (S128 audit AR1) ~1d
+- **T6.8–T6.10:** E2E acceptance v1.1 (25 new tests) + manual playbook v1.1 + performance pass (~3d)
+- **T6.11:** **Release v1.1.0** (final tag, GitHub release, CHANGELOG, installer verify, smoke test) ~1d
+- **Gate W6 / Release:** v1.1.0 tag pushed, release pipeline green, both update channels published, migration from v1.0.3 tested end-to-end, CHANGELOG reviewed, installer verified on clean Windows VM.
+
+### Success Criteria (v1.1.0)
+1. ✅ All 29 P0 scenarios implemented, tested, reviewed
+2. ✅ All 92 P1 scenarios implemented, tested, reviewed
+3. ✅ Full test suite green: `npm test && npm run typecheck && npm run lint && npm run build && npm run test:e2e`
+4. ✅ Manual acceptance playbook for 6 manual + 5 new v1.1 criteria passes
+5. ✅ Balance reconciliation holds for 1000 synthetic deal events with zero drift
+6. ✅ Every IPC handler has Zod-validated input schema
+7. ✅ Security sweep (zip-slip, CSP, permission handler, EXIF) clean
+8. ✅ Performance: cold start < 2s (i5 4yr-old), dashboard TTI < 500ms with 10k trades
+9. ✅ FXLedger branding at every user-facing surface
+10. ✅ CHANGELOG specific per scenario ID
+11. ✅ Migration from v1.0.3 tested: silent pre-upgrade backup, atomic Drizzle migration, rollback on failure
+
+---
 
 ### Changed (v1.1 renaming)
 - **Product rename:** "Ledger" → "FXLedger" at every user-visible surface

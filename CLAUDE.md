@@ -92,47 +92,54 @@ npm run db:migrate   # drizzle-kit: apply pending migrations to the DB
 
 ## What Is Done vs What Remains
 
-### Done
-- [x] `src/lib/pnl.ts` — P&L engine (385 lines, 27 tests)
-- [x] `src/lib/tz.ts` — timezone + session detection
-- [x] `src/lib/importers/headers.ts` — fuzzy header matcher
-- [x] `src/lib/importers/mt4-html.ts` — MT4 HTML parser
-- [x] `src/lib/importers/mt5-html.ts` — MT5 HTML parser
-- [x] `src/lib/db/schema.ts` — Drizzle schema (18 tables)
-- [x] `schema.sql` — SQLite DDL (362 lines)
-- [x] `electron/main.ts` — main process shell
-- [x] `electron/preload.ts` — typed IPC bridge
-- [x] `electron/mql/LedgerBridge.mq4` + `.mq5` — Expert Advisors
-- [x] `tests/pnl.test.ts` — test suite
-- [x] `package.json` — locked deps + scripts
+### Foundation Complete (v1.0.0–v1.0.6)
+All 18 core milestones complete. Production-ready features shipped:
 
-### Remaining
-- [ ] Code-signing for SmartScreen trust (deferred post-v1.0.2)
-- [ ] macOS and Linux builds (deferred)
-- [ ] Cloud backup option (user-configured S3/Dropbox) (deferred)
+| Item | Version | Status |
+|---|---|---|
+| `src/lib/pnl.ts` + 27 tests | v1.0.0 | ✅ Done |
+| `src/lib/tz.ts` (timezone + session) | v1.0.0 | ✅ Done |
+| `src/lib/risk-calc.ts` + 14 tests | v1.0.0 | ✅ Done |
+| `src/lib/importers/` (MT4/MT5/CSV) | v1.0.0 | ✅ Done |
+| Database schema (18 tables, DDL, migrations) | v1.0.0 | ✅ Done |
+| `src/lib/schemas.ts` (Zod validation) | v1.0.0 | ✅ Done |
+| Electron main + preload + IPC | v1.0.0 | ✅ Done |
+| `electron/mql/` (EA v1.00) | v1.0.0 | ✅ Done |
+| Blotter, Trade Detail, Dashboard | v1.0.0 | ✅ Done |
+| Reviews, Calendar, Reports | v1.0.0 | ✅ Done |
+| Backup/restore, Trash, Audit log | v1.0.0 | ✅ Done |
+| Hotkey overlay, System tray, Auto-launch | v1.0.0 | ✅ Done |
+| Guided tour, Help system, Glossary | v1.0.2 | ✅ Done |
+| Auto-update (electron-updater) | v1.0.2 | ✅ Done |
+| FXLedger rebranding (T1.2) | v1.0.5 | ✅ Done |
+| Balance reconciliation (T1.5) | v1.0.5 | ✅ Done |
+| EA bridge v2.00 (balance ops) (T1.4) | v1.0.5 | ✅ Done |
+| Account metadata extended (T1.3) | v1.0.5 | ✅ Done |
+| Trade-form P0 combobox + TP (T1.7) | v1.0.6 | ✅ Done |
 
-### Completed (as of v1.0.2)
-All 18 milestones from the original build order are complete. The following items
-previously marked "remaining" are implemented and verified:
+### v1.1.0 In Development (42-day sprint, target May 30, 2026)
 
-| Item | Status |
-|---|---|
-| `src/lib/risk-calc.ts` + 14 tests | Done |
-| `src/lib/schemas.ts` (Zod, 259 lines) | Done |
-| `src/components/risk-calculator/` UI | Done |
-| `src/components/session-header/` | Done |
-| `src/components/tour/GuidedTour` | Done |
-| `src/components/help/` (Glossary, MetricTooltip, EAInstallGuide) | Done (v1.0.2) |
-| System tray + auto-launch | Done |
-| Auto-update UX (UpdateBanner, useUpdater, IPC) | Done (v1.0.2) |
-| Drizzle migrations | Done |
-| Importer test fixtures (30 tests) | Done |
-| E2E acceptance suite (18 automated + 6 manual) | Done (v1.0.2) |
+**Status:** Week 1 (T1.1–T1.7) ✅ COMPLETE. Week 2–6 (T2.1–T6.11) in pipeline.
 
-**Release gate:** Before shipping any future release, run:
+**Completion:** T1.1–T1.10 (foundation) + T2.1–T2.10 (libraries) + T3.1–T3.10 (analytics) + T4.1–T4.15 (imports/UX) + T5.1–T5.10 (portfolio) + T6.1–T6.11 (intelligence/release).
 
+**What's next:** Execute T2.1–T6.11 per [Implementation Plan](docs/superpowers/plans/2026-04-19-v1.1-implementation.md):
+- **Week 2:** Setup library CRUD, methodology tags, prop firm presets, risk enforcement, theme/accessibility
+- **Week 3:** Sharpe/Sortino/Calmar, MAE/MFE, session analytics, post-mortem mode, discipline detectors
+- **Week 4:** Multi-broker importers (cTrader/MatchTrader/IBKR), PDF reports, command palette, acceptance suite
+- **Week 5:** Multi-account portfolio, cross-account risk, advanced importers, payout tracker, scale-out planner
+- **Week 6:** Voice memos, trade search, OCR indexing, coaching prompts, security polish, global support, **SHIP v1.1.0**
+
+**Release gate:** Before v1.1.0, verify:
 ```
 npm test && npm run typecheck && npm run lint && npm run build && npm run test:e2e
+```
+Then walk through [docs/acceptance-test-playbook.md](docs/acceptance-test-playbook.md) (6 manual criteria + 5 new v1.1 criteria).
+
+### Deferred (Post-v1.1)
+- [ ] Code-signing for SmartScreen trust (planned v1.1.1)
+- [ ] macOS and Linux builds (v1.2+)
+- [ ] Third-party cloud backup integrations (v1.2+)
 ```
 
 Then walk through `docs/acceptance-test-playbook.md` for the 6 manual criteria.

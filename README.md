@@ -373,7 +373,76 @@ schema.sql         ← SQLite DDL source of truth
 
 ---
 
+## v1.1.0 Roadmap (Target: May 30, 2026)
+
+v1.1.0 is a **production-grade release** adding 121 new features (29 P0 + 92 P1 scenarios) across 6 weeks. Key highlights:
+
+### Foundation & Core (Week 1)
+- ✅ **Balance Reconciliation** — Detect and correct account equity drift from deposits, withdrawals, credits, charges, and bonuses. Persistent banner alerts users.
+- ✅ **Account Metadata** — Track broker, platform (MT4/MT5), server, leverage, timezone, login per account.
+- ✅ **EA Bridge v2** — Capture all deal types (BALANCE/CREDIT/CHARGE/CORRECTION/BONUS) with 30-day backward compatibility window.
+- ✅ **Trade-Form P0** — Symbol combobox + setup combobox + take-profit field in both quick and full forms.
+- 🔄 **Security Sweep** — Zip-slip protection, CSP tightening, permission handlers, EXIF stripping on screenshots.
+- 🔄 **News Calendar Auto-Sync** — 4-hour pull from ForexFactory feed with configuration toggle.
+
+### Libraries & Discipline (Week 2)
+- 🔄 **Setup Library CRUD** — Create/edit/version setups with performance tracking. Dropdown everywhere on the form.
+- 🔄 **Methodology Tags** — Pre-built taxonomies (SMC, ICT, Wyckoff, Elliott, Harmonic, Session Bias).
+- 🔄 **Prop Firm Presets** — FTMO, MFF, Topstep, E8, FundedNext, The5ers rule engines with daily loss breaker.
+- 🔄 **Risk Enforcement** — 1% rule, open-risk aggregation, pre-trade simulation modal.
+- 🔄 **Theme & Accessibility** — Light/dark/system toggle, reduced-motion, color-blind safe palette.
+- 🔄 **Modified Dietz Equity Curve** — Accounts for deposits/withdrawals/bonuses with visual overlay.
+
+### Analytics Depth (Week 3)
+- 🔄 **Advanced Metrics** — Sharpe, Sortino, Calmar, Recovery Factor, Expectancy variance + confidence intervals.
+- 🔄 **MAE / MFE** — Capture high/low watermarks during trade life; scatter plot widget.
+- 🔄 **Session × Day-of-Week Cross** — P&L by session × weekday, time-of-day curve, duration-vs-outcome.
+- 🔄 **Setup Edge Degradation** — Rolling 30-trade expectancy threshold with red flag alerts.
+- 🔄 **Discipline Detectors** — Revenge-trade, tilt, overtrading alerts; anxiety slider; mood check-ins.
+- 🔄 **Post-Mortem Mode** — Blown-account autopsy with root-cause analysis of drawdowns.
+
+### Imports & UX (Week 4)
+- 🔄 **Multi-Broker Importers** — cTrader, MatchTrader/DXtrade (FundedNext/E8), IBKR Flex Query CSV/XML.
+- 🔄 **PDF Reports** — Monthly trader reports (8-page layout), prop firm submission bundles.
+- 🔄 **Command Palette** — Global hotkey (Cmd-K), keyboard shortcut overlay (`?`), bulk blotter ops.
+- 🔄 **E2E Acceptance Suite** — 25 new Playwright tests covering balance reconciliation, prop rule breaches, multi-import, zip-slip.
+
+### Multi-Account & Portfolio (Week 5)
+- 🔄 **Portfolio Dashboard** — Consolidated equity curve across linked accounts with FX conversion.
+- 🔄 **Cross-Account Risk** — Detect hedges and correlated positions across accounts; per-account prop rules.
+- 🔄 **Advanced Importers** — Edgewonk, TradeZella, TraderVue migration; PDF broker statement reconciler.
+- 🔄 **Payout Tracking** — Track funded account payouts; weekend close-all enforcement; consistency rule tracker.
+- 🔄 **Scale-Out Planner** — Plan TP1/TP2/TP3 at entry; track realized vs plan.
+
+### Intelligence & Security (Week 6)
+- 🔄 **Voice Memos** — Ctrl+Alt+V records up to 60s; local Whisper.cpp transcription attached to trade.
+- 🔄 **Trade Search** — Local embeddings (Sentence-Transformers ONNX) + natural-language blotter queries.
+- 🔄 **Screenshot OCR** — Tesseract.js indexes chart text; searchable in full-text search.
+- 🔄 **End-of-Day Coaching** — Rule-based insights ("you exited 3 of 4 winners before 1R today").
+- 🔄 **Advanced Security** — Encrypted data folder (opt-in), Windows Hello unlock, screenshot redaction, cryptographic audit seal.
+- 🔄 **Global Support** — RTL layouts, CJK fonts, regional holidays, locale-aware number/date formats.
+
+**Progress:** T1.1–T1.7 complete (foundation + trade-form). T1.8–T6.11 in pipeline.  
+**Current:** v1.0.6 (v1.0.3 with T1.7 combobox enhancements).  
+**Full plan:** [docs/superpowers/plans/2026-04-19-v1.1-implementation.md](docs/superpowers/plans/2026-04-19-v1.1-implementation.md)  
+**Spec:** [docs/superpowers/specs/2026-04-18-v1.1-real-world-scenarios.md](docs/superpowers/specs/2026-04-18-v1.1-real-world-scenarios.md) (245 scenarios)
+
+---
+
 ## Changelog
+
+### v1.0.6 (2026-04-19) – T1.7: Trade-Form P0
+- **Symbol combobox** — type-ahead autocomplete backed by instruments table
+- **Setup combobox** — autocomplete from setup library
+- **TP (take-profit) field** — available in both quick and full trade forms
+- Reusable Combobox component with Radix UI Popover and keyboard navigation
+
+### v1.0.5 (2026-04-19) – T1.5: Balance Reconciliation
+- **Balance reconciliation engine** — detects drift between broker equity and computed equity from trade P&L
+- **Drift banner** — persistent warning when deviation > 0.01%
+- **Correction workflow** — one-click modal to create a CORRECTION balance operation
+- **Account metadata** — track broker, platform, server, leverage, timezone, login
+- **Expert Advisor v2.00** — emits balance operations (BALANCE/CREDIT/CHARGE/CORRECTION/BONUS)
 
 ### v1.0.0 (Initial Release)
 - Full blotter with virtualized table, filters, FTS5 search, and bulk select
