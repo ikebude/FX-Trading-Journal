@@ -256,7 +256,6 @@ export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFi
               <SelectValue placeholder="Select platform" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
               {PLATFORMS.map((p) => (
                 <SelectItem key={p} value={p}>
                   {p}
@@ -292,7 +291,6 @@ export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFi
               <SelectValue placeholder="Select timezone" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
               {filteredTimezones.map((tz) => (
                 <SelectItem key={tz} value={tz}>
                   {tz}
@@ -325,7 +323,6 @@ export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFi
               <SelectValue placeholder="Select broker type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
               {BROKER_TYPES.map((bt) => (
                 <SelectItem key={bt} value={bt}>
                   {bt.replace(/_/g, ' ')}
@@ -417,7 +414,6 @@ export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFi
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
                 {DRAWDOWN_TYPES.map((dt) => (
                   <SelectItem key={dt} value={dt}>
                     {dt}
@@ -469,7 +465,6 @@ export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFi
                 <SelectValue placeholder="Select phase" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
                 {PHASES.map((p) => (
                   <SelectItem key={p} value={p}>
                     {p}
