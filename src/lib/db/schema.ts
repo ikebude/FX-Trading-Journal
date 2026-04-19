@@ -336,7 +336,11 @@ export const balanceSnapshots = sqliteTable(
 //
 // Full ledger of non-trade cash movements. Keeps accounts reconcilable as
 // ledgers rather than bare trade-P&L sums. op_type follows MT5 DEAL_TYPE
-// plus manual-entry needs. amount is signed in account currency.
+// plus manual-entry needs.
+//
+// Sign convention for amount:
+//   Positive = credit (DEPOSIT, BONUS, INTEREST, CORRECTION+, CREDIT)
+//   Negative = debit  (WITHDRAWAL, CHARGE, COMMISSION, PAYOUT, CORRECTION-)
 // ─────────────────────────────────────────────────────────────
 
 export const balanceOperations = sqliteTable(
@@ -360,7 +364,7 @@ export const balanceOperations = sqliteTable(
         'OTHER',
       ],
     }).notNull(),
-    amount: real('amount').notNull(),
+    amount: real('amount').notNull(), // signed: negative = debit (WITHDRAWAL, CHARGE), positive = credit (DEPOSIT, BONUS)
     currency: text('currency').notNull(),
     occurredAtUtc: text('occurred_at_utc').notNull(),
     recordedAtUtc: text('recorded_at_utc').notNull(),

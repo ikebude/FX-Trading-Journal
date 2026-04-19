@@ -332,6 +332,11 @@ CREATE INDEX idx_balance_ops_account_occurred ON balance_operations(account_id, 
 CREATE INDEX idx_balance_ops_soft_delete      ON balance_operations(deleted_at_utc);
 CREATE INDEX idx_balance_ops_type             ON balance_operations(op_type);
 
+-- FK index — prevents O(n) scan on every trades hard-delete with SET NULL cascade.
+CREATE INDEX idx_balance_ops_related_trade
+  ON balance_operations(related_trade_id)
+  WHERE related_trade_id IS NOT NULL;
+
 -- ─────────────────────────────────────────────────────────────
 -- Reviews — daily and weekly guided post-market reflections.
 -- ─────────────────────────────────────────────────────────────
