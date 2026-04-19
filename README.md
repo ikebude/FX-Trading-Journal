@@ -1,6 +1,8 @@
 # FXLedger — Forex Trading Journal
 
 > A local-first, institutional-grade trading journal for Windows. No cloud, no login, no subscription, no telemetry. Your data never leaves your machine.
+>
+> **Status:** v1.0.5 — Foundation complete. 260/260 tests passing. Calendar auto-sync ready.
 
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge&logo=windows)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -48,6 +50,8 @@ Download `FXLedger-Setup-x.x.x.exe` from the Assets section of the latest releas
 5. Launch **FXLedger** from the desktop shortcut.
 
 On first launch, FXLedger runs the guided setup tour (about 30 seconds). After that, you're in the main blotter.
+
+**Latest release:** [**v1.0.5**](https://github.com/ikebude/FX-Trading-Journal/releases/tag/v1.0.5) — April 19, 2026. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ### Uninstalling
 
@@ -137,7 +141,7 @@ Go to **Reviews** to write daily or weekly trade reviews with markdown support. 
 
 ### Calendar
 
-Go to **Calendar** to see your trades alongside high-impact economic news events. Import the ForexFactory calendar CSV (downloadable from their website) and FXLedger will automatically tag trades that occurred within 15 minutes of a news event.
+Go to **Calendar** to see your trades alongside high-impact economic news events. FXLedger **automatically syncs** the ForexFactory economic calendar every 4 hours (configurable from 1–24 hours). Trades are automatically tagged with relevant news events that occurred within 15 minutes of entry/exit. You can also manually import ForexFactory CSV if preferred.
 
 ### Reports
 
