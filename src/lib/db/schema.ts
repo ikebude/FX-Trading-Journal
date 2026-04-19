@@ -45,11 +45,28 @@ export const accounts = sqliteTable(
     propProfitTargetPct: real('prop_profit_target_pct'),
     propPhase: text('prop_phase', { enum: ['PHASE_1', 'PHASE_2', 'FUNDED', 'VERIFIED'] }),
 
+    // Broker metadata (v1.1 — T1.3). All nullable for forward-compat with v1.0.x.
+    // Used for: prop-firm preset matching, server-time drift detection,
+    // MT4/MT5 account lookup from the bridge.
+    server: text('server'),
+    platform: text('platform', {
+      enum: ['MT4', 'MT5', 'cTrader', 'MatchTrader', 'DXtrade', 'IBKR', 'OANDA', 'CRYPTO', 'OTHER'],
+    }),
+    leverage: integer('leverage'),
+    timezone: text('timezone'),
+    login: text('login'),
+    brokerType: text('broker_type', {
+      enum: ['RETAIL', 'PROP', 'ECN', 'MARKET_MAKER', 'CRYPTO_EXCHANGE'],
+    }),
+
     createdAtUtc: text('created_at_utc').notNull(),
     updatedAtUtc: text('updated_at_utc').notNull(),
   },
   (t) => ({
     activeIdx: index('idx_accounts_active').on(t.isActive),
+    // Partial unique on (platform, server, login) enforced via raw SQL in
+    // the migration — drizzle's uniqueIndex builder cannot emit a WHERE clause.
+    // See migration: idx_accounts_login.
   }),
 );
 
@@ -315,6 +332,75 @@ export const balanceSnapshots = sqliteTable(
 );
 
 // ─────────────────────────────────────────────────────────────
+// Balance operations (v1.1 — T1.3)
+//
+// Full ledger of non-trade cash movements. Keeps accounts reconcilable as
+// ledgers rather than bare trade-P&L sums. op_type follows MT5 DEAL_TYPE
+// plus manual-entry needs. amount is signed in account currency.
+// ─────────────────────────────────────────────────────────────
+
+export const balanceOperations = sqliteTable(
+  'balance_operations',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    opType: text('op_type', {
+      enum: [
+        'DEPOSIT',
+        'WITHDRAWAL',
+        'BONUS',
+        'CREDIT',
+        'CHARGE',
+        'CORRECTION',
+        'COMMISSION',
+        'INTEREST',
+        'PAYOUT',
+        'OTHER',
+      ],
+    }).notNull(),
+    amount: real('amount').notNull(),
+    currency: text('currency').notNull(),
+    occurredAtUtc: text('occurred_at_utc').notNull(),
+    recordedAtUtc: text('recorded_at_utc').notNull(),
+    source: text('source', {
+      enum: [
+        'MANUAL',
+        'BRIDGE',
+        'IMPORT',
+        'MT4_HTML',
+        'MT5_HTML',
+        'CSV',
+        'BROKER_PDF',
+        'RECONCILIATION',
+      ],
+    }).notNull(),
+    externalId: text('external_id'),
+    externalTicket: text('external_ticket'),
+    relatedTradeId: text('related_trade_id').references(() => trades.id, {
+      onDelete: 'set null',
+    }),
+    note: text('note'),
+    tags: text('tags'),
+    deletedAtUtc: text('deleted_at_utc'),
+    createdAtUtc: text('created_at_utc').notNull(),
+    updatedAtUtc: text('updated_at_utc').notNull(),
+  },
+  (t) => ({
+    accountOccurredIdx: index('idx_balance_ops_account_occurred').on(
+      t.accountId,
+      t.occurredAtUtc,
+    ),
+    softDeleteIdx: index('idx_balance_ops_soft_delete').on(t.deletedAtUtc),
+    typeIdx: index('idx_balance_ops_type').on(t.opType),
+    // Partial unique on (account_id, source, external_id) is enforced via raw
+    // SQL in the migration — drizzle's uniqueIndex builder cannot emit WHERE.
+    // See migration: idx_balance_ops_external.
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────
 // Reviews
 // ─────────────────────────────────────────────────────────────
 
@@ -410,12 +496,25 @@ export const auditLog = sqliteTable(
         'TRADE_TAGS',
         'REVIEW',
         'ACCOUNT',
+        'BALANCE_OP',
       ],
     }).notNull(),
     entityId: text('entity_id').notNull(),
     tradeId: text('trade_id').references(() => trades.id, { onDelete: 'set null' }),
     action: text('action', {
-      enum: ['CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'MERGE', 'BULK_UPDATE', 'HARD_DELETE'],
+      enum: [
+        'CREATE',
+        'UPDATE',
+        'DELETE',
+        'RESTORE',
+        'MERGE',
+        'BULK_UPDATE',
+        'HARD_DELETE',
+        'BALANCE_OP_CREATE',
+        'BALANCE_OP_UPDATE',
+        'BALANCE_OP_DELETE',
+        'BALANCE_OP_RESTORE',
+      ],
     }).notNull(),
     changedFields: text('changed_fields'),
     actor: text('actor').notNull().default('user'),
@@ -499,3 +598,5 @@ export type Review = typeof reviews.$inferSelect;
 export type NewsEvent = typeof newsEvents.$inferSelect;
 export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type ImportRun = typeof importRuns.$inferSelect;
+export type BalanceOperation = typeof balanceOperations.$inferSelect;
+export type NewBalanceOperation = typeof balanceOperations.$inferInsert;
