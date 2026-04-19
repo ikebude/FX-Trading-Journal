@@ -29,6 +29,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.6] — 2026-04-19
+
+### Added
+- **Trade-form P0 (T1.7).** Symbol combobox with type-ahead autocomplete backed by instruments table. Setup combobox with autocomplete from setups table. TP (take-profit) field for trade planning in both Mode A (FullForm) and Mode B (QuickForm). Reusable Combobox component with filtering and keyboard navigation via Radix UI Popover. Scenarios: S126 (symbol selection), S127 (setup selection), S128 (TP field).
+
+### Technical
+- **Tests:** 232/232 passing (9 suites).
+- **TypeScript:** Clean, no errors.
+- **Combobox component:** Type-ahead search with filtering, used in symbol selection and setup autocomplete.
+
+---
+
 ## [Unreleased] — roadmap for v1.1+
 
 ### Planned (T1.6–T1.10)
