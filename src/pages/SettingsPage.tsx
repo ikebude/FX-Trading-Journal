@@ -24,11 +24,17 @@ import {
   Archive,
   Info,
   Settings2,
+  Plus,
+  Pencil,
+  Trash,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import type { Account } from '@/lib/db/schema';
 import { UpdateCheckButton } from '@/components/layout/UpdateBanner';
+import { CreateAccountDialog } from '@/components/account-form/CreateAccountDialog';
+import { EditAccountDialog } from '@/components/account-form/EditAccountDialog';
+import { DeleteAccountDialog } from '@/components/account-form/DeleteAccountDialog';
 
 // ─────────────────────────────────────────────────────────────
 // Section wrapper
@@ -445,6 +451,11 @@ function AccountsSection() {
     queryFn: () => window.ledger.accounts.list(),
   });
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+
   const typeBadge: Record<string, string> = {
     LIVE: 'bg-emerald-950 text-emerald-400',
     DEMO: 'bg-sky-950 text-sky-400',
@@ -452,39 +463,87 @@ function AccountsSection() {
   };
 
   return (
-    <Section title="Accounts" icon={Shield}>
-      <div className="flex flex-col gap-2">
-        {(accounts ?? []).map((acc) => (
-          <div
-            key={acc.id}
-            className="flex items-center gap-3 rounded-lg border border-border px-3 py-2"
-          >
-            <span
-              className="h-3 w-3 rounded-full"
-              style={{ background: acc.displayColor }}
-            />
-            <span className="flex-1 text-xs font-medium text-foreground">{acc.name}</span>
-            {acc.broker && (
-              <span className="text-[10px] text-muted-foreground">{acc.broker}</span>
+    <>
+      <Section title="Accounts" icon={Shield}>
+        <div className="flex flex-col gap-3">
+          {/* Account list */}
+          <div className="flex flex-col gap-2">
+            {(accounts ?? []).map((acc) => (
+              <div
+                key={acc.id}
+                className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 hover:bg-accent/30 transition-colors"
+              >
+                <span
+                  className="h-3 w-3 rounded-full flex-shrink-0"
+                  style={{ background: acc.displayColor }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-foreground truncate">{acc.name}</div>
+                  {acc.broker && (
+                    <div className="text-[10px] text-muted-foreground">{acc.broker}</div>
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase flex-shrink-0',
+                    typeBadge[acc.accountType] ?? 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {acc.accountType}
+                </span>
+                <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                  ${acc.initialBalance.toLocaleString()}
+                </span>
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      setSelectedAccount(acc);
+                      setEditOpen(true);
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 hover:text-destructive"
+                    onClick={() => {
+                      setSelectedAccount(acc);
+                      setDeleteOpen(true);
+                    }}
+                  >
+                    <Trash className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {(!accounts || accounts.length === 0) && (
+              <p className="text-xs text-muted-foreground">No accounts yet.</p>
             )}
-            <span
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase',
-                typeBadge[acc.accountType] ?? 'bg-muted text-muted-foreground',
-              )}
-            >
-              {acc.accountType}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              ${acc.initialBalance.toLocaleString()}
-            </span>
           </div>
-        ))}
-        {(!accounts || accounts.length === 0) && (
-          <p className="text-xs text-muted-foreground">No accounts. Add one via the top bar.</p>
-        )}
-      </div>
-    </Section>
+
+          {/* Create button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add Account
+          </Button>
+        </div>
+      </Section>
+
+      {/* Dialogs */}
+      <CreateAccountDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <EditAccountDialog account={selectedAccount} open={editOpen} onOpenChange={setEditOpen} />
+      <DeleteAccountDialog account={selectedAccount} open={deleteOpen} onOpenChange={setDeleteOpen} />
+    </>
   );
 }
 

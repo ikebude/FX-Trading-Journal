@@ -44,6 +44,18 @@ export const CreateAccountSchema = z.object({
   propProfitTarget: nonNegativeReal.optional(),
   propProfitTargetPct: z.number().min(0).max(100).optional(),
   propPhase: z.enum(['PHASE_1', 'PHASE_2', 'FUNDED', 'VERIFIED']).optional(),
+
+  // Broker metadata (v1.1 — T1.3) — all optional for flexibility
+  server: z.string().max(100).optional(),
+  platform: z
+    .enum(['MT4', 'MT5', 'cTrader', 'MatchTrader', 'DXtrade', 'IBKR', 'OANDA', 'CRYPTO', 'OTHER'])
+    .optional(),
+  leverage: z.number().int().positive('Leverage must be positive').optional(),
+  timezone: z.string().max(100).optional(),
+  login: z.string().max(100).optional(),
+  brokerType: z
+    .enum(['RETAIL', 'PROP', 'ECN', 'MARKET_MAKER', 'CRYPTO_EXCHANGE'])
+    .optional(),
 });
 
 export const UpdateAccountSchema = CreateAccountSchema.partial();
