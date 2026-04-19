@@ -27,9 +27,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { cn } from '@/lib/cn';
 import { CreateTradeSchema, QuickTradeSchema } from '@/lib/schemas';
-import type { Account, Instrument, Trade } from '@/lib/db/schema';
+import type { Account, Instrument, Trade, Setup } from '@/lib/db/schema';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -127,11 +128,13 @@ function ConfidenceStars({
 function QuickForm({
   accounts,
   instruments,
+  setups,
   onSuccess,
   onCancel,
 }: {
   accounts: Account[];
   instruments: Instrument[];
+  setups: Setup[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }) {
@@ -210,11 +213,11 @@ function QuickForm({
       {/* Symbol + Direction */}
       <div className="grid grid-cols-2 gap-2">
         <Field label="Symbol" error={errors.symbol?.message}>
-          <Input
-            {...register('symbol')}
+          <Combobox
+            options={instruments.map((i) => ({ value: i.symbol, label: i.symbol }))}
+            value={watch('symbol') || ''}
+            onValueChange={(v) => setValue('symbol', v)}
             placeholder="EURUSD"
-            className="uppercase"
-            autoComplete="off"
           />
         </Field>
         <Field label="Direction">
@@ -260,20 +263,36 @@ function QuickForm({
         </Field>
       </div>
 
-      {/* Stop loss */}
-      <Field label="Stop Loss (optional)">
-        <Input
-          {...register('initialStopPrice', { valueAsNumber: true })}
-          type="number"
-          step="any"
-          placeholder="1.08200"
-        />
-      </Field>
+      {/* Stop loss + TP */}
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Stop Loss (optional)">
+          <Input
+            {...register('initialStopPrice', { valueAsNumber: true })}
+            type="number"
+            step="any"
+            placeholder="1.08200"
+          />
+        </Field>
+        <Field label="TP (optional)">
+          <Input
+            {...register('initialTargetPrice', { valueAsNumber: true })}
+            type="number"
+            step="any"
+            placeholder="1.09000"
+          />
+        </Field>
+      </div>
 
       {/* Setup + Confidence */}
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Setup">
-          <Input {...register('setupName')} placeholder="e.g. BOS retest" />
+        <Field label="Setup" error={errors.setupName?.message}>
+          <Combobox
+            options={setups.map((s) => ({ value: s.name, label: s.name }))}
+            value={watch('setupName') || ''}
+            onValueChange={(v) => setValue('setupName', v)}
+            placeholder="e.g. BOS retest"
+            emptyText="No setups. Type to create."
+          />
         </Field>
         <Field label="Confidence">
           <ConfidenceStars
@@ -306,12 +325,14 @@ function QuickForm({
 function FullForm({
   accounts,
   instruments,
+  setups,
   existingTrade,
   onSuccess,
   onCancel,
 }: {
   accounts: Account[];
   instruments: Instrument[];
+  setups: Setup[];
   existingTrade?: Trade;
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -443,11 +464,11 @@ function FullForm({
           {/* Symbol + Direction */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Symbol *" error={errors.symbol?.message}>
-              <Input
-                {...register('symbol')}
+              <Combobox
+                options={instruments.map((i) => ({ value: i.symbol, label: i.symbol }))}
+                value={watch('symbol') || ''}
+                onValueChange={(v) => setValue('symbol', v.toUpperCase())}
                 placeholder="EURUSD"
-                className="uppercase"
-                autoComplete="off"
               />
             </Field>
             <Field label="Direction *" error={errors.direction?.message}>
@@ -517,8 +538,14 @@ function FullForm({
           )}
 
           {/* Setup */}
-          <Field label="Setup name">
-            <Input {...register('setupName')} placeholder="e.g. BOS + retest" />
+          <Field label="Setup name" error={errors.setupName?.message}>
+            <Combobox
+              options={setups.map((s) => ({ value: s.name, label: s.name }))}
+              value={watch('setupName') || ''}
+              onValueChange={(v) => setValue('setupName', v)}
+              placeholder="e.g. BOS + retest"
+              emptyText="No setups. Type to create."
+            />
           </Field>
 
           {/* Confidence */}
@@ -696,11 +723,17 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel }:
     queryFn: () => window.ledger.instruments.list(),
   });
 
+  const { data: setups = [] } = useQuery<Setup[]>({
+    queryKey: ['setups'],
+    queryFn: () => window.ledger.setups.list(),
+  });
+
   if (mode === 'quick') {
     return (
       <QuickForm
         accounts={accounts}
         instruments={instruments}
+        setups={setups}
         onSuccess={onSuccess}
         onCancel={onCancel}
       />
@@ -711,6 +744,7 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel }:
     <FullForm
       accounts={accounts}
       instruments={instruments}
+      setups={setups}
       existingTrade={existingTrade}
       onSuccess={onSuccess}
       onCancel={onCancel}
