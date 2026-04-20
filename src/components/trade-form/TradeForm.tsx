@@ -147,6 +147,7 @@ function QuickForm({
   const [error, setError] = useState<string | null>(null);
   const pendingLotSize = useAppStore((s) => s.pendingLotSize);
   const setPendingLotSize = useAppStore((s) => s.setPendingLotSize);
+  const activeAccountId = useAppStore((s) => s.activeAccountId);
 
   const {
     register,
@@ -159,6 +160,7 @@ function QuickForm({
     defaultValues: {
       direction: 'LONG',
       ...(pendingLotSize != null ? { volumeLots: pendingLotSize } : {}),
+      ...(activeAccountId ? { accountId: activeAccountId } : {}),
     },
   });
 
@@ -205,7 +207,7 @@ function QuickForm({
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3 p-4">
       {/* Account */}
       <Field label="Account" error={errors.accountId?.message}>
-        <Select onValueChange={(v) => setValue('accountId', v)}>
+        <Select defaultValue={activeAccountId ?? undefined} onValueChange={(v) => setValue('accountId', v)}>
           <SelectTrigger>
             <SelectValue placeholder="Select account…" />
           </SelectTrigger>
@@ -375,6 +377,7 @@ function FullForm({
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeAccountId = useAppStore((s) => s.activeAccountId);
 
   const isEdit = !!existingTrade;
 
@@ -408,11 +411,12 @@ function FullForm({
           // Pre-populate entryLeg so individual field changes don't wipe sibling values
           entryLeg: {
             timestampUtc: new Date().toISOString(),
-            price: 0,
+            price: undefined,
             volumeLots: 0,
             commission: 0,
             swap: 0,
           },
+          ...(activeAccountId ? { accountId: activeAccountId } : {}),
         },
   });
 
@@ -485,7 +489,7 @@ function FullForm({
           {/* Account (hidden in edit mode) */}
           {!isEdit && (
             <Field label="Account *" error={errors.accountId?.message}>
-              <Select onValueChange={(v) => setValue('accountId', v)}>
+              <Select defaultValue={activeAccountId ?? undefined} onValueChange={(v) => setValue('accountId', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select account…" />
                 </SelectTrigger>
@@ -557,9 +561,16 @@ function FullForm({
                     type="number"
                     step="any"
                     placeholder="1.08500"
-                    onChange={(e) =>
-                      setValue('entryLeg', { ...entryLeg, price: parseFloat(e.target.value) || 0 })
-                    }
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const parsed = raw === '' ? undefined : parseFloat(raw);
+                      setValue('entryLeg', {
+                        ...entryLeg,
+                        // Leave price undefined when empty or invalid so zod shows a
+                        // clean "required" error instead of "Expected number, received nan".
+                        price: parsed === undefined || Number.isNaN(parsed) ? (undefined as unknown as number) : parsed,
+                      });
+                    }}
                   />
                 </Field>
                 <Field label="Volume (lots)" error={errors.entryLeg?.volumeLots?.message}>

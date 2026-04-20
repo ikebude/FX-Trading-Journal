@@ -278,12 +278,28 @@ function BridgeSection() {
         description="MQL5/Files/Ledger/ folder inside your MT4/5 data directory"
       >
         <div className="flex flex-col items-end gap-1.5">
-          <input
-            value={watchDir}
-            onChange={(e) => setWatchDir(e.target.value)}
-            placeholder="C:\Users\...\MQL5\Files\Ledger"
-            className="w-72 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+          <div className="flex gap-2">
+            <input
+              value={watchDir}
+              onChange={(e) => setWatchDir(e.target.value)}
+              placeholder="C:\Users\...\MQL5\Files\Ledger"
+              className="w-72 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              onClick={async () => {
+                const folder = await window.ledger.file.pickFolder();
+                if (folder) {
+                  setWatchDir(folder);
+                }
+              }}
+              title="Browse for folder"
+            >
+              📁
+            </Button>
+          </div>
           <Button
             size="sm"
             variant="outline"

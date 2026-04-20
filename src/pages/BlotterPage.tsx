@@ -26,14 +26,21 @@ const DEFAULT_FILTERS: Partial<TradeFilters> = {
 
 export function BlotterPage() {
   const qc = useQueryClient();
-  const { activeAccountId, filterPanelOpen, toggleFilterPanel } = useAppStore();
-  const [filters, setFilters] = useState<Partial<TradeFilters>>(DEFAULT_FILTERS);
+  const { activeAccountId, filterPanelOpen, toggleFilterPanel, blotterFilters, setBlotterFilters } = useAppStore();
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const PAGE_SIZE = 100;
+
+  // Use persisted filters, fallback to defaults
+  const filters = { ...DEFAULT_FILTERS, ...blotterFilters };
+
+  // Update filters in store
+  const updateFilters = (newFilters: Partial<TradeFilters>) => {
+    setBlotterFilters({ ...blotterFilters, ...newFilters });
+  };
 
   // Debounce search input by 300 ms
   useEffect(() => {
@@ -86,12 +93,12 @@ export function BlotterPage() {
   });
 
   function handleFilterChange(patch: Partial<TradeFilters>) {
-    setFilters((prev) => ({ ...prev, ...patch }));
+    updateFilters({ ...filters, ...patch });
     setPage(1);
   }
 
   function handleFilterReset() {
-    setFilters(DEFAULT_FILTERS);
+    updateFilters(DEFAULT_FILTERS);
     setPage(1);
   }
 

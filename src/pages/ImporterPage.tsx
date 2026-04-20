@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import {
   FileUp,
   CheckCircle2,
@@ -21,6 +22,9 @@ import {
   Copy,
   XCircle,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  History,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -44,7 +48,7 @@ import type { ReconcileAction, ReconcileCandidate, ReconcileChoice } from '@/lib
 type Step = 'drop' | 'preview' | 'commit' | 'done';
 
 interface ParsePreview {
-  id: string;
+  id: string | null;
   format: string;
   trades: Array<{
     externalPositionId: string;
@@ -57,6 +61,7 @@ interface ParsePreview {
   rowsTotal: number;
   candidates: ReconcileCandidate[];
   accountId: string | null;
+  error?: string;
 }
 
 interface CommitResult {
@@ -82,10 +87,16 @@ function DropZone({
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
 
   const { data: accounts = [], isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => window.ledger.accounts.list(),
+  });
+
+  const { data: importHistory = [] } = useQuery({
+    queryKey: ['import-history'],
+    queryFn: () => window.ledger.imports.history(),
   });
 
   const activeAccount = accounts.find((a) => a.id === selectedAccountId);
@@ -230,6 +241,46 @@ function DropZone({
         <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
+        </div>
+      )}
+
+      {/* Import History */}
+      {importHistory.length > 0 && (
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => setHistoryExpanded(!historyExpanded)}
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <History className="h-4 w-4" />
+            Import History ({importHistory.length})
+            {historyExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {historyExpanded && (
+            <div className="mt-3 space-y-2">
+              {importHistory.slice(0, 5).map((run: any) => (
+                <div key={run.id} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{run.filename}</span>
+                    <span className="text-muted-foreground">
+                      {new Date(run.createdAtUtc).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+                    <span>{run.imported} imported</span>
+                    <span>{run.merged} merged</span>
+                    <span>{run.duplicate} duplicate</span>
+                    <span>{run.failed} failed</span>
+                  </div>
+                </div>
+              ))}
+              {importHistory.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Showing latest 5 imports
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -697,6 +748,8 @@ function CommitStep({
 // ─────────────────────────────────────────────────────────────
 
 function DoneStep({ result, onReset }: { result: CommitResult; onReset: () => void }) {
+  const navigate = useNavigate();
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
       <CheckCircle2 className="h-16 w-16 text-emerald-400" />
@@ -717,7 +770,14 @@ function DoneStep({ result, onReset }: { result: CommitResult; onReset: () => vo
           </div>
         ))}
       </div>
-      <Button onClick={onReset}>Import another file</Button>
+      <div className="flex gap-3">
+        <Button variant="outline" onClick={onReset}>
+          Import another file
+        </Button>
+        <Button onClick={() => navigate({ to: '/' })}>
+          View Imported Trades
+        </Button>
+      </div>
     </div>
   );
 }
@@ -755,11 +815,32 @@ export function ImporterPage() {
         throw new Error('Please select an account before importing.');
       }
       const data = await window.ledger.imports.parseFile(path, importTargetAccountId);
+      
+      // Check for IPC-level parse errors
+      if (data.error) {
+        setParseError(`Parse error: ${data.error}`);
+        return;
+      }
+      
       if (!data.id) {
         setParseError('Could not detect format. Make sure this is an MT4/MT5 HTML or CSV file.');
         return;
       }
+      
       const p = data as ParsePreview;
+      
+      // Check if parse succeeded but returned zero trades
+      if (p.trades.length === 0 && p.rowsTotal === 0 && p.failed.length === 0) {
+        setParseError('No trades found in file. The file might be empty or in an unsupported format.');
+        return;
+      }
+      
+      // If rowsTotal is 0 but format detected, warn the user
+      if (p.rowsTotal === 0 && p.format !== 'UNKNOWN') {
+        setParseError(`Format detected as ${p.format}, but no valid data rows found. The file might be corrupted or in wrong format.`);
+        return;
+      }
+      
       setPreview(p);
       if (p.accountId && p.accountId !== importTargetAccountId) {
         setImportTargetAccountId(p.accountId);

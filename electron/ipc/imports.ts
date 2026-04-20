@@ -317,13 +317,23 @@ export function registerImportHandlers(ctx: IpcContext): void {
 
   ipcMain.handle('imports:parse-file', async (_e, filePath: string, accountId?: string) => {
     try {
-      if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
+      log.info(`[Import] parse-file handler: filePath="${filePath}", accountId="${accountId}"`);
+      
+      if (!existsSync(filePath)) {
+        log.error(`[Import] File not found: ${filePath}`);
+        throw new Error(`File not found: ${filePath}`);
+      }
 
       const content = readFileSync(filePath, 'utf-8');
+      log.info(`[Import] File read successfully: ${content.length} bytes`);
+      
       const filename = basename(filePath);
       const { format, result } = detectAndParse(content, filename);
+      
+      log.info(`[Import] Format detected: "${format}", trades: ${result.trades.length}, failed: ${result.failed.length}, rowsTotal: ${result.rowsTotal}`);
 
       if (format === 'UNKNOWN') {
+        log.warn(`[Import] Format detection failed for file "${filename}"`);
         return { id: null, format, trades: [], failed: [], rowsTotal: 0, candidates: [], accountId: null };
       }
 
@@ -333,6 +343,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
       const storedFilename = `${Date.now()}_${filename}`;
       const storedPath = join(importsDir, storedFilename);
       copyFileSync(filePath, storedPath);
+      log.info(`[Import] File copied to "${storedPath}"`);
 
       const accounts = await listAccounts();
       const defaultAccountId = accounts[0]?.id ?? '';
@@ -345,10 +356,13 @@ export function registerImportHandlers(ctx: IpcContext): void {
           })()
         : defaultAccountId;
 
+      log.info(`[Import] Using account: "${selectedAccountId}"`);
+
       // Find reconcile candidates for each parsed trade using the selected account.
       const allCandidates: ReconcileCandidate[] = [];
       for (const parsedTrade of result.trades) {
         const cs = await findReconcileCandidates(parsedTrade, selectedAccountId);
+        log.debug(`[Import] Trade "${parsedTrade.symbol}" ${parsedTrade.direction}: found ${cs.length} merge candidates`);
         allCandidates.push(...cs);
       }
 
@@ -365,6 +379,8 @@ export function registerImportHandlers(ctx: IpcContext): void {
         expiresAt: Date.now() + 30 * 60 * 1000,
       });
 
+      log.info(`[Import] Parse result stored: id="${parseResultId}", trades=${result.trades.length}, candidates=${allCandidates.length}`);
+
       return {
         id: parseResultId,
         format,
@@ -375,8 +391,8 @@ export function registerImportHandlers(ctx: IpcContext): void {
         accountId: selectedAccountId,
       };
     } catch (err) {
-      log.error('imports:parse-file', err);
-      throw err;
+      log.error('[Import] parse-file failed:', err);
+      return { id: null, format: 'UNKNOWN', trades: [], failed: [], rowsTotal: 0, candidates: [], accountId: null, error: (err as Error).message };
     }
   });
 
@@ -393,7 +409,12 @@ export function registerImportHandlers(ctx: IpcContext): void {
     ) => {
       try {
         const pending = pendingParses.get(parseResultId);
-        if (!pending) throw new Error('Parse result not found or expired. Re-parse the file.');
+        if (!pending) {
+          log.error(`[Import] Parse result not found or expired: id="${parseResultId}"`);
+          throw new Error('Parse result not found or expired. Re-parse the file.');
+        }
+
+        log.info(`[Import] Committing parse result: id="${parseResultId}", format="${pending.format}", trades=${pending.trades.length}`);
 
         const { accountId } = choices;
         const skipSet = new Set(choices.skipIds ?? []);
@@ -419,9 +440,12 @@ export function registerImportHandlers(ctx: IpcContext): void {
               ? ('MT5_HTML' as const)
               : ('CSV' as const);
 
+        log.debug(`[Import] Processing ${pending.trades.length} trades, skipping ${skipSet.size}, with ${reconcileMap.size} reconcile choices`);
+
         for (const parsedTrade of pending.trades) {
           // Explicitly skipped by user
           if (skipSet.has(parsedTrade.externalPositionId)) {
+            log.debug(`[Import] Trade "${parsedTrade.symbol}" skipped by user`);
             duplicate++;
             continue;
           }
@@ -430,6 +454,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
           const reconcileChoice = reconcileMap.get(parsedTrade.externalPositionId);
           if (reconcileChoice) {
             if (reconcileChoice.action === 'skip_import') {
+              log.debug(`[Import] Trade "${parsedTrade.symbol}" reconciled as skip`);
               duplicate++;
               continue;
             }

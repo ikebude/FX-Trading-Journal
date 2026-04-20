@@ -230,6 +230,8 @@ const api = {
   file: {
     pickFile: (filters?: Array<{ name: string; extensions: string[] }>) =>
       ipcRenderer.invoke('file:pick', filters) as Promise<string | null>,
+    pickFolder: () =>
+      ipcRenderer.invoke('file:pick-folder') as Promise<string | null>,
   },
 };
 

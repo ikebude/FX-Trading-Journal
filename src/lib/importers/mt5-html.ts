@@ -58,7 +58,9 @@ export function parseMt5Html(html: string): ParseResult {
   const tables = $('table').toArray();
 
   // Score each table by header match quality and pick the best.
+  // Track all candidates for fallback in case none meet strict threshold.
   let best: { table: Element; headers: string[]; score: number; headerRowIdx: number } | null = null;
+  let fallback: { table: Element; headers: string[]; score: number; headerRowIdx: number } | null = null;
 
   for (const table of tables) {
     const rows = $(table).find('tr').toArray();
@@ -69,18 +71,29 @@ export function parseMt5Html(html: string): ParseResult {
         .map((c) => $(c).text().trim());
       if (cells.length < 5) continue;
       const score = scoreHeaderMatch(cells);
-      if (score >= 5 && (!best || score > best.score)) {
+      
+      // Store best match (require score >= 3 for lenient header matching)
+      if (score >= 3 && (!best || score > best.score)) {
         best = { table, headers: cells, score, headerRowIdx: r };
+      }
+      
+      // Keep fallback for worst case
+      if (!fallback || score > fallback.score) {
+        fallback = { table, headers: cells, score, headerRowIdx: r };
       }
     }
   }
 
-  if (!best) {
+  // Use best match if found, otherwise use fallback
+  const selected = best ?? fallback;
+  
+  if (!selected) {
+    console.warn('[MT5 Parser] No table with valid headers found in HTML. Total tables:', tables.length);
     return { trades: [], failed: [], rowsTotal: 0 };
   }
 
-  const colMap = matchHeaders(best.headers);
-  const dataRows = $(best.table).find('tr').toArray().slice(best.headerRowIdx + 1);
+  const colMap = matchHeaders(selected.headers);
+  const dataRows = $(selected.table).find('tr').toArray().slice(selected.headerRowIdx + 1);
 
   const failed: ParseResult['failed'] = [];
   const deals: RawDeal[] = [];

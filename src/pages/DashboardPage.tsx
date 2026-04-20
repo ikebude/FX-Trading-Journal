@@ -20,7 +20,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
 import {
   AreaChart,
   Area,
@@ -119,8 +120,11 @@ function WidgetCard({
 
 function EmptyWidget({ message = 'No data yet' }: { message?: string }) {
   return (
-    <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-      {message}
+    <div className="flex h-32 flex-col items-center justify-center gap-2 text-center">
+      <p className="text-xs text-muted-foreground">{message}</p>
+      <p className="text-xs text-muted-foreground/60">
+        Import trades or add manual entries to see analytics.
+      </p>
     </div>
   );
 }
@@ -731,6 +735,7 @@ type Preset = DashboardPreset;
 // ─────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
+  const queryClient = useQueryClient();
   const { activeAccountId, displayTimezone } = useAppStore();
   const [preset, setPreset] = useState<Preset>('30d');
 
@@ -767,8 +772,15 @@ export function DashboardPage() {
 
   if (error || !data) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-rose-400">
-        Failed to load dashboard data.
+      <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+        <div className="text-sm text-rose-400">Failed to load dashboard data.</div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => queryClient.invalidateQueries({ queryKey: ['dashboard:stats'] })}
+        >
+          Retry
+        </Button>
       </div>
     );
   }

@@ -29,6 +29,10 @@ interface AppState {
   filterPanelOpen: boolean;
   toggleFilterPanel: () => void;
 
+  // Blotter filters — persisted across navigation.
+  blotterFilters: Record<string, unknown>;
+  setBlotterFilters: (filters: Record<string, unknown>) => void;
+
   // Trade detail drawer — id of the trade currently shown, or null.
   detailTradeId: string | null;
   setDetailTradeId: (id: string | null) => void;
@@ -62,6 +66,9 @@ export const useAppStore = create<AppState>()(
       filterPanelOpen: false,
       toggleFilterPanel: () => set((s) => ({ filterPanelOpen: !s.filterPanelOpen })),
 
+      blotterFilters: {},
+      setBlotterFilters: (filters) => set({ blotterFilters: filters }),
+
       detailTradeId: null,
       setDetailTradeId: (id) => set({ detailTradeId: id }),
 
@@ -81,6 +88,7 @@ export const useAppStore = create<AppState>()(
         displayTimezone: s.displayTimezone,
         theme: s.theme,
         filterPanelOpen: s.filterPanelOpen,
+        blotterFilters: s.blotterFilters,
       }),
     },
   ),

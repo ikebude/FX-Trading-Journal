@@ -26,7 +26,7 @@ export function TrashPage() {
     queryKey: ['trades-trash', activeAccountId],
     queryFn: () =>
       window.ledger.trades.list({
-        accountId: activeAccountId,
+        accountId: activeAccountId, // null means all accounts
         includeDeleted: true,
         deletedOnly: true,
         includeSample: false,
@@ -34,7 +34,7 @@ export function TrashPage() {
         sortBy: 'opened_at_utc',
         sortDir: 'desc',
       }),
-    enabled: !!activeAccountId,
+    enabled: true, // Always enabled - can show deleted trades from all accounts
   });
 
   const rows = data?.rows ?? [];

@@ -33,6 +33,7 @@ import {
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 import { useAppStore } from '@/stores/app-store';
 import { cn } from '@/lib/cn';
 import { formatCurrency, formatPips, pnlClass } from '@/lib/format';
@@ -297,6 +298,7 @@ function Field({
 
 export function ReviewsPage() {
   const { activeAccountId } = useAppStore();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [kind, setKind] = useState<ReviewKind>('DAILY');
@@ -348,6 +350,10 @@ export function ReviewsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews', kind, activeAccountId] });
       setDirty(false);
+      toast('Review saved', {
+        description: `${kind === 'DAILY' ? 'Daily' : 'Weekly'} review saved successfully.`,
+        variant: 'success',
+      });
     },
   });
 
