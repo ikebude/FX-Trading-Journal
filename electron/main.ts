@@ -433,6 +433,15 @@ app.whenReady().then(async () => {
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
 
+  // Folder picker handler — returns full folder path for bridge watch directory
+  ipcMain.handle('file:pick-folder', async (_e) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory'],
+      title: 'Select MT4/5 MQL Files/Ledger Folder',
+    });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+
   registerIpcHandlers({
     config,
     saveConfig: (next: AppConfig) => {

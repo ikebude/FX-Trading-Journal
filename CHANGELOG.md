@@ -6,6 +6,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.7] — 2026-04-20 — Critical Bug Fixes & UX Improvements
+
+### Fixed
+- **Account Pre-selection Bug** — TradeForm now correctly pre-selects active account in both manual entry and hotkey overlay modes, preventing "no account selected" errors.
+- **Trash Page Disabled** — Trash page now works for all accounts instead of requiring an active account selection, allowing users to restore deleted trades from any account.
+- **Stale Trade Detail Drawer** — Fixed drawer remaining open after soft-deleting a trade, now properly closes and clears selection state.
+- **Missing Folder Picker** — Added folder picker UI in Settings for bridge watch directory configuration, with proper IPC integration.
+- **Invalid Default Values** — Fixed TradeForm defaulting entry price to 0 instead of undefined, preventing invalid trade submissions.
+- **Entry Price NaN Regression** — Clearing the Entry Price field no longer writes `NaN` into form state; it is now left `undefined` so the standard "required" validation message is shown instead of the confusing "Expected number, received nan".
+- **Import History Missing** — Added expandable import history panel to importer page showing previous imports with timestamps and success counts.
+- **Post-Import Navigation** — Import completion now offers "View Imported Trades" button for seamless workflow continuation.
+- **Dashboard Error Recovery** — Added retry buttons to dashboard widgets when data loading fails, with proper error state handling.
+- **Filter State Reset** — Blotter filters now persist across navigation and page refreshes, maintaining user filter preferences.
+- **Success Feedback Missing** — Added success toast notifications for review saves and other user actions requiring confirmation.
+- **Poor Empty States** — Enhanced empty state messages across dashboard, blotter, and other pages with helpful guidance text.
+
+### Technical
+- **IPC Bridge Enhancement** — Added `file:pick-folder` IPC handler for native folder selection dialogs.
+- **State Persistence** — Extended Zustand store with blotterFilters persistence across app sessions.
+- **Toast System Integration** — Connected success/error feedback to existing toast notification system.
+- **Type Safety** — All TypeScript compilation errors resolved (0 errors).
+- **Test Coverage** — All 270 unit tests passing, production build succeeds.
+
+---
+
 ## [1.0.6] — 2026-04-19 — TradeForm Consistency Fix
 
 ### Fixed

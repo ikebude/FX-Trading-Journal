@@ -51,6 +51,7 @@ export function TradeDetailDrawer() {
     await window.ledger.trades.softDelete([detailTradeId]);
     queryClient.invalidateQueries({ queryKey: ['trades'] });
     queryClient.invalidateQueries({ queryKey: ['trade', detailTradeId] });
+    setDetailTradeId(null); // Close drawer after successful deletion
   }
 
   async function handleRestore() {

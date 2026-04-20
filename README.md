@@ -2,7 +2,7 @@
 
 > A local-first, institutional-grade trading journal for Windows. No cloud, no login, no subscription, no telemetry. Your data never leaves your machine.
 >
-> **Status:** v1.0.5 — Foundation complete. 260/260 tests passing. Calendar auto-sync ready.
+> **Status:** v1.0.7 — Critical bug-fix release. 270/270 unit tests passing. Calendar auto-sync ready.
 
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge&logo=windows)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -51,7 +51,7 @@ Download `FXLedger-Setup-x.x.x.exe` from the Assets section of the latest releas
 
 On first launch, FXLedger runs the guided setup tour (about 30 seconds). After that, you're in the main blotter.
 
-**Latest release:** [**v1.0.5**](https://github.com/ikebude/FX-Trading-Journal/releases/tag/v1.0.5) — April 19, 2026. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+**Latest release:** [**v1.0.7**](https://github.com/ikebude/FX-Trading-Journal/releases/tag/v1.0.7) — April 20, 2026. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ### Uninstalling
 
@@ -427,13 +427,25 @@ v1.1.0 is a **production-grade release** adding 121 new features (29 P0 + 92 P1 
 - 🔄 **Global Support** — RTL layouts, CJK fonts, regional holidays, locale-aware number/date formats.
 
 **Progress:** T1.1–T1.7 complete (foundation + trade-form). T1.8–T6.11 in pipeline.  
-**Current:** v1.0.6 (v1.0.3 with T1.7 combobox enhancements).  
+**Current:** v1.0.7 (v1.0.6 + critical bug-fix & UX sweep).  
 **Full plan:** [docs/superpowers/plans/2026-04-19-v1.1-implementation.md](docs/superpowers/plans/2026-04-19-v1.1-implementation.md)  
 **Spec:** [docs/superpowers/specs/2026-04-18-v1.1-real-world-scenarios.md](docs/superpowers/specs/2026-04-18-v1.1-real-world-scenarios.md) (245 scenarios)
 
 ---
 
 ## Changelog
+
+### v1.0.7 (2026-04-20) – Critical Bug Fixes & UX Improvements
+- **Account pre-selection** — TradeForm + hotkey overlay now pre-select the active account.
+- **Trash page** — works without an active account; can restore trades from any account.
+- **Trade detail drawer** — closes automatically after soft-delete.
+- **Settings** — native folder picker for bridge watch directory (`file:pick-folder` IPC).
+- **Entry Price NaN regression** — clearing the field leaves value `undefined` so a clean "required" error shows instead of "Expected number, received nan".
+- **Importer** — soft-error return from `imports:parse-file`, richer diagnostics, MT5 HTML score-tiered header fallback, expandable import history panel, post-import "View Imported Trades" CTA.
+- **Dashboard** — retry button on failed widgets; improved empty states.
+- **Blotter** — filters persist across navigation (Zustand).
+- **Reviews** — success toast on save.
+- 270/270 unit tests, 0 typecheck errors, 0 lint errors, clean production build.
 
 ### v1.0.6 (2026-04-19) – T1.7: Trade-Form P0
 - **Symbol combobox** — type-ahead autocomplete backed by instruments table
