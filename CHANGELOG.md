@@ -6,9 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.0.7] — 2026-04-20 — Critical Bug Fixes & UX Improvements
+## [1.0.7] — 2026-04-21 — Critical Bug Fixes, UX Improvements & Node 24 Compatibility
 
 ### Fixed
+- **Drag-and-drop import broken on Electron ≥32** — `File.path` was removed from the Web `File` interface in Electron 32. The importer and calendar pages now resolve dropped-file paths through a new `window.ledger.file.getPathForFile()` preload bridge that wraps `webUtils.getPathForFile`, restoring CSV / MT4 / MT5 drag-and-drop import under Electron 41.
+- **`better-sqlite3` native ABI mismatch on Node.js v24** — Documented and automated the dual-ABI workflow: `prebuild-install -r node` for vitest (Node ABI 137) and `electron-rebuild` (Electron ABI 145) before packaging. The `postinstall` / `rebuild` scripts handle this automatically; see README "Building from Source".
 - **Account Pre-selection Bug** — TradeForm now correctly pre-selects active account in both manual entry and hotkey overlay modes, preventing "no account selected" errors.
 - **Trash Page Disabled** — Trash page now works for all accounts instead of requiring an active account selection, allowing users to restore deleted trades from any account.
 - **Stale Trade Detail Drawer** — Fixed drawer remaining open after soft-deleting a trade, now properly closes and clears selection state.

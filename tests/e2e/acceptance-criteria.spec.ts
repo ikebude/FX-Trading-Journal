@@ -9,7 +9,8 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { statSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -21,7 +22,8 @@ import {
   waitForToast,
   navigateTo,
 } from './helpers';
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const FIXTURES = join(__dirname, 'fixtures');
 
 // ─── AC-02: Prop firm banner — daily loss alert ──────────────────────────────

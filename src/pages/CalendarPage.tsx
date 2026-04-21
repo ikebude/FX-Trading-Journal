@@ -244,7 +244,11 @@ export function CalendarPage() {
       setDragOver(false);
       const file = e.dataTransfer.files[0];
       if (file && file.name.endsWith('.csv')) {
-        importMutation.mutate(file.path);
+        // Electron >=32 removed File.path; use webUtils via preload bridge.
+        const filePath = window.ledger.file.getPathForFile(file);
+        if (filePath) {
+          importMutation.mutate(filePath);
+        }
       }
     },
     [importMutation],

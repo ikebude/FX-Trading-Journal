@@ -131,8 +131,8 @@ function DropZone({
     setDragging(false);
     const file = e.dataTransfer.files[0];
     if (file) {
-      // In Electron, dragged files have a .path property
-      const filePath = (file as File & { path?: string }).path;
+      // Electron >=32 removed File.path; use webUtils via preload bridge.
+      const filePath = window.ledger.file.getPathForFile(file);
       if (filePath) {
         handlePath(filePath);
       } else {

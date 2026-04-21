@@ -8,7 +8,7 @@
  * Node access; it goes through this bridge.
  */
 
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 const api = {
   // ── Settings ──────────────────────────────────────
@@ -232,6 +232,15 @@ const api = {
       ipcRenderer.invoke('file:pick', filters) as Promise<string | null>,
     pickFolder: () =>
       ipcRenderer.invoke('file:pick-folder') as Promise<string | null>,
+    // Electron >=32 removed `File.path`; use webUtils.getPathForFile instead.
+    // Returns the absolute filesystem path for a dropped/selected File object.
+    getPathForFile: (file: File): string => {
+      try {
+        return webUtils.getPathForFile(file);
+      } catch {
+        return '';
+      }
+    },
   },
 };
 
