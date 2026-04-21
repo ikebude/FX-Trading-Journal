@@ -1,0 +1,72 @@
+name: Nightly
+
+# R5 — Nightly CI matrix
+# Exercises the full Node 24 + Electron 41 packaging path on a clean
+# Windows runner so ABI/packaging regressions surface before they hit
+# a tagged release. See docs/v1.1-roadmap.md (R5, R6) for context.
+
+on:
+  schedule:
+    # 03:17 UTC every day — off-peak, low-contention.
+    - cron: '17 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  nightly:
+    name: Nightly full-stack verification
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Unit test phase (Node ABI) ─────────────────
+      - name: Swap better-sqlite3 to Node-ABI prebuilt
+        run: npm run rebuild:node
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # ── Build phase ────────────────────────────────
+      - name: Build renderer + main + preload
+        run: npm run build
+
+      # ── Packaging phase (Electron ABI) ─────────────
+      - name: Rebuild better-sqlite3 for Electron
+        run: npm run rebuild:electron
+
+      - name: Package Windows installer (no publish)
+        run: node scripts/gen-icons.js && npx electron-vite build && npx electron-builder --win --publish=never
+
+      # ── E2E smoke against the packaged app ─────────
+      - name: Run Playwright smoke tests
+        run: npm run test:e2e
+
+      - name: Upload nightly artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-failure-${{ github.run_id }}
+          path: |
+            tests/e2e/report/**
+            test-results/**
+            release/*.exe
+          retention-days: 7
