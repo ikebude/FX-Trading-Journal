@@ -12,9 +12,11 @@
  */
 
 import { test, expect, _electron as electron } from '@playwright/test';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const MAIN_PATH = join(__dirname, '../../dist-electron/main.cjs');
 
 test.beforeAll(() => {

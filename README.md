@@ -2,7 +2,7 @@
 
 > A local-first, institutional-grade trading journal for Windows. No cloud, no login, no subscription, no telemetry. Your data never leaves your machine.
 >
-> **Status:** v1.0.7 — Critical bug-fix release. 270/270 unit tests passing. Calendar auto-sync ready.
+> **Status:** v1.0.7 — Critical bug-fix release. 270/270 unit tests passing, 3/3 Playwright smoke tests passing. Electron 41 + Node.js v24 compatible. Calendar auto-sync ready.
 
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge&logo=windows)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -297,22 +297,31 @@ To move your data folder to a different location (e.g., OneDrive or a different 
 ## Building from Source
 
 **Prerequisites:**
-- Node.js 20+
+- **Node.js 20.14.0** (LTS) — ⚠️ **IMPORTANT:** better-sqlite3 native module requires Node.js v20 LTS. Do not use v24+ for builds.
 - npm 10+
 - Windows (for packaging — development works on macOS/Linux too)
+
+**Setup:**
 
 ```bash
 git clone https://github.com/ikebude/FX-Trading-Journal.git
 cd FX-Trading-Journal
+
+# If you have nvm, use the .nvmrc file to auto-select correct Node version
+nvm use  # This reads .nvmrc and switches to v20.14.0
+
+# Or manually set Node.js v20.14.0
 npm install
 npm run dev          # Start development server (hot reload)
-npm test             # Run test suite (165 tests across 6 suites)
-npm run typecheck    # TypeScript type check
+npm test             # Run test suite (270+ tests)
+npm run typecheck    # TypeScript type check (must be 0 errors)
 npm run build        # Build renderer + main (no installer)
 npm run package:win  # Build Windows NSIS installer → release/
 ```
 
 The packaged installer will be at `release/FXLedger Setup x.x.x.exe`.
+
+**⚠️ CRITICAL:** If you see errors about `better-sqlite3` native module version mismatch, you are using the wrong Node.js version. Switch to v20.14.0 and try again.
 
 ### Project Structure
 

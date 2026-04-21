@@ -8,11 +8,13 @@
  */
 
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mkdirSync, rmSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const MAIN_PATH = join(__dirname, '../../dist-electron/main.cjs');
 
 export interface LaunchResult {
@@ -70,13 +72,27 @@ export async function seedAccount(
         };
       };
     };
-    const result = await w.ledger.accounts.create({
-      name: o.name ?? 'Test Account',
-      type: o.type ?? 'LIVE',
-      currency: 'USD',
+    // Randomize default name to avoid UNIQUE collisions with first-run
+    // sample seed data or with other tests sharing a data folder.
+    const uniq = Math.random().toString(36).slice(2, 8);
+    const payload: Record<string, unknown> = {
+      name: o.name ?? `E2E Account ${uniq}`,
+      accountType: o.type ?? 'LIVE',
+      accountCurrency: 'USD',
       initialBalance: o.balance ?? 10000,
-      propRules: o.propRules ?? null,
-    });
+    };
+    if (o.propRules) {
+      if (o.propRules.dailyLossLimitPct !== undefined)
+        payload.propDailyLossPct = o.propRules.dailyLossLimitPct;
+      if (o.propRules.maxDrawdownPct !== undefined)
+        payload.propMaxDrawdownPct = o.propRules.maxDrawdownPct;
+      if (o.propRules.profitTargetPct !== undefined)
+        payload.propProfitTargetPct = o.propRules.profitTargetPct;
+      payload.accountType = 'PROP';
+      payload.propPhase = 'PHASE_1';
+      payload.propDrawdownType = 'STATIC';
+    }
+    const result = await w.ledger.accounts.create(payload);
     return typeof result === 'string' ? result : result.id;
   }, opts);
 }
@@ -90,7 +106,10 @@ export async function seedTrades(
   await window.evaluate(
     async ([accountId, symbol, netPnl, count]) => {
       const w = window as unknown as {
-        ledger: { trades: { create: (d: unknown) => Promise<unknown> } };
+        ledger: {
+          trades: { create: (d: unknown) => Promise<{ id: string }> };
+          legs: { create: (d: unknown) => Promise<unknown> };
+        };
       };
       for (let i = 0; i < (count as number); i++) {
         const base = new Date('2024-01-15T09:00:00Z');
@@ -98,28 +117,32 @@ export async function seedTrades(
         const open = base.toISOString();
         base.setHours(base.getHours() + 2);
         const close = base.toISOString();
-        await w.ledger.trades.create({
+        const exitPrice =
+          (netPnl as number) < 0 ? 1.08200 : 1.09100;
+        // Step 1: create OPEN trade with entry leg (schema: CreateTradeSchema)
+        const created = await w.ledger.trades.create({
           accountId,
           symbol: symbol ?? 'EURUSD',
           direction: 'LONG',
-          status: 'CLOSED',
           source: 'MANUAL',
+          initialStopPrice: 1.08200,
           entryLeg: {
             timestampUtc: open,
             price: 1.08500,
-            volume: 0.10,
+            volumeLots: 0.10,
             commission: -3.50,
-            swap: 0.00,
+            swap: 0.0,
           },
-          exitLeg: {
-            timestampUtc: close,
-            price: netPnl !== undefined && (netPnl as number) < 0 ? 1.08200 : 1.09100,
-            volume: 0.10,
-            commission: -3.50,
-            swap: 0.00,
-          },
-          riskPips: 30,
-          stopLoss: 1.08200,
+        });
+        // Step 2: post EXIT leg — recompute closes the trade automatically
+        await w.ledger.legs.create({
+          tradeId: created.id,
+          legType: 'EXIT',
+          timestampUtc: close,
+          price: exitPrice,
+          volumeLots: 0.10,
+          commission: -3.50,
+          swap: 0.0,
         });
       }
     },

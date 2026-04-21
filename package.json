@@ -25,7 +25,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-rebuild -f -w better-sqlite3 || echo \"electron-rebuild skipped (non-fatal on CI without Electron)\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -81,7 +83,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.30.2",
-    "electron": "^34.0.0",
+    "electron": "^41.2.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
     "eslint": "^9.18.0",
