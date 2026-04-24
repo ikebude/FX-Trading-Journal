@@ -1,6 +1,6 @@
 {
   "name": "fxledger",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "FXLedger — local-first forex trading journal for Windows",
   "author": "ikebude",
   "repository": {
@@ -21,6 +21,7 @@
     "package:win": "node scripts/gen-icons.js && electron-vite build && electron-builder --win",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretest:e2e": "electron-rebuild -f -w better-sqlite3",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

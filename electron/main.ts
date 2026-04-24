@@ -395,19 +395,21 @@ app.whenReady().then(async () => {
     log.info('Database initialized');
   } catch (err) {
     log.error('Database initialization failed', err);
-    // Show a blocking dialog so the user knows WHY the app quit rather than
-    // seeing a silent close. This also makes fresh-install failures diagnosable
-    // (missing VC++ runtime, locked db file, etc.).
-    dialog.showMessageBoxSync({
-      type: 'error',
-      title: 'FXLedger — Startup Failed',
-      message: 'Could not initialize the database.',
-      detail:
-        `Data folder: ${config.data_dir}\n\n` +
-        `Error: ${err instanceof Error ? err.message : String(err)}\n\n` +
-        'Check that the data folder is accessible and that no other instance of FXLedger is running.',
-      buttons: ['Quit'],
-    });
+    // Under E2E we must not show a modal dialog — it blocks the event loop
+    // and Playwright's app.close() can't return, which is how we shipped a
+    // Nightly red in v1.0.8. Production still gets the diagnostic dialog.
+    if (process.env.E2E !== '1') {
+      dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'FXLedger — Startup Failed',
+        message: 'Could not initialize the database.',
+        detail:
+          `Data folder: ${config.data_dir}\n\n` +
+          `Error: ${err instanceof Error ? err.message : String(err)}\n\n` +
+          'Check that the data folder is accessible and that no other instance of FXLedger is running.',
+        buttons: ['Quit'],
+      });
+    }
     app.quit();
     return;
   }
@@ -483,9 +485,16 @@ app.whenReady().then(async () => {
     atomicSaveConfig({ ...config, hotkey: '' });
   }
 
-  startBridgeWatcher(config.data_dir).catch((err) => {
-    log.error('Bridge watcher failed to start', err);
-  });
+  // E2E_MODE: skip background services that hold the app alive past
+  // window close (bridge watcher, auto-update, tray). These are irrelevant
+  // to renderer smoke tests and their teardown was the source of the
+  // Nightly worker-teardown-timeout (see v1.0.9 fix).
+  const E2E_MODE = process.env.E2E === '1';
+  if (!E2E_MODE) {
+    startBridgeWatcher(config.data_dir).catch((err) => {
+      log.error('Bridge watcher failed to start', err);
+    });
+  }
 
   // T1.10: Initialize calendar auto-sync service
   try {
@@ -506,13 +515,17 @@ app.whenReady().then(async () => {
   // Auto-updater — event listeners are always registered (so Settings can
   // trigger manual checks), but the background check only fires if the user
   // has opted in.
-  initAutoUpdateService();
-  if (config.auto_update) {
-    runAutoUpdateCheck();
+  if (!E2E_MODE) {
+    initAutoUpdateService();
+    if (config.auto_update) {
+      runAutoUpdateCheck();
+    }
   }
 
   createMainWindow();
-  createTray();
+  if (!E2E_MODE) {
+    createTray();
+  }
 });
 
 app.on('window-all-closed', async () => {
@@ -526,6 +539,12 @@ app.on('window-all-closed', async () => {
   }
   if (process.platform === 'darwin') {
     // macOS convention: closing last window ≠ quit
+  }
+  // E2E_MODE: no tray is created, so window-all-closed must quit or
+  // Playwright's app.close() hangs until worker-teardown-timeout.
+  if (process.env.E2E === '1') {
+    app.quit();
+    return;
   }
   // On Windows: do NOT call app.quit() here — tray keeps it running.
 });
