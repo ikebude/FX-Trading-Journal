@@ -60,6 +60,14 @@ jobs:
       - name: Run Playwright smoke tests
         run: npm run test:e2e
 
+      # ── Importer smoke against every fixture ───────
+      # Runs tests/fixtures/* through detectAndParse so any new broker
+      # export is caught before users hit it. Non-fatal on zero fixtures.
+      - name: Smoke-import fixture suite
+        run: npx vitest run tests/smoke-imports.test.ts
+        env:
+          DIAGNOSTIC_MODE: '1'
+
       - name: Upload nightly artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4

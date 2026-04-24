@@ -331,6 +331,14 @@ export function registerImportHandlers(ctx: IpcContext): void {
       const rawBuf = readFileSync(filePath);
       const content = decodeImportBuffer(rawBuf);
       log.info(`[Import] File read successfully: ${rawBuf.length} raw bytes, ${content.length} decoded chars`);
+      if (process.env.DIAGNOSTIC_MODE === '1' || process.env.DIAGNOSTIC_MODE === 'true') {
+        const bomTag =
+          rawBuf.length >= 2 && rawBuf[0] === 0xff && rawBuf[1] === 0xfe ? 'UTF-16 LE (BOM)'
+          : rawBuf.length >= 2 && rawBuf[0] === 0xfe && rawBuf[1] === 0xff ? 'UTF-16 BE (BOM)'
+          : rawBuf.length >= 3 && rawBuf[0] === 0xef && rawBuf[1] === 0xbb && rawBuf[2] === 0xbf ? 'UTF-8 (BOM)'
+          : 'UTF-8 (assumed — no BOM)';
+        log.info(`[Import][DIAG] detected encoding: ${bomTag}; first 64 bytes (hex): ${rawBuf.slice(0, 64).toString('hex')}`);
+      }
       
       const filename = basename(filePath);
       const { format, result } = detectAndParse(content, filename);
