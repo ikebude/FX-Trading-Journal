@@ -10,6 +10,37 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// v1.0.8: the calendar-sync service performs a real HTTP fetch against
+// ForexFactory on start/syncNow. In CI (and any offline dev box) that fetch
+// either hangs for the full 10-second AbortController budget or fails late,
+// which blew past vitest's default 5-second per-test timeout and caused
+// 4/8 tests in this file to fail non-deterministically. We mock the network
+// fetcher and the DB client here so these tests exercise the *service*
+// logic (interval setup/teardown, result shape, idempotency) without any
+// I/O. This matches how every other unit test in the repo isolates the
+// network layer.
+vi.mock('../src/lib/importers/forexfactory-feed', () => ({
+  fetchNewsEventsFromForexFactory: vi.fn(async () => 'Date,Time,Currency,Impact,Detail\n'),
+}));
+vi.mock('../src/lib/db/client', () => {
+  const chain: any = {
+    select: () => chain,
+    from: () => chain,
+    where: () => chain,
+    limit: async () => [],
+    insert: () => chain,
+    values: () => chain,
+    onConflictDoNothing: async () => ({}),
+    update: () => chain,
+    set: () => chain,
+    delete: () => chain,
+    returning: async () => [],
+    execute: async () => ({ rows: [] }),
+  };
+  return { getDb: () => chain };
+});
+
 import { startCalendarSync, stopCalendarSync, syncCalendarNow } from '../electron/services/calendar-sync';
 
 describe('Calendar Auto-Sync Service', () => {

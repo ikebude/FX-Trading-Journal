@@ -10,6 +10,7 @@
 import * as cheerio from 'cheerio';
 import type { Element } from 'domhandler';
 import { matchHeaders, scoreHeaderMatch, type CanonicalField } from './headers';
+import { stripBom } from './encoding';
 
 export interface ParsedTrade {
   externalPositionId: string;
@@ -41,6 +42,7 @@ interface RawDeal {
   rowIndex: number;
   dealId: string;
   positionId: string;
+  ticket: string; // order id (used as synthetic position id when positionId is missing)
   symbol: string;
   type: string; // "buy" / "sell" / "in" / "out" / "in/out"
   direction: string; // "in" / "out" / "in/out" / "" — separate column in newer statements
@@ -54,7 +56,10 @@ interface RawDeal {
 }
 
 export function parseMt5Html(html: string): ParseResult {
-  const $ = cheerio.load(html);
+  // Defence-in-depth: callers sometimes pass content that still carries a
+  // U+FEFF BOM (e.g. when decoded from UTF-16 without stripping). cheerio
+  // would otherwise treat the BOM as stray text before <!DOCTYPE>.
+  const $ = cheerio.load(stripBom(html));
   const tables = $('table').toArray();
 
   // Score each table by header match quality and pick the best.
@@ -64,22 +69,31 @@ export function parseMt5Html(html: string): ParseResult {
 
   for (const table of tables) {
     const rows = $(table).find('tr').toArray();
-    for (let r = 0; r < Math.min(rows.length, 8); r++) {
+    // v1.0.8: MT5 "Report History" exports wrap Positions, Orders AND Deals
+    // inside a single outer <table>. The Deals header (the one we actually
+    // want) can sit 30+ rows deep, so we must scan the entire table, not
+    // just the first 8 rows. We additionally prefer headers that contain
+    // the MT5-specific "Deal" column so Positions/Orders never win the tie.
+    for (let r = 0; r < rows.length; r++) {
       const cells = $(rows[r])
         .find('td, th')
         .toArray()
         .map((c) => $(c).text().trim());
       if (cells.length < 5) continue;
       const score = scoreHeaderMatch(cells);
-      
+      const hasDeal = cells.some((c) => /^deal(\s*id)?$/i.test(c.trim()));
+      // Boost the Deals header so it beats the Positions/Orders headers
+      // (which can share the same raw score but cannot synthesise trades).
+      const weighted = score + (hasDeal ? 10 : 0);
+
       // Store best match (require score >= 3 for lenient header matching)
-      if (score >= 3 && (!best || score > best.score)) {
-        best = { table, headers: cells, score, headerRowIdx: r };
+      if (score >= 3 && (!best || weighted > best.score)) {
+        best = { table, headers: cells, score: weighted, headerRowIdx: r };
       }
-      
+
       // Keep fallback for worst case
-      if (!fallback || score > fallback.score) {
-        fallback = { table, headers: cells, score, headerRowIdx: r };
+      if (!fallback || weighted > fallback.score) {
+        fallback = { table, headers: cells, score: weighted, headerRowIdx: r };
       }
     }
   }
@@ -121,22 +135,69 @@ export function parseMt5Html(html: string): ParseResult {
     }
   }
 
-  // Group deals by position_id and synthesize trades
+  // Group deals by position_id and synthesize trades.
+  //
+  // v1.0.8: Deriv's MT5 "Report History" Deals table has **no Position ID
+  // column** (only Time, Deal, Symbol, Type, Direction, Volume, Price,
+  // Order, …). When positionId is missing we fall back to FIFO pairing by
+  // symbol+direction: each "in" deal opens a synthetic position whose id is
+  // its own Order id (the opening order id, which is also what the
+  // top-level Positions section uses). The next matching "out" deal on the
+  // same symbol closes the oldest still-open synthetic position.
   const grouped = new Map<string, RawDeal[]>();
-  for (const d of deals) {
-    if (!d.positionId) {
-      // T6-3: Log deals with no position_id instead of silently skipping.
-      // A missing position_id means the deal cannot be grouped into a trade.
-      failed.push({
-        rowIndex: d.rowIndex,
-        reason: `Deal ${d.dealId} has no position_id — cannot group into a trade. Skipped.`,
-        rawRow: [],
-      });
-      continue;
+  // openBySymbol: symbol → FIFO queue of synthetic position ids still open
+  const openBySymbol = new Map<string, string[]>();
+
+  // Ensure chronological order so FIFO pairing is deterministic.
+  const orderedDeals = [...deals].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  for (const d of orderedDeals) {
+    let posId = d.positionId;
+
+    if (!posId) {
+      if (d.direction === 'in') {
+        // Opening deal — mint a synthetic position id from the order id
+        // (falling back to the deal id if order is also missing).
+        posId = d.ticket || d.dealId;
+        if (!posId) {
+          failed.push({
+            rowIndex: d.rowIndex,
+            reason: `Deal ${d.dealId} has no position_id, order id or deal id — cannot group.`,
+            rawRow: [],
+          });
+          continue;
+        }
+        const q = openBySymbol.get(d.symbol) ?? [];
+        q.push(posId);
+        openBySymbol.set(d.symbol, q);
+      } else if (d.direction === 'out') {
+        // Closing deal — attach to the oldest still-open position for the
+        // same symbol.
+        const q = openBySymbol.get(d.symbol);
+        if (!q || q.length === 0) {
+          failed.push({
+            rowIndex: d.rowIndex,
+            reason: `Closing deal ${d.dealId} for ${d.symbol} has no matching open position.`,
+            rawRow: [],
+          });
+          continue;
+        }
+        posId = q.shift()!;
+        if (q.length === 0) openBySymbol.delete(d.symbol);
+      } else {
+        // No direction column at all — cannot group safely.
+        failed.push({
+          rowIndex: d.rowIndex,
+          reason: `Deal ${d.dealId} has no position_id and no in/out direction — cannot group.`,
+          rawRow: [],
+        });
+        continue;
+      }
     }
-    const arr = grouped.get(d.positionId) ?? [];
+
+    const arr = grouped.get(posId) ?? [];
     arr.push(d);
-    grouped.set(d.positionId, arr);
+    grouped.set(posId, arr);
   }
 
   const trades: ParsedTrade[] = [];
@@ -211,8 +272,14 @@ function parseDealRow(
 
   if (!symbol || !timeStr || !priceStr) return null;
 
-  // Filter out balance/credit/correction rows that have no symbol
-  if (type === 'balance' || type === 'credit' || type === 'correction') return null;
+  // Filter out non-trade bookkeeping rows: balance adjustments, credits,
+  // corrections and Deriv-style "bonus" deposits never belong to a position.
+  if (
+    type === 'balance' ||
+    type === 'credit' ||
+    type === 'correction' ||
+    type === 'bonus'
+  ) return null;
 
   const volume = parseNumber(volumeStr);
   const price = parseNumber(priceStr);
@@ -238,6 +305,7 @@ function parseDealRow(
     rowIndex,
     dealId,
     positionId,
+    ticket: get('ticket') ?? '',
     symbol,
     type,
     direction,

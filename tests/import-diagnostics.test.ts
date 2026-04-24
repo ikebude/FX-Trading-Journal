@@ -9,7 +9,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseMt5Html } from '../src/lib/importers/mt5-html';
+import { decodeImportBuffer } from '../src/lib/importers/encoding';
 
 describe('MT5 Parser - Lenient Header Matching', () => {
   // Test 1: Standard MT5 HTML with all standard headers
@@ -379,5 +382,42 @@ describe('MT5 Parser - Lenient Header Matching', () => {
     const result = parseMt5Html(html);
     expect(result.trades.length).toBe(0);
     // This should be filtered out as a pending order
+  });
+});
+
+describe('MT5 Parser - real Deriv "Report History" fixture', () => {
+  // Regression for v1.0.8: the MT5 client writes "Report History" as a single
+  // outer <table> containing Positions/Orders/Deals sub-sections and encodes
+  // the file as UTF-16 LE + BOM. Both properties used to blow up the importer.
+  it('decodes UTF-16 and extracts all 5 closed trades from the Deals section', () => {
+    const buf = readFileSync(
+      join(__dirname, 'fixtures', 'ReportHistory-101713523.html'),
+    );
+    const html = decodeImportBuffer(buf);
+
+    // Sanity: encoding autodetect yields readable HTML (not mojibake).
+    expect(html).toContain('Trade History Report');
+    expect(html).toContain('Deals');
+
+    const result = parseMt5Html(html);
+
+    // The fixture has exactly 5 closed positions in the Deals section.
+    expect(result.failed).toEqual([]);
+    expect(result.trades).toHaveLength(5);
+
+    const symbols = result.trades.map((t) => t.symbol).sort();
+    expect(symbols).toEqual([
+      'Volatility 50 Index',
+      'Volatility 50 Index',
+      'Volatility 75 (1s) Index',
+      'Volatility 75 (1s) Index',
+      'Volatility 75 (1s) Index',
+    ]);
+
+    // Every trade must be SHORT (all deals in this report are sells).
+    for (const t of result.trades) {
+      expect(t.direction).toBe('SHORT');
+      expect(t.legs.length).toBeGreaterThanOrEqual(2); // in + out
+    }
   });
 });
