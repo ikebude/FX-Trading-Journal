@@ -6,7 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased] — Roadmap Step 2/5 follow-through (importer diagnostics + smoke CI)
+## [1.0.9] — 2026-04-24 — Nightly E2E Fix + Importer Diagnostics & Smoke CI
+
+### Fixed
+- **Nightly CI `test:e2e` failed with 60s "worker teardown timeout" on every smoke test** — root cause was in `electron/main.ts`: `window-all-closed` intentionally **does not quit** on Windows (the tray icon is meant to keep the app alive), and `createTray()` + `startBridgeWatcher()` + `initAutoUpdateService()` all add extra app-ref holders. Playwright's `app.close()` therefore hung until the worker-teardown timeout expired, three tests in a row. Fix:
+  - `electron/main.ts` honours a new `E2E=1` env flag — under E2E, tray / bridge-watcher / auto-update are skipped, and `window-all-closed` calls `app.quit()` so `electronApp.close()` returns cleanly.
+  - `tests/e2e/smoke.test.ts` now sets `E2E: '1'` on every launched Electron instance.
+  - No runtime behaviour change outside E2E mode — production still hides-to-tray as before.
 
 ### Added
 - **`tests/smoke-imports.test.ts`** — generic regression suite that iterates every file in `tests/fixtures/` through `decodeImportBuffer` → `detectAndParse`, asserting format detection, at least one parsed trade, and that dropped rows never exceed kept rows. Drop a new fixture in and it is covered automatically.

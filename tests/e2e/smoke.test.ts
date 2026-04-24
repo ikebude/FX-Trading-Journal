@@ -33,7 +33,7 @@ test.beforeAll(() => {
 test('1 — app launches and main window appears', async () => {
   const app = await electron.launch({
     args: [MAIN_PATH],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: { ...process.env, NODE_ENV: 'test', E2E: '1' },
   });
 
   try {
@@ -56,7 +56,7 @@ test('1 — app launches and main window appears', async () => {
 test('2 — dashboard route renders without console errors', async () => {
   const app = await electron.launch({
     args: [MAIN_PATH],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: { ...process.env, NODE_ENV: 'test', E2E: '1' },
   });
 
   try {
@@ -88,7 +88,7 @@ test('2 — dashboard route renders without console errors', async () => {
 test('3 — settings page shows Clear Sample Trades button', async () => {
   const app = await electron.launch({
     args: [MAIN_PATH],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: { ...process.env, NODE_ENV: 'test', E2E: '1' },
   });
 
   try {
