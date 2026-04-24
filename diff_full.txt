@@ -1,0 +1,570 @@
+﻿git : warning: in the working copy of 'src/lib/importers/mt5-html.ts', LF will 
+be replaced by CRLF the next time Git touches it
+At line:1 char:69
++ ...  Journal" ; git diff -- electron/ipc/imports.ts electron/main.ts elec ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: in the... Git touches it 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: in the working copy of 'src/pages/BlotterPage.tsx', LF will be 
+replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/DashboardPage.tsx', LF will be 
+replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/ImporterPage.tsx', LF will be 
+replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/ReviewsPage.tsx', LF will be 
+replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/stores/app-store.ts', LF will be replaced 
+by CRLF the next time Git touches it
+diff --git a/electron/ipc/imports.ts b/electron/ipc/imports.ts
+index 19f6a6b..1a640e0 100644
+--- a/electron/ipc/imports.ts
++++ b/electron/ipc/imports.ts
+@@ -317,13 +317,23 @@ export function registerImportHandlers(ctx: IpcContext): void {
+ 
+   ipcMain.handle('imports:parse-file', async (_e, filePath: string, accountId?: string) => {
+     try {
+-      if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
++      log.info(`[Import] parse-file handler: filePath="${filePath}", accountId="${accountId}"`);
++      
++      if (!existsSync(filePath)) {
++        log.error(`[Import] File not found: ${filePath}`);
++        throw new Error(`File not found: ${filePath}`);
++      }
+ 
+       const content = readFileSync(filePath, 'utf-8');
++      log.info(`[Import] File read successfully: ${content.length} bytes`);
++      
+       const filename = basename(filePath);
+       const { format, result } = detectAndParse(content, filename);
++      
++      log.info(`[Import] Format detected: "${format}", trades: ${result.trades.length}, failed: ${result.failed.length}, rowsTotal: ${result.rowsTotal}`);
+ 
+       if (format === 'UNKNOWN') {
++        log.warn(`[Import] Format detection failed for file "${filename}"`);
+         return { id: null, format, trades: [], failed: [], rowsTotal: 0, candidates: [], accountId: null };
+       }
+ 
+@@ -333,6 +343,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
+       const storedFilename = `${Date.now()}_${filename}`;
+       const storedPath = join(importsDir, storedFilename);
+       copyFileSync(filePath, storedPath);
++      log.info(`[Import] File copied to "${storedPath}"`);
+ 
+       const accounts = await listAccounts();
+       const defaultAccountId = accounts[0]?.id ?? '';
+@@ -345,10 +356,13 @@ export function registerImportHandlers(ctx: IpcContext): void {
+           })()
+         : defaultAccountId;
+ 
++      log.info(`[Import] Using account: "${selectedAccountId}"`);
++
+       // Find reconcile candidates for each parsed trade using the selected account.
+       const allCandidates: ReconcileCandidate[] = [];
+       for (const parsedTrade of result.trades) {
+         const cs = await findReconcileCandidates(parsedTrade, selectedAccountId);
++        log.debug(`[Import] Trade "${parsedTrade.symbol}" ${parsedTrade.direction}: found ${cs.length} merge candidates`);
+         allCandidates.push(...cs);
+       }
+ 
+@@ -365,6 +379,8 @@ export function registerImportHandlers(ctx: IpcContext): void {
+         expiresAt: Date.now() + 30 * 60 * 1000,
+       });
+ 
++      log.info(`[Import] Parse result stored: id="${parseResultId}", trades=${result.trades.length}, candidates=${allCandidates.length}`);
++
+       return {
+         id: parseResultId,
+         format,
+@@ -375,8 +391,8 @@ export function registerImportHandlers(ctx: IpcContext): void {
+         accountId: selectedAccountId,
+       };
+     } catch (err) {
+-      log.error('imports:parse-file', err);
+-      throw err;
++      log.error('[Import] parse-file failed:', err);
++      return { id: null, format: 'UNKNOWN', trades: [], failed: [], rowsTotal: 0, candidates: [], accountId: null, error: (err as Error).message };
+     }
+   });
+ 
+@@ -393,7 +409,12 @@ export function registerImportHandlers(ctx: IpcContext): void {
+     ) => {
+       try {
+         const pending = pendingParses.get(parseResultId);
+-        if (!pending) throw new Error('Parse result not found or expired. Re-parse the file.');
++        if (!pending) {
++          log.error(`[Import] Parse result not found or expired: id="${parseResultId}"`);
++          throw new Error('Parse result not found or expired. Re-parse the file.');
++        }
++
++        log.info(`[Import] Committing parse result: id="${parseResultId}", format="${pending.format}", trades=${pending.trades.length}`);
+ 
+         const { accountId } = choices;
+         const skipSet = new Set(choices.skipIds ?? []);
+@@ -419,9 +440,12 @@ export function registerImportHandlers(ctx: IpcContext): void {
+               ? ('MT5_HTML' as const)
+               : ('CSV' as const);
+ 
++        log.debug(`[Import] Processing ${pending.trades.length} trades, skipping ${skipSet.size}, with ${reconcileMap.size} reconcile choices`);
++
+         for (const parsedTrade of pending.trades) {
+           // Explicitly skipped by user
+           if (skipSet.has(parsedTrade.externalPositionId)) {
++            log.debug(`[Import] Trade "${parsedTrade.symbol}" skipped by user`);
+             duplicate++;
+             continue;
+           }
+@@ -430,6 +454,7 @@ export function registerImportHandlers(ctx: IpcContext): void {
+           const reconcileChoice = reconcileMap.get(parsedTrade.externalPositionId);
+           if (reconcileChoice) {
+             if (reconcileChoice.action === 'skip_import') {
++              log.debug(`[Import] Trade "${parsedTrade.symbol}" reconciled as skip`);
+               duplicate++;
+               continue;
+             }
+diff --git a/electron/main.ts b/electron/main.ts
+index 4b5baf7..2674a02 100644
+--- a/electron/main.ts
++++ b/electron/main.ts
+@@ -433,6 +433,15 @@ app.whenReady().then(async () => {
+     return result.canceled ? null : result.filePaths[0] ?? null;
+   });
+ 
++  // Folder picker handler — returns full folder path for bridge watch directory
++  ipcMain.handle('file:pick-folder', async (_e) => {
++    const result = await dialog.showOpenDialog(mainWindow!, {
++      properties: ['openDirectory'],
++      title: 'Select MT4/5 MQL Files/Ledger Folder',
++    });
++    return result.canceled ? null : result.filePaths[0] ?? null;
++  });
++
+   registerIpcHandlers({
+     config,
+     saveConfig: (next: AppConfig) => {
+diff --git a/electron/preload.ts b/electron/preload.ts
+index 335ccc0..977c973 100644
+--- a/electron/preload.ts
++++ b/electron/preload.ts
+@@ -230,6 +230,8 @@ const api = {
+   file: {
+     pickFile: (filters?: Array<{ name: string; extensions: string[] }>) =>
+       ipcRenderer.invoke('file:pick', filters) as Promise<string | null>,
++    pickFolder: () =>
++      ipcRenderer.invoke('file:pick-folder') as Promise<string | null>,
+   },
+ };
+ 
+diff --git a/src/lib/importers/mt5-html.ts b/src/lib/importers/mt5-html.ts
+index 2fd44b1..869c540 100644
+--- a/src/lib/importers/mt5-html.ts
++++ b/src/lib/importers/mt5-html.ts
+@@ -58,7 +58,9 @@ export function parseMt5Html(html: string): ParseResult {
+   const tables = $('table').toArray();
+ 
+   // Score each table by header match quality and pick the best.
++  // Track all candidates for fallback in case none meet strict threshold.
+   let best: { table: Element; headers: string[]; score: number; headerRowIdx: number } | null = null;
++  let fallback: { table: Element; headers: string[]; score: number; headerRowIdx: number } | null = null;
+ 
+   for (const table of tables) {
+     const rows = $(table).find('tr').toArray();
+@@ -69,18 +71,29 @@ export function parseMt5Html(html: string): ParseResult {
+         .map((c) => $(c).text().trim());
+       if (cells.length < 5) continue;
+       const score = scoreHeaderMatch(cells);
+-      if (score >= 5 && (!best || score > best.score)) {
++      
++      // Store best match (require score >= 3 for lenient header matching)
++      if (score >= 3 && (!best || score > best.score)) {
+         best = { table, headers: cells, score, headerRowIdx: r };
+       }
++      
++      // Keep fallback for worst case
++      if (!fallback || score > fallback.score) {
++        fallback = { table, headers: cells, score, headerRowIdx: r };
++      }
+     }
+   }
+ 
+-  if (!best) {
++  // Use best match if found, otherwise use fallback
++  const selected = best ?? fallback;
++  
++  if (!selected) {
++    console.warn('[MT5 Parser] No table with valid headers found in HTML. Total tables:', tables.length);
+     return { trades: [], failed: [], rowsTotal: 0 };
+   }
+ 
+-  const colMap = matchHeaders(best.headers);
+-  const dataRows = $(best.table).find('tr').toArray().slice(best.headerRowIdx + 1);
++  const colMap = matchHeaders(selected.headers);
++  const dataRows = $(selected.table).find('tr').toArray().slice(selected.headerRowIdx + 1);
+ 
+   const failed: ParseResult['failed'] = [];
+   const deals: RawDeal[] = [];
+diff --git a/src/pages/BlotterPage.tsx b/src/pages/BlotterPage.tsx
+index 1142399..1ec06e6 100644
+--- a/src/pages/BlotterPage.tsx
++++ b/src/pages/BlotterPage.tsx
+@@ -26,8 +26,7 @@ const DEFAULT_FILTERS: Partial<TradeFilters> = {
+ 
+ export function BlotterPage() {
+   const qc = useQueryClient();
+-  const { activeAccountId, filterPanelOpen, toggleFilterPanel } = useAppStore();
+-  const [filters, setFilters] = useState<Partial<TradeFilters>>(DEFAULT_FILTERS);
++  const { activeAccountId, filterPanelOpen, toggleFilterPanel, blotterFilters, setBlotterFilters } = useAppStore();
+   const [page, setPage] = useState(1);
+   const [searchQuery, setSearchQuery] = useState('');
+   const [debouncedSearch, setDebouncedSearch] = useState('');
+@@ -35,6 +34,14 @@ export function BlotterPage() {
+   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const PAGE_SIZE = 100;
+ 
++  // Use persisted filters, fallback to defaults
++  const filters = { ...DEFAULT_FILTERS, ...blotterFilters };
++
++  // Update filters in store
++  const updateFilters = (newFilters: Partial<TradeFilters>) => {
++    setBlotterFilters({ ...blotterFilters, ...newFilters });
++  };
++
+   // Debounce search input by 300 ms
+   useEffect(() => {
+     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+@@ -86,12 +93,12 @@ export function BlotterPage() {
+   });
+ 
+   function handleFilterChange(patch: Partial<TradeFilters>) {
+-    setFilters((prev) => ({ ...prev, ...patch }));
++    updateFilters({ ...filters, ...patch });
+     setPage(1);
+   }
+ 
+   function handleFilterReset() {
+-    setFilters(DEFAULT_FILTERS);
++    updateFilters(DEFAULT_FILTERS);
+     setPage(1);
+   }
+ 
+diff --git a/src/pages/DashboardPage.tsx b/src/pages/DashboardPage.tsx
+index e193270..09773b6 100644
+--- a/src/pages/DashboardPage.tsx
++++ b/src/pages/DashboardPage.tsx
+@@ -20,7 +20,8 @@
+  */
+ 
+ import { useMemo, useState } from 'react';
+-import { useQuery } from '@tanstack/react-query';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
++import { Button } from '@/components/ui/button';
+ import {
+   AreaChart,
+   Area,
+@@ -119,8 +120,11 @@ function WidgetCard({
+ 
+ function EmptyWidget({ message = 'No data yet' }: { message?: string }) {
+   return (
+-    <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
+-      {message}
++    <div className="flex h-32 flex-col items-center justify-center gap-2 text-center">
++      <p className="text-xs text-muted-foreground">{message}</p>
++      <p className="text-xs text-muted-foreground/60">
++        Import trades or add manual entries to see analytics.
++      </p>
+     </div>
+   );
+ }
+@@ -731,6 +735,7 @@ type Preset = DashboardPreset;
+ // ─────────────────────────────────────────────────────────────
+ 
+ export function DashboardPage() {
++  const queryClient = useQueryClient();
+   const { activeAccountId, displayTimezone } = useAppStore();
+   const [preset, setPreset] = useState<Preset>('30d');
+ 
+@@ -767,8 +772,15 @@ export function DashboardPage() {
+ 
+   if (error || !data) {
+     return (
+-      <div className="flex h-full items-center justify-center text-sm text-rose-400">
+-        Failed to load dashboard data.
++      <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
++        <div className="text-sm text-rose-400">Failed to load dashboard data.</div>
++        <Button
++          variant="outline"
++          size="sm"
++          onClick={() => queryClient.invalidateQueries({ queryKey: ['dashboard:stats'] })}
++        >
++          Retry
++        </Button>
+       </div>
+     );
+   }
+diff --git a/src/pages/ImporterPage.tsx b/src/pages/ImporterPage.tsx
+index ccc07db..3603623 100644
+--- a/src/pages/ImporterPage.tsx
++++ b/src/pages/ImporterPage.tsx
+@@ -10,6 +10,7 @@
+ 
+ import { useState, useEffect } from 'react';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
++import { useNavigate } from '@tanstack/react-router';
+ import {
+   FileUp,
+   CheckCircle2,
+@@ -21,6 +22,9 @@ import {
+   Copy,
+   XCircle,
+   AlertTriangle,
++  ChevronDown,
++  ChevronUp,
++  History,
+ } from 'lucide-react';
+ 
+ import { Button } from '@/components/ui/button';
+@@ -44,7 +48,7 @@ import type { ReconcileAction, ReconcileCandidate, ReconcileChoice } from '@/lib
+ type Step = 'drop' | 'preview' | 'commit' | 'done';
+ 
+ interface ParsePreview {
+-  id: string;
++  id: string | null;
+   format: string;
+   trades: Array<{
+     externalPositionId: string;
+@@ -57,6 +61,7 @@ interface ParsePreview {
+   rowsTotal: number;
+   candidates: ReconcileCandidate[];
+   accountId: string | null;
++  error?: string;
+ }
+ 
+ interface CommitResult {
+@@ -82,12 +87,18 @@ function DropZone({
+   const [dragging, setDragging] = useState(false);
+   const [parsing, setParsing] = useState(false);
+   const [error, setError] = useState<string | null>(null);
++  const [historyExpanded, setHistoryExpanded] = useState(false);
+ 
+   const { data: accounts = [], isLoading: accountsLoading } = useQuery<Account[]>({
+     queryKey: ['accounts'],
+     queryFn: () => window.ledger.accounts.list(),
+   });
+ 
++  const { data: importHistory = [] } = useQuery({
++    queryKey: ['import-history'],
++    queryFn: () => window.ledger.imports.history(),
++  });
++
+   const activeAccount = accounts.find((a) => a.id === selectedAccountId);
+ 
+   async function handlePath(path: string) {
+@@ -232,6 +243,46 @@ function DropZone({
+           {error}
+         </div>
+       )}
++
++      {/* Import History */}
++      {importHistory.length > 0 && (
++        <div className="mt-8">
++          <button
++            type="button"
++            onClick={() => setHistoryExpanded(!historyExpanded)}
++            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
++          >
++            <History className="h-4 w-4" />
++            Import History ({importHistory.length})
++            {historyExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
++          </button>
++          {historyExpanded && (
++            <div className="mt-3 space-y-2">
++              {importHistory.slice(0, 5).map((run: any) => (
++                <div key={run.id} className="rounded-lg border border-border bg-card p-3">
++                  <div className="flex items-center justify-between text-xs">
++                    <span className="font-medium">{run.filename}</span>
++                    <span className="text-muted-foreground">
++                      {new Date(run.createdAtUtc).toLocaleDateString()}
++                    </span>
++                  </div>
++                  <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
++                    <span>{run.imported} imported</span>
++                    <span>{run.merged} merged</span>
++                    <span>{run.duplicate} duplicate</span>
++                    <span>{run.failed} failed</span>
++                  </div>
++                </div>
++              ))}
++              {importHistory.length > 5 && (
++                <p className="text-xs text-muted-foreground text-center">
++                  Showing latest 5 imports
++                </p>
++              )}
++            </div>
++          )}
++        </div>
++      )}
+     </div>
+   );
+ }
+@@ -697,6 +748,8 @@ function CommitStep({
+ // ─────────────────────────────────────────────────────────────
+ 
+ function DoneStep({ result, onReset }: { result: CommitResult; onReset: () => void }) {
++  const navigate = useNavigate();
++
+   return (
+     <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
+       <CheckCircle2 className="h-16 w-16 text-emerald-400" />
+@@ -717,7 +770,14 @@ function DoneStep({ result, onReset }: { result: CommitResult; onReset: () => vo
+           </div>
+         ))}
+       </div>
+-      <Button onClick={onReset}>Import another file</Button>
++      <div className="flex gap-3">
++        <Button variant="outline" onClick={onReset}>
++          Import another file
++        </Button>
++        <Button onClick={() => navigate({ to: '/' })}>
++          View Imported Trades
++        </Button>
++      </div>
+     </div>
+   );
+ }
+@@ -755,11 +815,32 @@ export function ImporterPage() {
+         throw new Error('Please select an account before importing.');
+       }
+       const data = await window.ledger.imports.parseFile(path, importTargetAccountId);
++      
++      // Check for IPC-level parse errors
++      if (data.error) {
++        setParseError(`Parse error: ${data.error}`);
++        return;
++      }
++      
+       if (!data.id) {
+         setParseError('Could not detect format. Make sure this is an MT4/MT5 HTML or CSV file.');
+         return;
+       }
++      
+       const p = data as ParsePreview;
++      
++      // Check if parse succeeded but returned zero trades
++      if (p.trades.length === 0 && p.rowsTotal === 0 && p.failed.length === 0) {
++        setParseError('No trades found in file. The file might be empty or in an unsupported format.');
++        return;
++      }
++      
++      // If rowsTotal is 0 but format detected, warn the user
++      if (p.rowsTotal === 0 && p.format !== 'UNKNOWN') {
++        setParseError(`Format detected as ${p.format}, but no valid data rows found. The file might be corrupted or in wrong format.`);
++        return;
++      }
++      
+       setPreview(p);
+       if (p.accountId && p.accountId !== importTargetAccountId) {
+         setImportTargetAccountId(p.accountId);
+diff --git a/src/pages/ReviewsPage.tsx b/src/pages/ReviewsPage.tsx
+index 26ab954..c6d7e39 100644
+--- a/src/pages/ReviewsPage.tsx
++++ b/src/pages/ReviewsPage.tsx
+@@ -33,6 +33,7 @@ import {
+ } from 'date-fns';
+ import { ChevronLeft, ChevronRight, Save } from 'lucide-react';
+ import { Button } from '@/components/ui/button';
++import { useToast } from '@/components/ui/toast';
+ import { useAppStore } from '@/stores/app-store';
+ import { cn } from '@/lib/cn';
+ import { formatCurrency, formatPips, pnlClass } from '@/lib/format';
+@@ -297,6 +298,7 @@ function Field({
+ 
+ export function ReviewsPage() {
+   const { activeAccountId } = useAppStore();
++  const { toast } = useToast();
+   const queryClient = useQueryClient();
+ 
+   const [kind, setKind] = useState<ReviewKind>('DAILY');
+@@ -348,6 +350,10 @@ export function ReviewsPage() {
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['reviews', kind, activeAccountId] });
+       setDirty(false);
++      toast('Review saved', {
++        description: `${kind === 'DAILY' ? 'Daily' : 'Weekly'} review saved successfully.`,
++        variant: 'success',
++      });
+     },
+   });
+ 
+diff --git a/src/pages/SettingsPage.tsx b/src/pages/SettingsPage.tsx
+index fae93b4..5f2668e 100644
+--- a/src/pages/SettingsPage.tsx
++++ b/src/pages/SettingsPage.tsx
+@@ -278,12 +278,28 @@ function BridgeSection() {
+         description="MQL5/Files/Ledger/ folder inside your MT4/5 data directory"
+       >
+         <div className="flex flex-col items-end gap-1.5">
+-          <input
+-            value={watchDir}
+-            onChange={(e) => setWatchDir(e.target.value)}
+-            placeholder="C:\Users\...\MQL5\Files\Ledger"
+-            className="w-72 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+-          />
++          <div className="flex gap-2">
++            <input
++              value={watchDir}
++              onChange={(e) => setWatchDir(e.target.value)}
++              placeholder="C:\Users\...\MQL5\Files\Ledger"
++              className="w-72 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
++            />
++            <Button
++              size="sm"
++              variant="outline"
++              className="h-7 px-2 text-xs"
++              onClick={async () => {
++                const folder = await window.ledger.file.pickFolder();
++                if (folder) {
++                  setWatchDir(folder);
++                }
++              }}
++              title="Browse for folder"
++            >
++              📁
++            </Button>
++          </div>
+           <Button
+             size="sm"
+             variant="outline"
+diff --git a/src/stores/app-store.ts b/src/stores/app-store.ts
+index 712fd8d..8e4ef52 100644
+--- a/src/stores/app-store.ts
++++ b/src/stores/app-store.ts
+@@ -29,6 +29,10 @@ interface AppState {
+   filterPanelOpen: boolean;
+   toggleFilterPanel: () => void;
+ 
++  // Blotter filters — persisted across navigation.
++  blotterFilters: Record<string, unknown>;
++  setBlotterFilters: (filters: Record<string, unknown>) => void;
++
+   // Trade detail drawer — id of the trade currently shown, or null.
+   detailTradeId: string | null;
+   setDetailTradeId: (id: string | null) => void;
+@@ -62,6 +66,9 @@ export const useAppStore = create<AppState>()(
+       filterPanelOpen: false,
+       toggleFilterPanel: () => set((s) => ({ filterPanelOpen: !s.filterPanelOpen })),
+ 
++      blotterFilters: {},
++      setBlotterFilters: (filters) => set({ blotterFilters: filters }),
++
+       detailTradeId: null,
+       setDetailTradeId: (id) => set({ detailTradeId: id }),
+ 
+@@ -81,6 +88,7 @@ export const useAppStore = create<AppState>()(
+         displayTimezone: s.displayTimezone,
+         theme: s.theme,
+         filterPanelOpen: s.filterPanelOpen,
++        blotterFilters: s.blotterFilters,
+       }),
+     },
+   ),
