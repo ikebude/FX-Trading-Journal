@@ -12,6 +12,21 @@ import type { Element } from 'domhandler';
 import { matchHeaders, scoreHeaderMatch, type CanonicalField } from './headers';
 import { stripBom } from './encoding';
 
+/**
+ * DIAGNOSTIC_MODE — set env `DIAGNOSTIC_MODE=1` to emit verbose parser
+ * traces (selected header row, raw header cells, per-failure reasons).
+ * Pure stderr logging — no behavioural change. Useful for triaging new
+ * broker exports in the field without rebuilding the app.
+ */
+const DIAGNOSTIC_MODE =
+  typeof process !== 'undefined' &&
+  process.env &&
+  (process.env.DIAGNOSTIC_MODE === '1' || process.env.DIAGNOSTIC_MODE === 'true');
+
+function diag(...args: unknown[]): void {
+  if (DIAGNOSTIC_MODE) console.warn('[MT5 Parser][DIAG]', ...args);
+}
+
 export interface ParsedTrade {
   externalPositionId: string;
   symbol: string;
@@ -103,8 +118,13 @@ export function parseMt5Html(html: string): ParseResult {
   
   if (!selected) {
     console.warn('[MT5 Parser] No table with valid headers found in HTML. Total tables:', tables.length);
+    diag('tables count =', tables.length, '— dumping first-row cell counts:');
+    diag(tables.map((t) => $(t).find('tr').length));
     return { trades: [], failed: [], rowsTotal: 0 };
   }
+
+  diag('selected header row index =', selected.headerRowIdx, 'score =', selected.score);
+  diag('selected header cells =', selected.headers);
 
   const colMap = matchHeaders(selected.headers);
   const dataRows = $(selected.table).find('tr').toArray().slice(selected.headerRowIdx + 1);
@@ -241,6 +261,11 @@ export function parseMt5Html(html: string): ParseResult {
       legs,
       rawDealCount: group.length,
     });
+  }
+
+  if (DIAGNOSTIC_MODE) {
+    diag('parse summary — deals:', deals.length, 'trades:', trades.length, 'failed:', failed.length);
+    if (failed.length) diag('first failures:', failed.slice(0, 5));
   }
 
   return { trades, failed, rowsTotal: deals.length };

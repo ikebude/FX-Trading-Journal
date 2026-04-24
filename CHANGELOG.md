@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased] — Roadmap Step 2/5 follow-through (importer diagnostics + smoke CI)
+
+### Added
+- **`tests/smoke-imports.test.ts`** — generic regression suite that iterates every file in `tests/fixtures/` through `decodeImportBuffer` → `detectAndParse`, asserting format detection, at least one parsed trade, and that dropped rows never exceed kept rows. Drop a new fixture in and it is covered automatically.
+- **`DIAGNOSTIC_MODE` env flag** (`DIAGNOSTIC_MODE=1`):
+  - `src/lib/importers/mt5-html.ts` emits the selected header row index, raw header cells, per-parse summary (deals / trades / failed) and the first five failure reasons.
+  - `electron/ipc/imports.ts` logs the detected encoding tag and the first 64 bytes of the raw buffer (hex) so field triage of broken broker exports no longer needs a rebuild.
+- **Nightly CI smoke-import step** — `.github/workflows/nightly.yml` runs the new smoke suite with `DIAGNOSTIC_MODE=1` so future broker-export regressions are caught before a tag.
+
+### Security — tracked follow-up
+- `npm audit --omit=dev` reports one high-severity advisory on `drizzle-orm@0.39.3` (GHSA-gpj5-g38j-94v9: SQL-injection via improperly-escaped SQL identifiers). Exploitable only when caller-supplied strings are used as identifiers; this repo uses only hard-coded identifiers in `src/lib/db/schema.ts`, so practical exposure is zero today. Remediation requires a breaking upgrade to `drizzle-orm ≥ 0.45.2` and is deferred to the v1.1 track.
+
+### Technical
+- **Tests:** 272/272 passing (14 suites, +1 smoke suite).
+
+---
+
 ## [1.0.8] — 2026-04-24 — MT5 UTF-16 Import Fix & Deterministic Calendar-Sync Tests
 
 ### Fixed
