@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.8] — 2026-04-24 — MT5 UTF-16 Import Fix & Deterministic Calendar-Sync Tests
+
+### Fixed
+- **MT5 "Report History" HTML imports failed en-masse** — Deriv / MetaTrader 5 exports the statement as **UTF-16 LE with BOM** and packs Positions / Orders / Deals into a single outer `<table>` with **no `Position ID` column in the Deals section**. The importer previously read every file as hard-coded UTF-8 (producing NUL-interspersed mojibake that cheerio rejected as "no tables") and, even when it *did* decode, skipped every deal because `positionId` was blank. Fixed end-to-end:
+  - New `src/lib/importers/encoding.ts` with `decodeImportBuffer(buf)` — auto-detects UTF-16 LE (FF FE), UTF-16 BE (FE FF), UTF-8-with-BOM (EF BB BF) and falls back to UTF-8.
+  - `electron/ipc/imports.ts` now reads the raw `Buffer` and runs it through `decodeImportBuffer` instead of `readFileSync(path, 'utf-8')`, and logs both raw-byte and decoded-char counts for diagnostics.
+  - `src/lib/importers/mt5-html.ts` (a) strips any residual BOM before feeding cheerio, (b) scans the **entire** table for header rows (was capped at the first 8, missing the Deals header at row 33), (c) boosts headers that contain a `Deal` column so the Positions/Orders sub-headers never win the tie, (d) **FIFO-pairs `in` / `out` deals by symbol** when `Position ID` is missing, using the opening order id as a synthetic position id, (e) filters Deriv `bonus` bookkeeping rows.
+  - New regression test loads the real Deriv report as a fixture and asserts 5 SHORT trades with ≥2 legs each and zero failed rows.
+- **Nightly CI flakiness in `tests/calendar-sync.test.ts`** — 4 of 8 tests timed out because `startCalendarSync()` / `syncCalendarNow()` performed a real HTTP fetch against ForexFactory whose 10-second AbortController budget exceeded vitest's 5-second per-test timeout, non-deterministically. The test now mocks `forexfactory-feed` and `db/client` so the service's lifecycle / result-shape / idempotency contracts are exercised offline. All 8 calendar-sync tests now pass in ~200 ms.
+
+### Technical
+- **Tests:** 271/271 passing (13 suites, up from 269/271 green in v1.0.7).
+- **No production behaviour changes outside importer & encoding paths.**
+
+---
+
 ## [1.0.7] — 2026-04-21 — Critical Bug Fixes, UX Improvements & Node 24 Compatibility
 
 ### Fixed

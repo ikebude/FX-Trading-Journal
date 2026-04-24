@@ -21,6 +21,7 @@ import { nanoid } from 'nanoid';
 import { eq, and, isNull, sql, desc } from 'drizzle-orm';
 
 import { detectAndParse } from '../../src/lib/importers/detect';
+import { decodeImportBuffer } from '../../src/lib/importers/encoding';
 import { getDb, withAsyncTransaction } from '../../src/lib/db/client';
 import { trades, tradeLegs, importRuns } from '../../src/lib/db/schema';
 import { detectSession } from '../../src/lib/tz';
@@ -324,8 +325,12 @@ export function registerImportHandlers(ctx: IpcContext): void {
         throw new Error(`File not found: ${filePath}`);
       }
 
-      const content = readFileSync(filePath, 'utf-8');
-      log.info(`[Import] File read successfully: ${content.length} bytes`);
+      // v1.0.8: MT5 "Report History" HTML is UTF-16 LE with BOM; reading as
+      // 'utf-8' silently produced mojibake and zero parsed trades. Read the
+      // raw buffer and let decodeImportBuffer() pick the right encoding.
+      const rawBuf = readFileSync(filePath);
+      const content = decodeImportBuffer(rawBuf);
+      log.info(`[Import] File read successfully: ${rawBuf.length} raw bytes, ${content.length} decoded chars`);
       
       const filename = basename(filePath);
       const { format, result } = detectAndParse(content, filename);
