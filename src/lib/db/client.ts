@@ -80,6 +80,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration003(sqlite);
   }
 
+  if (currentVersion < 4) {
+    applyMigration004(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -383,6 +387,43 @@ function applyMigration003(sqlite: Database.Database): void {
   migrate();
   sqlite.pragma('foreign_keys = ON');
   log.info('Database: migration 003 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 004 — methodologies + prop_firm_presets tables
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration004(sqlite: Database.Database): void {
+  log.info('Database: applying migration 004 (methodologies + prop_firm_presets)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS methodologies (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL UNIQUE,
+        description     TEXT,
+        is_active       INTEGER NOT NULL DEFAULT 1,
+        created_at_utc  TEXT NOT NULL,
+        updated_at_utc  TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS prop_firm_presets (
+        id                    TEXT PRIMARY KEY,
+        name                  TEXT NOT NULL UNIQUE,
+        max_drawdown_pct      REAL,
+        max_daily_loss_pct    REAL,
+        max_drawdown_amount   REAL,
+        is_active             INTEGER NOT NULL DEFAULT 1,
+        created_at_utc        TEXT NOT NULL,
+        updated_at_utc        TEXT NOT NULL
+      );
+    `);
+
+    sqlite.pragma('user_version = 4');
+  });
+
+  migrate();
+  log.info('Database: migration 004 complete');
 }
 
 /**

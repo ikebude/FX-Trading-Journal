@@ -43,6 +43,7 @@ import { TrashPage } from '@/pages/TrashPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { OverlayPage } from '@/pages/OverlayPage';
 import { ImporterPage } from '@/pages/ImporterPage';
+import { LibraryPage } from '@/pages/LibraryPage';
 
 // ─────────────────────────────────────────────────────────────
 // TanStack Query client
@@ -231,6 +232,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const libraryRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/library',
+  component: LibraryPage,
+});
+
 const eaGuideRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/settings/ea-guide',
@@ -246,6 +253,7 @@ const routeTree = rootRoute.addChildren([
     calendarRoute,
     reportsRoute,
     importRoute,
+    libraryRoute,
     trashRoute,
     settingsRoute,
     eaGuideRoute,
