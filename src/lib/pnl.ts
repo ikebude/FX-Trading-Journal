@@ -368,7 +368,18 @@ export function computeAggregateMetrics(
     .filter((r): r is number => r !== null);
   const averageR =
     rValues.length > 0 ? sum(rValues) / rValues.length : null;
-  const expectancy = averageR; // Same definition; provided as a separate name for UI clarity.
+  // True expectancy: E = (winRate × avgWin) − ((1−winRate) × avgLoss)
+  // Degenerates to averageR when all trades are wins or all are losses.
+  const winRValues = rValues.filter((r) => r > 0);
+  const lossRValues = rValues.filter((r) => r < 0);
+  let expectancy: number | null;
+  if (winRValues.length > 0 && lossRValues.length > 0) {
+    const avgWin = sum(winRValues) / winRValues.length;
+    const avgLoss = sum(lossRValues.map(Math.abs)) / lossRValues.length;
+    expectancy = winRate * avgWin - (1 - winRate) * avgLoss;
+  } else {
+    expectancy = averageR;
+  }
 
   const winningPnl = sum(
     closed
