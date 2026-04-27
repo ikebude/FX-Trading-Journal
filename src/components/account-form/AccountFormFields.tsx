@@ -8,12 +8,14 @@
  */
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
   ChevronDown,
   Palette,
   Calendar,
 } from 'lucide-react';
+import type { PropFirmPreset } from '@/lib/db/schema';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,11 +64,25 @@ export interface AccountFormFieldsProps {
 export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFieldsProps) {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [timezoneSearch, setTimezoneSearch] = useState('');
-  
+
   const isProp = data.accountType === 'PROP';
   const filteredTimezones = TIMEZONES.filter((tz) =>
     tz.toLowerCase().includes(timezoneSearch.toLowerCase())
   );
+
+  const { data: presets = [] } = useQuery<PropFirmPreset[]>({
+    queryKey: ['library', 'presets'],
+    queryFn: () => window.ledger.library.presets.list() as Promise<PropFirmPreset[]>,
+    enabled: isProp,
+  });
+
+  function applyPreset(presetId: string) {
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return;
+    if (preset.maxDrawdownPct != null) onChange('propMaxDrawdownPct', preset.maxDrawdownPct);
+    if (preset.maxDailyLossPct != null) onChange('propDailyLossPct', preset.maxDailyLossPct);
+    if (preset.maxDrawdownAmount != null) onChange('propMaxDrawdown', preset.maxDrawdownAmount);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -336,9 +352,25 @@ export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFi
       {/* ── Prop Firm Section (Conditional) ────────────────────────────────────── */}
       {isProp && (
         <div className="space-y-4 border-t border-border pt-4">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Prop Firm Rules
-          </h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Prop Firm Rules
+            </h3>
+            {presets.length > 0 && (
+              <Select onValueChange={applyPreset}>
+                <SelectTrigger className="h-7 w-[160px] text-xs">
+                  <SelectValue placeholder="Load preset…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {presets.map((p) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs">
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
 
           {/* Daily Loss Limit */}
           <div className="grid grid-cols-2 gap-4">
