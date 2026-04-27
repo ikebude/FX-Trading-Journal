@@ -330,6 +330,10 @@ export interface AggregateMetrics {
   sortinoPerTrade: number | null;
   calmarRatio: number | null;
   recoveryFactor: number | null;
+  /** Number of days used to annualize Calmar (derived from equityCurve). */
+  calmarPeriodDays?: number | null;
+  /** Annualized total return (decimal), used to compute time-normalized Calmar. */
+  annualizedReturn?: number | null;
   expectancyStd?: number | null;
   expectancyCi95?: { lower: number; upper: number } | null;
   equityCurve: EquityPoint[];
@@ -480,10 +484,31 @@ export function computeAggregateMetrics(
   }
 
   // Calmar ratio (practical, non-annualized): total return / max drawdown pct
+  // Calmar ratio — time-normalized: annualized return / max drawdown (as fraction)
   let calmarRatio: number | null = null;
+  let calmarPeriodDays: number | null = null;
+  let annualizedReturn: number | null = null;
   if (startingBalance > 0 && maxDrawdownPct > 0) {
-    const totalReturn = startingBalance > 0 ? netPnl / startingBalance : 0;
-    calmarRatio = totalReturn / (maxDrawdownPct / 100);
+    const totalReturn = netPnl / startingBalance; // can be negative
+    // Determine time span from equity curve if available; otherwise fallback to 1 day
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    let years = 1 / 365; // default to 1 day expressed in years
+    let days = 1;
+    if (equityCurve.length >= 2) {
+      const firstTs = new Date(equityCurve[0].timestamp).getTime();
+      const lastTs = new Date(equityCurve[equityCurve.length - 1].timestamp).getTime();
+      days = Math.max(1, (lastTs - firstTs) / MS_PER_DAY);
+      years = days / 365;
+    }
+    calmarPeriodDays = Math.round(days);
+    // Annualized return using chain-linking: (1+totalReturn)^(1/years) - 1
+    // Guard against negative base when totalReturn <= -1 (full loss)
+    if (totalReturn <= -1) {
+      annualizedReturn = -1;
+    } else {
+      annualizedReturn = Math.pow(1 + totalReturn, 1 / years) - 1;
+    }
+    calmarRatio = (maxDrawdownPct > 0) ? annualizedReturn / (maxDrawdownPct / 100) : null;
   }
 
   // Recovery factor: net P&L divided by absolute max drawdown amount
@@ -505,6 +530,8 @@ export function computeAggregateMetrics(
     sharpePerTrade,
     sortinoPerTrade,
     calmarRatio,
+    calmarPeriodDays,
+    annualizedReturn,
     recoveryFactor,
     expectancyStd,
     expectancyCi95,
