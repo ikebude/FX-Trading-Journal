@@ -168,6 +168,8 @@ const api = {
     setSyncInterval: (hours: number) => ipcRenderer.invoke('calendar:set-sync-interval', hours),
     syncNow: () => ipcRenderer.invoke('calendar:sync-now'),
     getSyncSettings: () => ipcRenderer.invoke('calendar:get-sync-settings'),
+    checkBlackout: (symbol: string, timestampUtc: string, windowMinutes?: number) =>
+      ipcRenderer.invoke('calendar:check-blackout', symbol, timestampUtc, windowMinutes),
   },
 
   // ── Reports ───────────────────────────────────────

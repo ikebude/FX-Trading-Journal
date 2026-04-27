@@ -20,11 +20,11 @@ import { readFileSync } from 'node:fs';
 import Papa from 'papaparse';
 import log from 'electron-log/main.js';
 import { nanoid } from 'nanoid';
-import { gte, lte, and, isNull, sql, eq } from 'drizzle-orm';
+import { gte, lte, and, isNull, sql, eq, inArray } from 'drizzle-orm';
 import { fromZonedTime } from 'date-fns-tz';
 
 import { getDb } from '../../src/lib/db/client';
-import { newsEvents, tradeNewsEvents, trades, tradeLegs, settings as settingsTable } from '../../src/lib/db/schema';
+import { newsEvents, tradeNewsEvents, trades, tradeLegs, instruments, settings as settingsTable } from '../../src/lib/db/schema';
 
 // ─────────────────────────────────────────────────────────────
 // ForexFactory CSV row
@@ -374,6 +374,73 @@ export function registerCalendarHandlers(): void {
       throw new Error('Failed to sync calendar');
     }
   });
+
+  ipcMain.handle(
+    'calendar:check-blackout',
+    async (_e, symbol: string, timestampUtc: string, windowMinutes?: number) => {
+      try {
+        const db = getDb();
+
+        // Resolve window from settings if not provided
+        const minutes =
+          windowMinutes ??
+          parseInt(await getSettingValue('news_blackout_minutes', '15'), 10);
+
+        // Resolve currencies from instruments table; fall back to 6-char split
+        const sym = symbol.toUpperCase();
+        const instrRow = await db
+          .select({ baseCurrency: instruments.baseCurrency, quoteCurrency: instruments.quoteCurrency })
+          .from(instruments)
+          .where(eq(instruments.symbol, sym))
+          .limit(1);
+
+        let currencies: string[];
+        if (instrRow[0]?.baseCurrency || instrRow[0]?.quoteCurrency) {
+          currencies = [instrRow[0].baseCurrency, instrRow[0].quoteCurrency].filter(
+            (c): c is string => !!c,
+          );
+        } else if (sym.length === 6) {
+          currencies = [sym.slice(0, 3), sym.slice(3, 6)];
+        } else {
+          return { events: [] };
+        }
+
+        const t = new Date(timestampUtc);
+        const windowMs = minutes * 60 * 1000;
+        const rangeFrom = new Date(t.getTime() - windowMs).toISOString();
+        const rangeTo = new Date(t.getTime() + windowMs).toISOString();
+
+        const rows = await db
+          .select()
+          .from(newsEvents)
+          .where(
+            and(
+              inArray(newsEvents.currency, currencies),
+              eq(newsEvents.impact, 'HIGH'),
+              gte(newsEvents.timestampUtc, rangeFrom),
+              lte(newsEvents.timestampUtc, rangeTo),
+            ),
+          )
+          .orderBy(newsEvents.timestampUtc);
+
+        const events = rows.map((e) => ({
+          id: e.id,
+          title: e.title,
+          currency: e.currency,
+          impact: e.impact,
+          timestampUtc: e.timestampUtc,
+          minutesDiff: Math.round(
+            (new Date(e.timestampUtc).getTime() - t.getTime()) / 60000,
+          ),
+        }));
+
+        return { events };
+      } catch (err) {
+        log.error('calendar:check-blackout', err);
+        throw new Error('Failed to check news blackout');
+      }
+    },
+  );
 
   ipcMain.handle('calendar:get-sync-settings', async () => {
     try {

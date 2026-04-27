@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertTriangle } from 'lucide-react';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { cn } from '@/lib/cn';
 import { CreateTradeSchema, QuickTradeSchema } from '@/lib/schemas';
@@ -89,6 +90,41 @@ function Field({
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
       {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// News blackout warning — shown when HIGH-impact events are near entry time
+// ─────────────────────────────────────────────────────────────
+
+interface NewsEvent { title: string; currency: string; minutesDiff: number }
+interface BlackoutResult { events: NewsEvent[] }
+
+function NewsBlackoutWarning({ symbol, timestampUtc }: { symbol: string; timestampUtc: string }) {
+  const { data } = useQuery<BlackoutResult>({
+    queryKey: ['news-blackout', symbol, timestampUtc.slice(0, 16)],
+    queryFn: () =>
+      window.ledger.calendar.checkBlackout(symbol, timestampUtc) as Promise<BlackoutResult>,
+    enabled: symbol.length >= 3,
+    staleTime: 60_000,
+  });
+
+  const events = data?.events ?? [];
+  if (events.length === 0) return null;
+
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-xs text-amber-400">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span>
+        <span className="font-semibold">High-impact news nearby: </span>
+        {events
+          .map(
+            (e) =>
+              `${e.currency} — ${e.title} (${e.minutesDiff >= 0 ? `+${e.minutesDiff}m` : `${e.minutesDiff}m`})`,
+          )
+          .join(', ')}
+      </span>
     </div>
   );
 }
@@ -256,6 +292,8 @@ function QuickForm({
           </div>
         </Field>
       </div>
+
+      <NewsBlackoutWarning symbol={watch('symbol') ?? ''} timestampUtc={new Date().toISOString()} />
 
       {/* Price + Volume */}
       <div className="grid grid-cols-2 gap-2">
@@ -572,6 +610,14 @@ function FullForm({
               </div>
             </Field>
           </div>
+
+          {/* News blackout warning — shown when high-impact events are near entry time */}
+          {!isEdit && (
+            <NewsBlackoutWarning
+              symbol={watch('symbol') ?? ''}
+              timestampUtc={entryLeg.timestampUtc}
+            />
+          )}
 
           {/* Entry leg (new trade only) */}
           {!isEdit && (
