@@ -70,6 +70,7 @@ export function registerTradeHandlers(): void {
           plannedRr: parsed.plannedRr ?? null,
           plannedRiskAmount: parsed.plannedRiskAmount ?? null,
           plannedRiskPct: parsed.plannedRiskPct ?? null,
+          methodologyId: parsed.methodologyId ?? null,
           setupName: parsed.setupName ?? null,
           session: session ?? null,
           marketCondition: parsed.marketCondition ?? null,
