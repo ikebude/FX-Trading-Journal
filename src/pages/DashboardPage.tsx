@@ -238,7 +238,7 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
             <div className="font-medium">Calmar Ratio (time-normalized)</div>
             <div className="text-xs text-muted-foreground mt-1">Calmar = annualized return ÷ max drawdown</div>
             <div className="text-xs text-muted-foreground mt-1">
-              Annualized return: {agg.annualizedReturn !== null ? `${(agg.annualizedReturn * 100).toFixed(2)}%` : '—'}
+              Annualized return: {agg.annualizedReturn != null ? `${(agg.annualizedReturn * 100).toFixed(2)}%` : '—'}
             </div>
             <div className="text-xs text-muted-foreground">Period used: {agg.calmarPeriodDays ?? '—'} day{(agg.calmarPeriodDays ?? 0) !== 1 ? 's' : ''}</div>
             <div className="text-xs text-muted-foreground mt-1">Max drawdown: {agg.maxDrawdownPct.toFixed(2)}%</div>
