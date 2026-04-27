@@ -48,6 +48,20 @@ export const GLOSSARY: GlossaryEntry[] = [
     seeAlso: ['Sharpe Ratio'],
   },
   {
+    term: 'Calmar Ratio',
+    definition:
+      'Risk-adjusted performance metric computed as annualized return divided by maximum drawdown (as a fraction). Higher is better; values >1 are generally desirable. In FXLedger Calmar is time-normalized using the equity-curve period.',
+    example: 'Annualized return 20% and max drawdown 10% → Calmar = 0.20 / 0.10 = 2.0',
+    seeAlso: ['Max Drawdown', 'Equity Curve'],
+  },
+  {
+    term: 'Recovery Factor',
+    definition:
+      'Net P&L divided by absolute maximum drawdown. Measures how many units of net profit were earned per unit of the largest peak-to-trough loss. Higher is better; values <1 indicate the account has not recovered from its largest drawdown.',
+    example: 'Net P&L $2,000, Max DD $1,000 → Recovery Factor = 2.0',
+    seeAlso: ['Max Drawdown'],
+  },
+  {
     term: 'Max Drawdown',
     definition:
       'The largest peak-to-trough decline in account equity during the measured period. A key risk metric — prop firms set hard limits on this.',
