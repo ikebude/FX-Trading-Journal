@@ -178,6 +178,10 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
       label: 'Expectancy',
       value: agg.expectancy !== null ? formatR(agg.expectancy) : '—',
       metric: 'Expectancy',
+      tooltip:
+        agg.expectancyCi95 && agg.expectancy !== null
+          ? `95% CI: ${formatR(agg.expectancyCi95.lower)} — ${formatR(agg.expectancyCi95.upper)}`
+          : undefined,
     },
     {
       label: 'Net P&L',
@@ -194,6 +198,21 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
       label: 'Sharpe',
       value: agg.sharpePerTrade !== null ? agg.sharpePerTrade.toFixed(2) : '—',
       metric: 'Sharpe Ratio',
+    },
+    {
+      label: 'Sortino',
+      value: agg.sortinoPerTrade !== null ? agg.sortinoPerTrade.toFixed(2) : '—',
+      metric: 'Sortino Ratio',
+    },
+    {
+      label: 'Calmar',
+      value: agg.calmarRatio !== null ? agg.calmarRatio.toFixed(2) : '—',
+      metric: 'Calmar Ratio',
+    },
+    {
+      label: 'Recovery',
+      value: agg.recoveryFactor !== null ? agg.recoveryFactor.toFixed(2) : '—',
+      metric: 'Recovery Factor',
     },
   ];
 
