@@ -21,6 +21,8 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { buildModifiedDietzCurve } from '@/lib/equity-curve';
+import type { BalanceOperation } from '@/lib/db/schema';
 import { Button } from '@/components/ui/button';
 import {
   AreaChart,
@@ -235,16 +237,52 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Widget: Equity curve
+// Widget: Equity curve (Modified Dietz)
 // ─────────────────────────────────────────────────────────────
 
-function EquityCurveWidget({ agg }: { agg: AggregateMetrics }) {
-  if (agg.equityCurve.length === 0) return <EmptyWidget />;
+interface EquityCurveWidgetProps {
+  agg: AggregateMetrics;
+  accountId: string | null;
+  startingBalance: number;
+}
+
+function EquityCurveWidget({ agg, accountId, startingBalance }: EquityCurveWidgetProps) {
+  const { data: balanceOps = [] } = useQuery<BalanceOperation[]>({
+    queryKey: ['balance-ops', accountId ?? '__all__'],
+    queryFn: () =>
+      accountId
+        ? (window.ledger.balanceOps.list(accountId) as Promise<BalanceOperation[]>)
+        : Promise.resolve([]),
+    enabled: !!accountId,
+    staleTime: 60_000,
+  });
+
+  const dietzPoints = useMemo(
+    () =>
+      buildModifiedDietzCurve(
+        startingBalance,
+        agg.equityCurve,
+        balanceOps
+          .filter((op) => !op.deletedAtUtc)
+          .map((op) => ({
+            timestampUtc: op.occurredAtUtc,
+            amount: op.amount,
+            opType: op.opType,
+          })),
+      ),
+    [startingBalance, agg.equityCurve, balanceOps],
+  );
+
+  if (dietzPoints.length === 0) return <EmptyWidget />;
+
+  const depositTimestamps = dietzPoints
+    .filter((p) => p.cashFlowAmount !== undefined)
+    .map((p) => p.timestamp);
 
   return (
     <ResponsiveContainer width="100%" height={180}>
       <AreaChart
-        data={agg.equityCurve}
+        data={dietzPoints}
         margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
       >
         <defs>
@@ -273,17 +311,25 @@ function EquityCurveWidget({ agg }: { agg: AggregateMetrics }) {
             borderRadius: 6,
             fontSize: 11,
           }}
-          formatter={(value: number, name: string) => [
-            name === 'equity'
-              ? formatCurrency(value)
-              : `-${formatCurrency(value)}`,
-            name === 'equity' ? 'Equity' : 'Drawdown',
-          ]}
+          formatter={(value: number, name: string) => {
+            if (name === 'balance') return [formatCurrency(value), 'Balance'];
+            if (name === 'drawdown') return [`-${formatCurrency(value)}`, 'Drawdown'];
+            return [value, name];
+          }}
           labelFormatter={(ts: string) => ts.slice(0, 10)}
         />
+        {depositTimestamps.map((ts) => (
+          <ReferenceLine
+            key={ts}
+            x={ts}
+            stroke="#60a5fa"
+            strokeDasharray="3 3"
+            strokeOpacity={0.6}
+          />
+        ))}
         <Area
           type="monotone"
-          dataKey="equity"
+          dataKey="balance"
           stroke="#34d399"
           strokeWidth={2}
           fill="url(#equityGrad)"
@@ -754,6 +800,16 @@ export function DashboardPage() {
     staleTime: 60_000,
   });
 
+  const { data: activeAccount } = useQuery<{ initialBalance: number } | null>({
+    queryKey: ['accounts', activeAccountId],
+    queryFn: () =>
+      activeAccountId
+        ? (window.ledger.accounts.get(activeAccountId) as Promise<{ initialBalance: number }>)
+        : Promise.resolve(null),
+    enabled: !!activeAccountId,
+    staleTime: 60_000,
+  });
+
   const PRESETS: { key: Preset; label: string }[] = [
     { key: '7d', label: '7D' },
     { key: '30d', label: '30D' },
@@ -831,7 +887,11 @@ export function DashboardPage() {
         {/* Row 1: Equity curve (wide) + Streak */}
         <div className="grid grid-cols-3 gap-4">
           <WidgetCard title="Equity curve" metric="Equity Curve" className="col-span-2">
-            <EquityCurveWidget agg={aggregate} />
+            <EquityCurveWidget
+              agg={aggregate}
+              accountId={activeAccountId}
+              startingBalance={activeAccount?.initialBalance ?? 0}
+            />
           </WidgetCard>
           <WidgetCard title="Win / loss streak">
             <StreakWidget info={streakInfo} />
