@@ -29,6 +29,7 @@ import { Glossary } from '@/components/help/Glossary';
 import { EAInstallGuide } from '@/components/help/EAInstallGuide';
 import { GuidedTour } from '@/components/tour/GuidedTour';
 import { useGlobalKeys } from '@/hooks/useGlobalKeys';
+import { useTheme } from '@/hooks/useTheme';
 import { NewTradeDialog } from '@/components/trade-form/NewTradeDialog';
 import { TradeDetailDrawer } from '@/components/trade-detail/TradeDetailDrawer';
 import { ToastProvider, useToast } from '@/components/ui/toast';
@@ -124,6 +125,8 @@ function AppShell() {
     queryKey: ['settings'],
     queryFn: () => window.ledger.settings.get(),
   });
+
+  useTheme(settings?.theme);
   // Show tour once: when first_run_complete is false and we have settings loaded
   const firstRunRef = useState(false);
   if (settings && settings.first_run_complete === false && !firstRunRef[0]) {
