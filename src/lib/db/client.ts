@@ -88,6 +88,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration005(sqlite);
   }
 
+  if (currentVersion < 6) {
+    applyMigration006(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -462,6 +466,41 @@ function applyMigration005(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 005 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 006 — seed built-in prop firm presets
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration006(sqlite: Database.Database): void {
+  log.info('Database: applying migration 006 (prop firm preset seeds)');
+
+  const now = new Date().toISOString();
+  const migrate = sqlite.transaction(() => {
+    const insert = sqlite.prepare(
+      `INSERT OR IGNORE INTO prop_firm_presets
+         (id, name, max_drawdown_pct, max_daily_loss_pct, max_drawdown_amount,
+          is_active, created_at_utc, updated_at_utc)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    );
+
+    const firms = [
+      { id: 'ftmo',        name: 'FTMO',           maxDdPct: 10, maxDailyPct: 5,   maxDdAmt: null },
+      { id: 'mff',         name: 'MyForexFunds',   maxDdPct: 12, maxDailyPct: 5,   maxDdAmt: null },
+      { id: 'topstep',     name: 'Topstep',        maxDdPct: 6,  maxDailyPct: 3,   maxDdAmt: null },
+      { id: 'e8',          name: 'E8 Funding',     maxDdPct: 8,  maxDailyPct: 4,   maxDdAmt: null },
+      { id: 'fundednext',  name: 'FundedNext',     maxDdPct: 10, maxDailyPct: 5,   maxDdAmt: null },
+    ];
+
+    for (const f of firms) {
+      insert.run(f.id, f.name, f.maxDdPct, f.maxDailyPct, f.maxDdAmt, now, now);
+    }
+
+    sqlite.pragma('user_version = 6');
+  });
+
+  migrate();
+  log.info('Database: migration 006 complete');
 }
 
 /**
