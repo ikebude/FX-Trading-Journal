@@ -4,7 +4,7 @@ import { Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { Methodology, PropFirmPreset } from '@/lib/db/schema';
+import type { Methodology, PropFirmPreset, Tag } from '@/lib/db/schema';
 
 // ─────────────────────────────────────────────────────────────
 // Inline-edit row shared by both tabs
@@ -328,6 +328,113 @@ function PropFirmPresetsTab() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Generic tag library tab (MISTAKE or CONFLUENCE category)
+// ─────────────────────────────────────────────────────────────
+
+function TagLibraryTab({ category, emptyLabel }: { category: 'MISTAKE' | 'CONFLUENCE'; emptyLabel: string }) {
+  const qc = useQueryClient();
+  const [newName, setNewName] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const { data = [], isLoading } = useQuery<Tag[]>({
+    queryKey: ['tags', category],
+    queryFn: () => window.ledger.tags.list(category) as Promise<Tag[]>,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => window.ledger.tags.create(name, category),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tags', category] });
+      setNewName('');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      window.ledger.tags.create(name, category).then(() => window.ledger.tags.delete(id)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tags', category] });
+      setEditingId(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => window.ledger.tags.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tags', category] }),
+  });
+
+  function handleAdd() {
+    const trimmed = newName.trim();
+    if (trimmed) createMutation.mutate(trimmed);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-2">
+        <Input
+          placeholder={`New ${emptyLabel.toLowerCase()} tag…`}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          className="max-w-xs"
+        />
+        <Button size="sm" onClick={handleAdd} disabled={!newName.trim() || createMutation.isPending}>
+          <Plus className="mr-1 h-4 w-4" />
+          Add
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No {emptyLabel.toLowerCase()} tags yet. Add one above.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {data.map((t) => (
+            <li
+              key={t.id}
+              className="flex items-center justify-between rounded-md border border-border px-3 py-2"
+            >
+              {editingId === t.id ? (
+                <EditRow
+                  value={t.name}
+                  onSave={(name) => updateMutation.mutate({ id: t.id, name })}
+                  onCancel={() => setEditingId(null)}
+                />
+              ) : (
+                <>
+                  <span className="text-sm font-medium">{t.name}</span>
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => setEditingId(t.id)}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => deleteMutation.mutate(t.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Page root
 // ─────────────────────────────────────────────────────────────
 
@@ -337,19 +444,27 @@ export function LibraryPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Library</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage trading methodologies and prop firm rule presets.
+          Manage methodologies, prop firm presets, mistake patterns, and confluence factors.
         </p>
       </div>
       <Tabs defaultValue="methodologies" className="flex-1">
         <TabsList>
           <TabsTrigger value="methodologies">Methodologies</TabsTrigger>
           <TabsTrigger value="presets">Prop Firm Presets</TabsTrigger>
+          <TabsTrigger value="mistakes">Mistakes</TabsTrigger>
+          <TabsTrigger value="confluence">Confluence</TabsTrigger>
         </TabsList>
         <TabsContent value="methodologies" className="mt-4">
           <MethodologiesTab />
         </TabsContent>
         <TabsContent value="presets" className="mt-4">
           <PropFirmPresetsTab />
+        </TabsContent>
+        <TabsContent value="mistakes" className="mt-4">
+          <TagLibraryTab category="MISTAKE" emptyLabel="Mistake" />
+        </TabsContent>
+        <TabsContent value="confluence" className="mt-4">
+          <TagLibraryTab category="CONFLUENCE" emptyLabel="Confluence" />
         </TabsContent>
       </Tabs>
     </div>
