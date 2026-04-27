@@ -27,6 +27,8 @@ import { registerTagHandlers } from './tags';
 import { registerTradeHandlers } from './trades';
 import { registerUpdaterHandlers } from './updater';
 import { registerReconciliationHandlers } from './reconciliation';
+import { registerLibraryHandlers } from './library';
+import { registerBalanceOpHandlers } from './balance-ops';
 
 interface AppConfig {
   data_dir: string;
@@ -69,6 +71,8 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   registerStubHandlers();
   registerUpdaterHandlers();
   registerReconciliationHandlers();
+  registerLibraryHandlers();
+  registerBalanceOpHandlers();
 
   log.info('IPC: all handlers registered');
 }

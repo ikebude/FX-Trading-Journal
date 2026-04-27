@@ -29,6 +29,7 @@ import { Glossary } from '@/components/help/Glossary';
 import { EAInstallGuide } from '@/components/help/EAInstallGuide';
 import { GuidedTour } from '@/components/tour/GuidedTour';
 import { useGlobalKeys } from '@/hooks/useGlobalKeys';
+import { useTheme } from '@/hooks/useTheme';
 import { NewTradeDialog } from '@/components/trade-form/NewTradeDialog';
 import { TradeDetailDrawer } from '@/components/trade-detail/TradeDetailDrawer';
 import { ToastProvider, useToast } from '@/components/ui/toast';
@@ -43,6 +44,7 @@ import { TrashPage } from '@/pages/TrashPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { OverlayPage } from '@/pages/OverlayPage';
 import { ImporterPage } from '@/pages/ImporterPage';
+import { LibraryPage } from '@/pages/LibraryPage';
 
 // ─────────────────────────────────────────────────────────────
 // TanStack Query client
@@ -123,6 +125,8 @@ function AppShell() {
     queryKey: ['settings'],
     queryFn: () => window.ledger.settings.get(),
   });
+
+  useTheme(settings?.theme);
   // Show tour once: when first_run_complete is false and we have settings loaded
   const firstRunRef = useState(false);
   if (settings && settings.first_run_complete === false && !firstRunRef[0]) {
@@ -231,6 +235,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const libraryRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/library',
+  component: LibraryPage,
+});
+
 const eaGuideRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/settings/ea-guide',
@@ -246,6 +256,7 @@ const routeTree = rootRoute.addChildren([
     calendarRoute,
     reportsRoute,
     importRoute,
+    libraryRoute,
     trashRoute,
     settingsRoute,
     eaGuideRoute,

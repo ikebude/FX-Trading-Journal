@@ -168,6 +168,8 @@ const api = {
     setSyncInterval: (hours: number) => ipcRenderer.invoke('calendar:set-sync-interval', hours),
     syncNow: () => ipcRenderer.invoke('calendar:sync-now'),
     getSyncSettings: () => ipcRenderer.invoke('calendar:get-sync-settings'),
+    checkBlackout: (symbol: string, timestampUtc: string, windowMinutes?: number) =>
+      ipcRenderer.invoke('calendar:check-blackout', symbol, timestampUtc, windowMinutes),
   },
 
   // ── Reports ───────────────────────────────────────
@@ -224,6 +226,44 @@ const api = {
       ipcRenderer.invoke('reconciliation:detect-drift', accountId),
     createCorrection: (accountId: string, driftAmount: number, note?: string) =>
       ipcRenderer.invoke('reconciliation:create-correction', accountId, driftAmount, note),
+  },
+
+  // ── Library (methodologies + prop firm presets) ───
+  library: {
+    methodologies: {
+      list: (activeOnly?: boolean) =>
+        ipcRenderer.invoke('library:methodologies:list', activeOnly) as Promise<unknown[]>,
+      get: (id: string) =>
+        ipcRenderer.invoke('library:methodologies:get', id) as Promise<unknown>,
+      create: (data: unknown) =>
+        ipcRenderer.invoke('library:methodologies:create', data) as Promise<unknown>,
+      update: (id: string, data: unknown) =>
+        ipcRenderer.invoke('library:methodologies:update', id, data) as Promise<void>,
+      delete: (id: string) =>
+        ipcRenderer.invoke('library:methodologies:delete', id) as Promise<void>,
+    },
+    presets: {
+      list: (activeOnly?: boolean) =>
+        ipcRenderer.invoke('library:presets:list', activeOnly) as Promise<unknown[]>,
+      get: (id: string) =>
+        ipcRenderer.invoke('library:presets:get', id) as Promise<unknown>,
+      create: (data: unknown) =>
+        ipcRenderer.invoke('library:presets:create', data) as Promise<unknown>,
+      update: (id: string, data: unknown) =>
+        ipcRenderer.invoke('library:presets:update', id, data) as Promise<void>,
+      delete: (id: string) =>
+        ipcRenderer.invoke('library:presets:delete', id) as Promise<void>,
+    },
+  },
+
+  // ── Balance operations (deposits / withdrawals) ───
+  balanceOps: {
+    list: (accountId: string, includeDeleted?: boolean) =>
+      ipcRenderer.invoke('balance-ops:list', accountId, includeDeleted) as Promise<unknown[]>,
+    create: (data: unknown) =>
+      ipcRenderer.invoke('balance-ops:create', data) as Promise<unknown>,
+    delete: (id: string) =>
+      ipcRenderer.invoke('balance-ops:delete', id) as Promise<void>,
   },
 
   // ── File dialogs ──────────────────────────────────

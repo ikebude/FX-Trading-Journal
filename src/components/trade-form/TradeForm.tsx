@@ -8,11 +8,13 @@
  * After success, invalidates the 'trades' query so the blotter refreshes.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
+import { computePipValuePerLot } from '@/lib/risk-calc';
+import type { TradeRow } from '@/lib/db/queries';
 import { useAppStore } from '@/stores/app-store';
 
 import { Button } from '@/components/ui/button';
@@ -27,10 +29,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertTriangle } from 'lucide-react';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { cn } from '@/lib/cn';
 import { CreateTradeSchema, QuickTradeSchema } from '@/lib/schemas';
-import type { Account, Instrument, Trade, Setup } from '@/lib/db/schema';
+import type { Account, Instrument, Methodology, Trade, Setup } from '@/lib/db/schema';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -94,6 +97,41 @@ function Field({
 }
 
 // ─────────────────────────────────────────────────────────────
+// News blackout warning — shown when HIGH-impact events are near entry time
+// ─────────────────────────────────────────────────────────────
+
+interface NewsEvent { title: string; currency: string; minutesDiff: number }
+interface BlackoutResult { events: NewsEvent[] }
+
+function NewsBlackoutWarning({ symbol, timestampUtc }: { symbol: string; timestampUtc: string }) {
+  const { data } = useQuery<BlackoutResult>({
+    queryKey: ['news-blackout', symbol, timestampUtc.slice(0, 16)],
+    queryFn: () =>
+      window.ledger.calendar.checkBlackout(symbol, timestampUtc) as Promise<BlackoutResult>,
+    enabled: symbol.length >= 3,
+    staleTime: 60_000,
+  });
+
+  const events = data?.events ?? [];
+  if (events.length === 0) return null;
+
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-xs text-amber-400">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span>
+        <span className="font-semibold">High-impact news nearby: </span>
+        {events
+          .map(
+            (e) =>
+              `${e.currency} — ${e.title} (${e.minutesDiff >= 0 ? `+${e.minutesDiff}m` : `${e.minutesDiff}m`})`,
+          )
+          .join(', ')}
+      </span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Star confidence selector (1–5)
 // ─────────────────────────────────────────────────────────────
 
@@ -131,6 +169,7 @@ function QuickForm({
   accounts,
   instruments,
   setups,
+  methodologies,
   onSuccess,
   onCancel,
   customSubmitHandler,
@@ -138,6 +177,7 @@ function QuickForm({
   accounts: Account[];
   instruments: Instrument[];
   setups: Setup[];
+  methodologies: Methodology[];
   onSuccess?: () => void;
   onCancel?: () => void;
   customSubmitHandler?: (data: QuickFormValues) => Promise<void>;
@@ -174,6 +214,7 @@ function QuickForm({
   const direction = watch('direction');
   const confidence = watch('confidence');
   const preEmotion = watch('preTradeEmotion');
+  const methodologyId = watch('methodologyId' as keyof QuickFormValues) as string | undefined;
 
   async function onSubmit(data: QuickFormValues) {
     setSaving(true);
@@ -254,6 +295,8 @@ function QuickForm({
         </Field>
       </div>
 
+      <NewsBlackoutWarning symbol={watch('symbol') ?? ''} timestampUtc={new Date().toISOString()} />
+
       {/* Price + Volume */}
       <div className="grid grid-cols-2 gap-2">
         <Field label="Entry Price" error={errors.price?.message}>
@@ -313,6 +356,34 @@ function QuickForm({
         </Field>
       </div>
 
+      {/* Methodology chips */}
+      {methodologies.length > 0 && (
+        <Field label="Methodology">
+          <div className="flex flex-wrap gap-1">
+            {methodologies.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() =>
+                  (setValue as (name: string, value: unknown) => void)(
+                    'methodologyId',
+                    methodologyId === m.id ? undefined : m.id,
+                  )
+                }
+                className={cn(
+                  'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+                  methodologyId === m.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:border-border/60',
+                )}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
+
       {/* Pre-trade emotion */}
       <Field label="Pre-trade emotion">
         <div className="flex flex-wrap gap-1">
@@ -361,6 +432,7 @@ function FullForm({
   accounts,
   instruments,
   setups,
+  methodologies,
   existingTrade,
   onSuccess,
   onCancel,
@@ -369,6 +441,7 @@ function FullForm({
   accounts: Account[];
   instruments: Instrument[];
   setups: Setup[];
+  methodologies: Methodology[];
   existingTrade?: Trade;
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -397,6 +470,7 @@ function FullForm({
           initialStopPrice: existingTrade.initialStopPrice ?? undefined,
           initialTargetPrice: existingTrade.initialTargetPrice ?? undefined,
           plannedRiskPct: existingTrade.plannedRiskPct ?? undefined,
+          methodologyId: existingTrade.methodologyId ?? undefined,
           setupName: existingTrade.setupName ?? undefined,
           marketCondition: existingTrade.marketCondition ?? undefined,
           entryModel: existingTrade.entryModel ?? undefined,
@@ -424,7 +498,10 @@ function FullForm({
   const confidence = watch('confidence');
   const preEmotion = watch('preTradeEmotion');
   const postEmotion = watch('postTradeEmotion');
+  const methodologyId = watch('methodologyId');
   const rawEntryLeg = watch('entryLeg');
+  const watchedSymbol = watch('symbol');
+  const watchedStop = watch('initialStopPrice');
   // Guarantee required numeric fields so spread merges never produce undefined values
   const entryLeg = {
     timestampUtc: rawEntryLeg?.timestampUtc ?? new Date().toISOString(),
@@ -433,6 +510,58 @@ function FullForm({
     commission: rawEntryLeg?.commission ?? 0,
     swap: rawEntryLeg?.swap ?? 0,
   };
+
+  // Risk computation data
+  const watchedAccountId = watch('accountId');
+  const { data: activeAccount } = useQuery<Account | null>({
+    queryKey: ['account', watchedAccountId],
+    queryFn: () => (watchedAccountId ? window.ledger.accounts.get(watchedAccountId) : null),
+    enabled: !!watchedAccountId && !isEdit,
+  });
+
+  const { data: openTradesData } = useQuery<{ rows: TradeRow[]; total: number }>({
+    queryKey: ['trades-open-risk', watchedAccountId],
+    queryFn: () =>
+      window.ledger.trades.list({
+        accountId: watchedAccountId,
+        status: ['OPEN', 'PARTIAL'],
+        includeDeleted: false,
+        includeSample: false,
+        pageSize: 500,
+      }),
+    enabled: !!watchedAccountId && !isEdit,
+    staleTime: 30_000,
+  });
+
+  const computedRisk = useMemo(() => {
+    if (isEdit) return null;
+    const ep = entryLeg.price;
+    const sp = watchedStop;
+    const vol = entryLeg.volumeLots;
+    if (!ep || !sp || !vol || ep <= 0 || sp <= 0 || vol <= 0) return null;
+    const instr = instruments.find((i) => i.symbol === watchedSymbol?.toUpperCase());
+    if (!instr) return null;
+    const balance = activeAccount?.initialBalance;
+    if (!balance || balance <= 0) return null;
+    const pvp = computePipValuePerLot(
+      instr.pipSize,
+      instr.contractSize,
+      ep,
+      instr.quoteCurrency ?? 'USD',
+      activeAccount?.accountCurrency ?? 'USD',
+    );
+    const pipsAtRisk = Math.abs(ep - sp) / instr.pipSize;
+    const riskAmount = pipsAtRisk * pvp * vol;
+    const riskPct = (riskAmount / balance) * 100;
+    return { riskAmount, riskPct };
+  }, [isEdit, entryLeg.price, entryLeg.volumeLots, watchedStop, watchedSymbol, instruments, activeAccount]);
+
+  const openRiskTotal = useMemo(() => {
+    if (isEdit) return null;
+    const rows = openTradesData?.rows ?? [];
+    const total = rows.reduce((s, t) => s + (t.plannedRiskAmount ?? 0), 0);
+    return total > 0 ? total : null;
+  }, [isEdit, openTradesData]);
 
   async function onSubmit(data: FullFormValues) {
     setSaving(true);
@@ -450,6 +579,7 @@ function FullForm({
             plannedRr: data.plannedRr,
             plannedRiskAmount: data.plannedRiskAmount,
             plannedRiskPct: data.plannedRiskPct,
+            methodologyId: data.methodologyId,
             setupName: data.setupName,
             marketCondition: data.marketCondition,
             entryModel: data.entryModel,
@@ -537,6 +667,14 @@ function FullForm({
             </Field>
           </div>
 
+          {/* News blackout warning — shown when high-impact events are near entry time */}
+          {!isEdit && (
+            <NewsBlackoutWarning
+              symbol={watch('symbol') ?? ''}
+              timestampUtc={entryLeg.timestampUtc}
+            />
+          )}
+
           {/* Entry leg (new trade only) */}
           {!isEdit && (
             <>
@@ -585,6 +723,31 @@ function FullForm({
                 </Field>
               </div>
             </>
+          )}
+
+          {/* Methodology chips */}
+          {methodologies.length > 0 && (
+            <Field label="Methodology">
+              <div className="flex flex-wrap gap-1">
+                {methodologies.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() =>
+                      setValue('methodologyId', methodologyId === m.id ? undefined : m.id)
+                    }
+                    className={cn(
+                      'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+                      methodologyId === m.id
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-border/60',
+                    )}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            </Field>
           )}
 
           {/* Setup */}
@@ -646,6 +809,35 @@ function FullForm({
               />
             </Field>
           </div>
+
+          {/* Computed risk indicator */}
+          {computedRisk && (
+            <div
+              className={cn(
+                'flex items-center justify-between rounded-md border px-3 py-2 text-xs',
+                computedRisk.riskPct > 2
+                  ? 'border-rose-500/30 bg-rose-950/30 text-rose-400'
+                  : computedRisk.riskPct > 1
+                    ? 'border-amber-500/30 bg-amber-950/30 text-amber-400'
+                    : 'border-emerald-500/30 bg-emerald-950/30 text-emerald-400',
+              )}
+            >
+              <span>Computed risk (from entry/stop/vol)</span>
+              <span className="font-semibold tabular-nums">
+                ${computedRisk.riskAmount.toFixed(2)} · {computedRisk.riskPct.toFixed(2)}%
+                {computedRisk.riskPct > 1 && (
+                  <span className="ml-1 opacity-80">
+                    {computedRisk.riskPct > 2 ? '⚠ Exceeds 2%' : '⚠ Exceeds 1%'}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+          {openRiskTotal != null && (
+            <p className="text-[11px] text-muted-foreground">
+              Open positions risk total: ${openRiskTotal.toFixed(2)}
+            </p>
+          )}
 
           <Field label="Entry model">
             <Select
@@ -778,12 +970,18 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel, c
     queryFn: () => window.ledger.setups.list(),
   });
 
+  const { data: methodologies = [] } = useQuery<Methodology[]>({
+    queryKey: ['library', 'methodologies'],
+    queryFn: () => window.ledger.library.methodologies.list() as Promise<Methodology[]>,
+  });
+
   if (mode === 'quick') {
     return (
       <QuickForm
         accounts={accounts}
         instruments={instruments}
         setups={setups}
+        methodologies={methodologies}
         onSuccess={onSuccess}
         onCancel={onCancel}
         customSubmitHandler={customSubmitHandler}
@@ -796,6 +994,7 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel, c
       accounts={accounts}
       instruments={instruments}
       setups={setups}
+      methodologies={methodologies}
       existingTrade={existingTrade}
       onSuccess={onSuccess}
       onCancel={onCancel}

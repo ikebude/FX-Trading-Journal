@@ -327,6 +327,15 @@ export interface AggregateMetrics {
   maxDrawdown: number;
   maxDrawdownPct: number;
   sharpePerTrade: number | null;
+  sortinoPerTrade: number | null;
+  calmarRatio: number | null;
+  recoveryFactor: number | null;
+  /** Number of days used to annualize Calmar (derived from equityCurve). */
+  calmarPeriodDays?: number | null;
+  /** Annualized total return (decimal), used to compute time-normalized Calmar. */
+  annualizedReturn?: number | null;
+  expectancyStd?: number | null;
+  expectancyCi95?: { lower: number; upper: number } | null;
   equityCurve: EquityPoint[];
 }
 
@@ -368,7 +377,18 @@ export function computeAggregateMetrics(
     .filter((r): r is number => r !== null);
   const averageR =
     rValues.length > 0 ? sum(rValues) / rValues.length : null;
-  const expectancy = averageR; // Same definition; provided as a separate name for UI clarity.
+  // True expectancy: E = (winRate × avgWin) − ((1−winRate) × avgLoss)
+  // Degenerates to averageR when all trades are wins or all are losses.
+  const winRValues = rValues.filter((r) => r > 0);
+  const lossRValues = rValues.filter((r) => r < 0);
+  let expectancy: number | null;
+  if (winRValues.length > 0 && lossRValues.length > 0) {
+    const avgWin = sum(winRValues) / winRValues.length;
+    const avgLoss = sum(lossRValues.map(Math.abs)) / lossRValues.length;
+    expectancy = winRate * avgWin - (1 - winRate) * avgLoss;
+  } else {
+    expectancy = averageR;
+  }
 
   const winningPnl = sum(
     closed
@@ -439,6 +459,73 @@ export function computeAggregateMetrics(
       stdev > 0 ? (mean / stdev) * Math.sqrt(tradeReturns.length) : null;
   }
 
+  // Sortino per trade — use downside deviation (negative returns only)
+  let sortinoPerTrade: number | null = null;
+  if (tradeReturns.length > 1) {
+    const mean = sum(tradeReturns) / tradeReturns.length;
+    const downsideSqSum = sum(tradeReturns.map((r) => Math.min(r, 0) ** 2));
+    // Use population denominator N for downside deviation as a conservative measure
+    const downsideVar = downsideSqSum / tradeReturns.length;
+    const downsideStdev = Math.sqrt(downsideVar);
+    sortinoPerTrade = downsideStdev > 0 ? (mean / downsideStdev) * Math.sqrt(tradeReturns.length) : null;
+  }
+
+  // Expectancy statistics (in R-multiples)
+  let expectancyStd: number | null = null;
+  let expectancyCi95: { lower: number; upper: number } | null = null;
+  if (rValues.length > 1 && expectancy !== null) {
+    const meanR = sum(rValues) / rValues.length;
+    const varR = sum(rValues.map((r) => (r - meanR) ** 2)) / (rValues.length - 1);
+    const sdR = Math.sqrt(varR);
+    expectancyStd = sdR;
+    const se = sdR / Math.sqrt(rValues.length);
+    const z = 1.96; // 95% CI
+    expectancyCi95 = { lower: expectancy - z * se, upper: expectancy + z * se };
+  }
+
+  // Calmar ratio (practical, non-annualized): total return / max drawdown pct
+  // Calmar ratio — time-normalized: annualized return / max drawdown (as fraction)
+  let calmarRatio: number | null = null;
+  let calmarPeriodDays: number | null = null;
+  let annualizedReturn: number | null = null;
+  // Minimum measurement window (days) required to produce a stable annualized value.
+  // Short measurement windows produce misleadingly large annualized figures —
+  // for these cases we fall back to the non-annualized Calmar (total return / max drawdown).
+  const MIN_ANNUALIZATION_DAYS = 30;
+  if (startingBalance > 0 && maxDrawdownPct > 0) {
+    const totalReturn = netPnl / startingBalance; // can be negative
+    // Determine time span from equity curve if available; otherwise fallback to 1 day
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    let years = 1 / 365; // default to 1 day expressed in years
+    let days = 1;
+    if (equityCurve.length >= 2) {
+      const firstTs = new Date(equityCurve[0].timestamp).getTime();
+      const lastTs = new Date(equityCurve[equityCurve.length - 1].timestamp).getTime();
+      days = Math.max(1, (lastTs - firstTs) / MS_PER_DAY);
+      years = days / 365;
+    }
+    calmarPeriodDays = Math.round(days);
+    // If the measurement period is too short, avoid annualizing because the
+    // resulting figure will be unstable and misleading. In that case we fall
+    // back to the practical (non-annualized) Calmar: totalReturn / maxDrawdown.
+    if (calmarPeriodDays < MIN_ANNUALIZATION_DAYS) {
+      annualizedReturn = null;
+      calmarRatio = (maxDrawdownPct > 0) ? totalReturn / (maxDrawdownPct / 100) : null;
+    } else {
+      // Annualized return using chain-linking: (1+totalReturn)^(1/years) - 1
+      // Guard against negative base when totalReturn <= -1 (full loss)
+      if (totalReturn <= -1) {
+        annualizedReturn = -1;
+      } else {
+        annualizedReturn = Math.pow(1 + totalReturn, 1 / years) - 1;
+      }
+      calmarRatio = (maxDrawdownPct > 0) ? annualizedReturn / (maxDrawdownPct / 100) : null;
+    }
+  }
+
+  // Recovery factor: net P&L divided by absolute max drawdown amount
+  const recoveryFactor = maxDrawdown > 0 ? netPnl / maxDrawdown : null;
+
   return {
     totalTrades,
     closedTrades,
@@ -453,6 +540,13 @@ export function computeAggregateMetrics(
     maxDrawdown,
     maxDrawdownPct,
     sharpePerTrade,
+    sortinoPerTrade,
+    calmarRatio,
+    calmarPeriodDays,
+    annualizedReturn,
+    recoveryFactor,
+    expectancyStd,
+    expectancyCi95,
     equityCurve,
   };
 }

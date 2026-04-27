@@ -1,12 +1,16 @@
 import { ipcMain } from 'electron';
 import log from 'electron-log/main.js';
 
+import { startOfDay, endOfDay } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+
 import {
   addTagsToTrade,
   bulkUpdateTrades,
   clearSampleData,
   createLeg,
   createTrade,
+  getAccount,
   getTrade,
   hardDeleteTrades,
   listTrades,
@@ -51,6 +55,9 @@ export function registerTradeHandlers(): void {
     try {
       const parsed = CreateTradeSchema.parse(data);
 
+      // Circuit breaker: block new entries on PROP accounts that have hit daily loss
+      await enforceDailyLossGuard(parsed.accountId);
+
       // Detect session from entry leg timestamp if provided
       let session: string | undefined;
       if (parsed.entryLeg?.timestampUtc) {
@@ -70,6 +77,7 @@ export function registerTradeHandlers(): void {
           plannedRr: parsed.plannedRr ?? null,
           plannedRiskAmount: parsed.plannedRiskAmount ?? null,
           plannedRiskPct: parsed.plannedRiskPct ?? null,
+          methodologyId: parsed.methodologyId ?? null,
           setupName: parsed.setupName ?? null,
           session: session ?? null,
           marketCondition: parsed.marketCondition ?? null,
@@ -297,5 +305,63 @@ export async function recomputeAndSaveTrade(tradeId: string): Promise<void> {
     });
   } catch (err) {
     log.error(`recomputeAndSaveTrade: P&L computation failed for ${tradeId}`, err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Daily loss circuit breaker
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Throws if the account is a PROP account whose daily loss limit has already
+ * been reached or exceeded for the current calendar day (in the account's
+ * configured timezone, or UTC if none is set).
+ *
+ * Only fires when at least one daily-loss rule is configured on the account.
+ * Passes silently for LIVE/DEMO accounts and accounts with no rules.
+ */
+async function enforceDailyLossGuard(accountId: string): Promise<void> {
+  const account = await getAccount(accountId);
+  if (!account || account.accountType !== 'PROP') return;
+
+  const hasLimit = account.propDailyLossLimit != null || account.propDailyLossPct != null;
+  if (!hasLimit) return;
+
+  // Resolve absolute dollar limit
+  let limit: number;
+  if (account.propDailyLossLimit != null) {
+    limit = account.propDailyLossLimit;
+  } else {
+    if (account.initialBalance <= 0) return;
+    limit = (account.propDailyLossPct! / 100) * account.initialBalance;
+  }
+
+  // "Today" in the account's timezone (or UTC)
+  const tz = account.timezone ?? 'UTC';
+  const nowInTz = toZonedTime(new Date(), tz);
+  const todayStart = fromZonedTime(startOfDay(nowInTz), tz).toISOString();
+  const todayEnd = fromZonedTime(endOfDay(nowInTz), tz).toISOString();
+
+  const { rows } = await listTrades({
+    accountId,
+    status: ['CLOSED'],
+    dateFrom: todayStart,
+    dateTo: todayEnd,
+    includeDeleted: false,
+    deletedOnly: false,
+    includeSample: false,
+    page: 1,
+    pageSize: 2000,
+    sortBy: 'closed_at_utc',
+    sortDir: 'asc',
+  });
+
+  const todayPnl = rows.reduce((sum, t) => sum + (t.netPnl ?? 0), 0);
+
+  if (todayPnl < 0 && Math.abs(todayPnl) >= limit) {
+    throw new Error(
+      `Daily loss limit reached (−$${Math.abs(todayPnl).toFixed(2)} of $${limit.toFixed(2)} limit). ` +
+      `New trades are blocked until tomorrow.`,
+    );
   }
 }

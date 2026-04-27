@@ -80,6 +80,18 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration003(sqlite);
   }
 
+  if (currentVersion < 4) {
+    applyMigration004(sqlite);
+  }
+
+  if (currentVersion < 5) {
+    applyMigration005(sqlite);
+  }
+
+  if (currentVersion < 6) {
+    applyMigration006(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -383,6 +395,112 @@ function applyMigration003(sqlite: Database.Database): void {
   migrate();
   sqlite.pragma('foreign_keys = ON');
   log.info('Database: migration 003 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 004 — methodologies + prop_firm_presets tables
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration004(sqlite: Database.Database): void {
+  log.info('Database: applying migration 004 (methodologies + prop_firm_presets)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS methodologies (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL UNIQUE,
+        description     TEXT,
+        is_active       INTEGER NOT NULL DEFAULT 1,
+        created_at_utc  TEXT NOT NULL,
+        updated_at_utc  TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS prop_firm_presets (
+        id                    TEXT PRIMARY KEY,
+        name                  TEXT NOT NULL UNIQUE,
+        max_drawdown_pct      REAL,
+        max_daily_loss_pct    REAL,
+        max_drawdown_amount   REAL,
+        is_active             INTEGER NOT NULL DEFAULT 1,
+        created_at_utc        TEXT NOT NULL,
+        updated_at_utc        TEXT NOT NULL
+      );
+    `);
+
+    sqlite.pragma('user_version = 4');
+  });
+
+  migrate();
+  log.info('Database: migration 004 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 005 — trades.methodology_id + seed built-in methodologies
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration005(sqlite: Database.Database): void {
+  log.info('Database: applying migration 005 (trades.methodology_id + methodology seeds)');
+
+  const now = new Date().toISOString();
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN methodology_id TEXT REFERENCES methodologies(id);`);
+
+    // Seed five universal methodology presets — traders can rename/delete them
+    const seedMethods = [
+      { id: 'smc',     name: 'SMC',             description: 'Smart Money Concepts — order blocks, FVGs, liquidity sweeps' },
+      { id: 'ict',     name: 'ICT',             description: 'Inner Circle Trader — market structure, optimal trade entries' },
+      { id: 'wyckoff', name: 'Wyckoff',         description: 'Wyckoff accumulation/distribution schematics' },
+      { id: 'pa',      name: 'Price Action',    description: 'Pure price action — candle patterns, S/R, trend following' },
+      { id: 'snr',     name: 'Supply & Demand', description: 'Supply and demand zone trading' },
+    ];
+    const insert = sqlite.prepare(
+      `INSERT OR IGNORE INTO methodologies(id, name, description, is_active, created_at_utc, updated_at_utc)
+       VALUES (?, ?, ?, 1, ?, ?)`,
+    );
+    for (const m of seedMethods) {
+      insert.run(m.id, m.name, m.description, now, now);
+    }
+
+    sqlite.pragma('user_version = 5');
+  });
+
+  migrate();
+  log.info('Database: migration 005 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 006 — seed built-in prop firm presets
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration006(sqlite: Database.Database): void {
+  log.info('Database: applying migration 006 (prop firm preset seeds)');
+
+  const now = new Date().toISOString();
+  const migrate = sqlite.transaction(() => {
+    const insert = sqlite.prepare(
+      `INSERT OR IGNORE INTO prop_firm_presets
+         (id, name, max_drawdown_pct, max_daily_loss_pct, max_drawdown_amount,
+          is_active, created_at_utc, updated_at_utc)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    );
+
+    const firms = [
+      { id: 'ftmo',        name: 'FTMO',           maxDdPct: 10, maxDailyPct: 5,   maxDdAmt: null },
+      { id: 'mff',         name: 'MyForexFunds',   maxDdPct: 12, maxDailyPct: 5,   maxDdAmt: null },
+      { id: 'topstep',     name: 'Topstep',        maxDdPct: 6,  maxDailyPct: 3,   maxDdAmt: null },
+      { id: 'e8',          name: 'E8 Funding',     maxDdPct: 8,  maxDailyPct: 4,   maxDdAmt: null },
+      { id: 'fundednext',  name: 'FundedNext',     maxDdPct: 10, maxDailyPct: 5,   maxDdAmt: null },
+    ];
+
+    for (const f of firms) {
+      insert.run(f.id, f.name, f.maxDdPct, f.maxDailyPct, f.maxDdAmt, now, now);
+    }
+
+    sqlite.pragma('user_version = 6');
+  });
+
+  migrate();
+  log.info('Database: migration 006 complete');
 }
 
 /**

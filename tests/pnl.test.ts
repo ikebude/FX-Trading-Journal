@@ -627,6 +627,30 @@ describe('computeAggregateMetrics — portfolio math', () => {
     expect(m.closedTrades).toBe(1);
     expect(m.wins).toBe(1);
   });
+
+  it('35. True expectancy: 2 wins (R=+1, R=+2), 1 loss (R=−1)', () => {
+    // winRate=2/3, avgWin=(1+2)/2=1.5, avgLoss=1
+    // E = (2/3)*1.5 − (1/3)*1 = 1.0 − 0.333 = 0.667
+    const bundles = [
+      bundle([entry(1.085, 1.0, '2026-04-01T10:00:00Z'), exit(1.09, 1.0, '2026-04-01T12:00:00Z')], 1.08),    // R=+1
+      bundle([entry(1.085, 1.0, '2026-04-02T10:00:00Z'), exit(1.095, 1.0, '2026-04-02T12:00:00Z')], 1.08),  // R=+2
+      bundle([entry(1.085, 1.0, '2026-04-03T10:00:00Z'), exit(1.08, 1.0, '2026-04-03T12:00:00Z')], 1.08),   // R=−1
+    ];
+    const m = computeAggregateMetrics(bundles, 10000);
+    expect(m.expectancy).toBeCloseTo(0.667, 2);
+  });
+
+  it('36. Expectancy with all wins → falls back to averageR (degenerate case)', () => {
+    // No losses → winRValues.length > 0, lossRValues.length === 0 → degenerate
+    const bundles = [
+      bundle([entry(1.085, 1.0, '2026-04-01T10:00:00Z'), exit(1.09, 1.0, '2026-04-01T12:00:00Z')], 1.08),   // R=+1
+      bundle([entry(1.085, 1.0, '2026-04-02T10:00:00Z'), exit(1.095, 1.0, '2026-04-02T12:00:00Z')], 1.08), // R=+2
+    ];
+    const m = computeAggregateMetrics(bundles, 10000);
+    // averageR = (1+2)/2 = 1.5; expectancy falls back to averageR
+    expect(m.expectancy).toBeCloseTo(1.5, 3);
+    expect(m.expectancy).toBeCloseTo(m.averageR!, 3);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────

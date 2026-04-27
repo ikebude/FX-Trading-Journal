@@ -117,6 +117,7 @@ export const trades = sqliteTable(
     plannedRiskPct: real('planned_risk_pct'),
 
     // Qualitative context
+    methodologyId: text('methodology_id').references(() => methodologies.id),
     setupName: text('setup_name'),
     session: text('session'),
     marketCondition: text('market_condition', {
@@ -303,6 +304,32 @@ export const setups = sqliteTable('setups', {
   description: text('description'),
   isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+});
+
+// ─────────────────────────────────────────────────────────────
+// Methodologies (user-defined trading methodologies / tags)
+// ─────────────────────────────────────────────────────────────
+export const methodologies = sqliteTable('methodologies', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  description: text('description'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAtUtc: text('created_at_utc').notNull(),
+  updatedAtUtc: text('updated_at_utc').notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────
+// Prop firm presets
+// ─────────────────────────────────────────────────────────────
+export const propFirmPresets = sqliteTable('prop_firm_presets', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  maxDrawdownPct: real('max_drawdown_pct'),
+  maxDailyLossPct: real('max_daily_loss_pct'),
+  maxDrawdownAmount: real('max_drawdown_amount'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAtUtc: text('created_at_utc').notNull(),
+  updatedAtUtc: text('updated_at_utc').notNull(),
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -604,3 +631,7 @@ export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type ImportRun = typeof importRuns.$inferSelect;
 export type BalanceOperation = typeof balanceOperations.$inferSelect;
 export type NewBalanceOperation = typeof balanceOperations.$inferInsert;
+export type Methodology = typeof methodologies.$inferSelect;
+export type NewMethodology = typeof methodologies.$inferInsert;
+export type PropFirmPreset = typeof propFirmPresets.$inferSelect;
+export type NewPropFirmPreset = typeof propFirmPresets.$inferInsert;
