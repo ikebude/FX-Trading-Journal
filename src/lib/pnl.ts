@@ -488,6 +488,10 @@ export function computeAggregateMetrics(
   let calmarRatio: number | null = null;
   let calmarPeriodDays: number | null = null;
   let annualizedReturn: number | null = null;
+  // Minimum measurement window (days) required to produce a stable annualized value.
+  // Short measurement windows produce misleadingly large annualized figures —
+  // for these cases we fall back to the non-annualized Calmar (total return / max drawdown).
+  const MIN_ANNUALIZATION_DAYS = 30;
   if (startingBalance > 0 && maxDrawdownPct > 0) {
     const totalReturn = netPnl / startingBalance; // can be negative
     // Determine time span from equity curve if available; otherwise fallback to 1 day
@@ -501,14 +505,22 @@ export function computeAggregateMetrics(
       years = days / 365;
     }
     calmarPeriodDays = Math.round(days);
-    // Annualized return using chain-linking: (1+totalReturn)^(1/years) - 1
-    // Guard against negative base when totalReturn <= -1 (full loss)
-    if (totalReturn <= -1) {
-      annualizedReturn = -1;
+    // If the measurement period is too short, avoid annualizing because the
+    // resulting figure will be unstable and misleading. In that case we fall
+    // back to the practical (non-annualized) Calmar: totalReturn / maxDrawdown.
+    if (calmarPeriodDays < MIN_ANNUALIZATION_DAYS) {
+      annualizedReturn = null;
+      calmarRatio = (maxDrawdownPct > 0) ? totalReturn / (maxDrawdownPct / 100) : null;
     } else {
-      annualizedReturn = Math.pow(1 + totalReturn, 1 / years) - 1;
+      // Annualized return using chain-linking: (1+totalReturn)^(1/years) - 1
+      // Guard against negative base when totalReturn <= -1 (full loss)
+      if (totalReturn <= -1) {
+        annualizedReturn = -1;
+      } else {
+        annualizedReturn = Math.pow(1 + totalReturn, 1 / years) - 1;
+      }
+      calmarRatio = (maxDrawdownPct > 0) ? annualizedReturn / (maxDrawdownPct / 100) : null;
     }
-    calmarRatio = (maxDrawdownPct > 0) ? annualizedReturn / (maxDrawdownPct / 100) : null;
   }
 
   // Recovery factor: net P&L divided by absolute max drawdown amount
