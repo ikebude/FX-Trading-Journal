@@ -287,6 +287,21 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
           >
             {value}
           </p>
+          {/* Calmar short-period badge */}
+          {label === 'Calmar' && agg.annualizedReturn == null && agg.calmarRatio !== null ? (
+            <HintTooltip>
+              <HintTooltipTrigger asChild>
+                <div className="mx-auto mt-1 inline-block">
+                  <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-medium text-white">Not annualized</span>
+                </div>
+              </HintTooltipTrigger>
+              <HintTooltipContent className="max-w-48 text-left">
+                <div className="font-medium">Calmar not annualized</div>
+                <div className="text-xs text-muted-foreground mt-1">Measurement period is too short to annualize (shown value is non-annualized Calmar).</div>
+                <div className="text-xs text-muted-foreground mt-1">Consider increasing the analysis window to get an annualized Calmar.</div>
+              </HintTooltipContent>
+            </HintTooltip>
+          ) : null}
           {metric ? (
             <MetricTooltip metric={metric}>
               <p className="mt-0.5 text-[10px] text-muted-foreground">{label}</p>
