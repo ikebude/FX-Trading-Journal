@@ -141,7 +141,7 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
     value: string;
     color?: string;
     metric?: string;
-    tooltip?: string;
+    tooltip?: React.ReactNode;
   }> = [
     { label: 'Trades', value: String(agg.closedTrades) },
     {
@@ -179,9 +179,18 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
       value: agg.expectancy !== null ? formatR(agg.expectancy) : '—',
       metric: 'Expectancy',
       tooltip:
-        agg.expectancyCi95 && agg.expectancy !== null
-          ? `95% CI: ${formatR(agg.expectancyCi95.lower)} — ${formatR(agg.expectancyCi95.upper)}`
-          : undefined,
+        agg.expectancyCi95 && agg.expectancy !== null ? (
+          <div className="text-left">
+            <div className="font-medium">Expectancy</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Mean: {formatR(agg.expectancy)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              95% CI: {formatR(agg.expectancyCi95.lower)} — {formatR(agg.expectancyCi95.upper)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">n = {agg.closedTrades} trade{agg.closedTrades !== 1 ? 's' : ''}</div>
+          </div>
+        ) : undefined,
     },
     {
       label: 'Net P&L',
@@ -203,16 +212,63 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
       label: 'Sortino',
       value: agg.sortinoPerTrade !== null ? agg.sortinoPerTrade.toFixed(2) : '—',
       metric: 'Sortino Ratio',
+      tooltip: (
+        <div className="text-left">
+          <div className="font-medium">Sortino ratio</div>
+          <div className="text-xs text-muted-foreground mt-1">Uses downside deviation (neg. returns only). Higher is better.</div>
+          <div className="text-xs text-muted-foreground mt-1">n = {agg.closedTrades} trade{agg.closedTrades !== 1 ? 's' : ''}</div>
+        </div>
+      ),
+      color:
+        agg.sortinoPerTrade !== null
+          ? agg.sortinoPerTrade >= 1
+            ? 'text-emerald-400'
+            : agg.sortinoPerTrade >= 0.5
+            ? 'text-amber-400'
+            : 'text-rose-400'
+          : undefined,
     },
     {
       label: 'Calmar',
       value: agg.calmarRatio !== null ? agg.calmarRatio.toFixed(2) : '—',
       metric: 'Calmar Ratio',
+      tooltip:
+        agg.calmarRatio !== null ? (
+          <div className="text-left">
+            <div className="font-medium">Calmar Ratio (time-normalized)</div>
+            <div className="text-xs text-muted-foreground mt-1">Calmar = annualized return ÷ max drawdown</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Annualized return: {agg.annualizedReturn !== null ? `${(agg.annualizedReturn * 100).toFixed(2)}%` : '—'}
+            </div>
+            <div className="text-xs text-muted-foreground">Period used: {agg.calmarPeriodDays ?? '—'} day{(agg.calmarPeriodDays ?? 0) !== 1 ? 's' : ''}</div>
+            <div className="text-xs text-muted-foreground mt-1">Max drawdown: {agg.maxDrawdownPct.toFixed(2)}%</div>
+            <div className="text-xs text-muted-foreground mt-2 italic">Interpreting: higher is better. Values &lt;1 indicate annualized return smaller than drawdown.</div>
+          </div>
+        ) : (
+          'Calmar requires a positive starting balance and a non-zero max drawdown.'
+        ),
+      color:
+        agg.calmarRatio !== null
+          ? agg.calmarRatio >= 2
+            ? 'text-emerald-400'
+            : agg.calmarRatio >= 1
+            ? 'text-amber-400'
+            : 'text-rose-400'
+          : undefined,
     },
     {
       label: 'Recovery',
       value: agg.recoveryFactor !== null ? agg.recoveryFactor.toFixed(2) : '—',
       metric: 'Recovery Factor',
+      tooltip: 'Recovery Factor = Net P&L / Max Drawdown — higher indicates efficient recovery',
+      color:
+        agg.recoveryFactor !== null
+          ? agg.recoveryFactor >= 2
+            ? 'text-emerald-400'
+            : agg.recoveryFactor >= 1
+            ? 'text-amber-400'
+            : 'text-rose-400'
+          : undefined,
     },
   ];
 
