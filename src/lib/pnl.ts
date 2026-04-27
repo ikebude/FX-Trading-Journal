@@ -327,6 +327,11 @@ export interface AggregateMetrics {
   maxDrawdown: number;
   maxDrawdownPct: number;
   sharpePerTrade: number | null;
+  sortinoPerTrade: number | null;
+  calmarRatio: number | null;
+  recoveryFactor: number | null;
+  expectancyStd?: number | null;
+  expectancyCi95?: { lower: number; upper: number } | null;
   equityCurve: EquityPoint[];
 }
 
@@ -450,6 +455,40 @@ export function computeAggregateMetrics(
       stdev > 0 ? (mean / stdev) * Math.sqrt(tradeReturns.length) : null;
   }
 
+  // Sortino per trade — use downside deviation (negative returns only)
+  let sortinoPerTrade: number | null = null;
+  if (tradeReturns.length > 1) {
+    const mean = sum(tradeReturns) / tradeReturns.length;
+    const downsideSqSum = sum(tradeReturns.map((r) => Math.min(r, 0) ** 2));
+    // Use population denominator N for downside deviation as a conservative measure
+    const downsideVar = downsideSqSum / tradeReturns.length;
+    const downsideStdev = Math.sqrt(downsideVar);
+    sortinoPerTrade = downsideStdev > 0 ? (mean / downsideStdev) * Math.sqrt(tradeReturns.length) : null;
+  }
+
+  // Expectancy statistics (in R-multiples)
+  let expectancyStd: number | null = null;
+  let expectancyCi95: { lower: number; upper: number } | null = null;
+  if (rValues.length > 1 && expectancy !== null) {
+    const meanR = sum(rValues) / rValues.length;
+    const varR = sum(rValues.map((r) => (r - meanR) ** 2)) / (rValues.length - 1);
+    const sdR = Math.sqrt(varR);
+    expectancyStd = sdR;
+    const se = sdR / Math.sqrt(rValues.length);
+    const z = 1.96; // 95% CI
+    expectancyCi95 = { lower: expectancy - z * se, upper: expectancy + z * se };
+  }
+
+  // Calmar ratio (practical, non-annualized): total return / max drawdown pct
+  let calmarRatio: number | null = null;
+  if (startingBalance > 0 && maxDrawdownPct > 0) {
+    const totalReturn = startingBalance > 0 ? netPnl / startingBalance : 0;
+    calmarRatio = totalReturn / (maxDrawdownPct / 100);
+  }
+
+  // Recovery factor: net P&L divided by absolute max drawdown amount
+  const recoveryFactor = maxDrawdown > 0 ? netPnl / maxDrawdown : null;
+
   return {
     totalTrades,
     closedTrades,
@@ -464,6 +503,11 @@ export function computeAggregateMetrics(
     maxDrawdown,
     maxDrawdownPct,
     sharpePerTrade,
+    sortinoPerTrade,
+    calmarRatio,
+    recoveryFactor,
+    expectancyStd,
+    expectancyCi95,
     equityCurve,
   };
 }
