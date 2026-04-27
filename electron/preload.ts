@@ -256,6 +256,16 @@ const api = {
     },
   },
 
+  // ── Balance operations (deposits / withdrawals) ───
+  balanceOps: {
+    list: (accountId: string, includeDeleted?: boolean) =>
+      ipcRenderer.invoke('balance-ops:list', accountId, includeDeleted) as Promise<unknown[]>,
+    create: (data: unknown) =>
+      ipcRenderer.invoke('balance-ops:create', data) as Promise<unknown>,
+    delete: (id: string) =>
+      ipcRenderer.invoke('balance-ops:delete', id) as Promise<void>,
+  },
+
   // ── File dialogs ──────────────────────────────────
   file: {
     pickFile: (filters?: Array<{ name: string; extensions: string[] }>) =>

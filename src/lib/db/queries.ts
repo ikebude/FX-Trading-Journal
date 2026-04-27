@@ -13,6 +13,7 @@ import { getDb } from './client';
 import {
   accounts,
   auditLog,
+  balanceOperations,
   instruments,
   reviews,
   screenshots,
@@ -24,6 +25,8 @@ import {
   trades,
   type Account,
   type AuditLogEntry,
+  type BalanceOperation,
+  type NewBalanceOperation,
   type Instrument,
   type NewAccount,
   type NewTrade,
@@ -790,4 +793,54 @@ export async function searchTrades(query: string, accountId?: string): Promise<s
     .from(trades)
     .where(and(inArray(trades.id, ids), eq(trades.accountId, accountId)));
   return filtered.map((r) => r.id);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Balance operations
+// ─────────────────────────────────────────────────────────────
+
+export async function listBalanceOps(
+  accountId: string,
+  includeDeleted = false,
+): Promise<BalanceOperation[]> {
+  const db = getDb();
+  const conditions = [eq(balanceOperations.accountId, accountId)];
+  if (!includeDeleted) conditions.push(isNull(balanceOperations.deletedAtUtc));
+  return db
+    .select()
+    .from(balanceOperations)
+    .where(and(...conditions))
+    .orderBy(desc(balanceOperations.occurredAtUtc));
+}
+
+export async function createBalanceOp(
+  data: Omit<NewBalanceOperation, 'id' | 'recordedAtUtc' | 'createdAtUtc' | 'updatedAtUtc'>,
+): Promise<BalanceOperation> {
+  const db = getDb();
+  const now = nowUtc();
+  const id = newId();
+  await db.insert(balanceOperations).values({
+    ...data,
+    id,
+    recordedAtUtc: now,
+    createdAtUtc: now,
+    updatedAtUtc: now,
+  });
+  await writeAudit('BALANCE_OP', id, 'BALANCE_OP_CREATE');
+  const rows = await db
+    .select()
+    .from(balanceOperations)
+    .where(eq(balanceOperations.id, id))
+    .limit(1);
+  return rows[0];
+}
+
+export async function softDeleteBalanceOp(id: string): Promise<void> {
+  const db = getDb();
+  const now = nowUtc();
+  await db
+    .update(balanceOperations)
+    .set({ deletedAtUtc: now, updatedAtUtc: now })
+    .where(eq(balanceOperations.id, id));
+  await writeAudit('BALANCE_OP', id, 'BALANCE_OP_DELETE');
 }
