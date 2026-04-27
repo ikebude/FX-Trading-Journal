@@ -117,6 +117,7 @@ export const trades = sqliteTable(
     plannedRiskPct: real('planned_risk_pct'),
 
     // Qualitative context
+    methodologyId: text('methodology_id').references(() => methodologies.id),
     setupName: text('setup_name'),
     session: text('session'),
     marketCondition: text('market_condition', {

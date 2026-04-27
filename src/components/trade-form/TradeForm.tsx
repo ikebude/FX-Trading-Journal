@@ -30,7 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { cn } from '@/lib/cn';
 import { CreateTradeSchema, QuickTradeSchema } from '@/lib/schemas';
-import type { Account, Instrument, Trade, Setup } from '@/lib/db/schema';
+import type { Account, Instrument, Methodology, Trade, Setup } from '@/lib/db/schema';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -131,6 +131,7 @@ function QuickForm({
   accounts,
   instruments,
   setups,
+  methodologies,
   onSuccess,
   onCancel,
   customSubmitHandler,
@@ -138,6 +139,7 @@ function QuickForm({
   accounts: Account[];
   instruments: Instrument[];
   setups: Setup[];
+  methodologies: Methodology[];
   onSuccess?: () => void;
   onCancel?: () => void;
   customSubmitHandler?: (data: QuickFormValues) => Promise<void>;
@@ -174,6 +176,7 @@ function QuickForm({
   const direction = watch('direction');
   const confidence = watch('confidence');
   const preEmotion = watch('preTradeEmotion');
+  const methodologyId = watch('methodologyId' as keyof QuickFormValues) as string | undefined;
 
   async function onSubmit(data: QuickFormValues) {
     setSaving(true);
@@ -313,6 +316,34 @@ function QuickForm({
         </Field>
       </div>
 
+      {/* Methodology chips */}
+      {methodologies.length > 0 && (
+        <Field label="Methodology">
+          <div className="flex flex-wrap gap-1">
+            {methodologies.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() =>
+                  (setValue as (name: string, value: unknown) => void)(
+                    'methodologyId',
+                    methodologyId === m.id ? undefined : m.id,
+                  )
+                }
+                className={cn(
+                  'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+                  methodologyId === m.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:border-border/60',
+                )}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
+
       {/* Pre-trade emotion */}
       <Field label="Pre-trade emotion">
         <div className="flex flex-wrap gap-1">
@@ -361,6 +392,7 @@ function FullForm({
   accounts,
   instruments,
   setups,
+  methodologies,
   existingTrade,
   onSuccess,
   onCancel,
@@ -369,6 +401,7 @@ function FullForm({
   accounts: Account[];
   instruments: Instrument[];
   setups: Setup[];
+  methodologies: Methodology[];
   existingTrade?: Trade;
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -397,6 +430,7 @@ function FullForm({
           initialStopPrice: existingTrade.initialStopPrice ?? undefined,
           initialTargetPrice: existingTrade.initialTargetPrice ?? undefined,
           plannedRiskPct: existingTrade.plannedRiskPct ?? undefined,
+          methodologyId: existingTrade.methodologyId ?? undefined,
           setupName: existingTrade.setupName ?? undefined,
           marketCondition: existingTrade.marketCondition ?? undefined,
           entryModel: existingTrade.entryModel ?? undefined,
@@ -424,6 +458,7 @@ function FullForm({
   const confidence = watch('confidence');
   const preEmotion = watch('preTradeEmotion');
   const postEmotion = watch('postTradeEmotion');
+  const methodologyId = watch('methodologyId');
   const rawEntryLeg = watch('entryLeg');
   // Guarantee required numeric fields so spread merges never produce undefined values
   const entryLeg = {
@@ -450,6 +485,7 @@ function FullForm({
             plannedRr: data.plannedRr,
             plannedRiskAmount: data.plannedRiskAmount,
             plannedRiskPct: data.plannedRiskPct,
+            methodologyId: data.methodologyId,
             setupName: data.setupName,
             marketCondition: data.marketCondition,
             entryModel: data.entryModel,
@@ -585,6 +621,31 @@ function FullForm({
                 </Field>
               </div>
             </>
+          )}
+
+          {/* Methodology chips */}
+          {methodologies.length > 0 && (
+            <Field label="Methodology">
+              <div className="flex flex-wrap gap-1">
+                {methodologies.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() =>
+                      setValue('methodologyId', methodologyId === m.id ? undefined : m.id)
+                    }
+                    className={cn(
+                      'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+                      methodologyId === m.id
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-border/60',
+                    )}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            </Field>
           )}
 
           {/* Setup */}
@@ -778,12 +839,18 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel, c
     queryFn: () => window.ledger.setups.list(),
   });
 
+  const { data: methodologies = [] } = useQuery<Methodology[]>({
+    queryKey: ['library', 'methodologies'],
+    queryFn: () => window.ledger.library.methodologies.list() as Promise<Methodology[]>,
+  });
+
   if (mode === 'quick') {
     return (
       <QuickForm
         accounts={accounts}
         instruments={instruments}
         setups={setups}
+        methodologies={methodologies}
         onSuccess={onSuccess}
         onCancel={onCancel}
         customSubmitHandler={customSubmitHandler}
@@ -796,6 +863,7 @@ export function TradeForm({ mode = 'full', existingTrade, onSuccess, onCancel, c
       accounts={accounts}
       instruments={instruments}
       setups={setups}
+      methodologies={methodologies}
       existingTrade={existingTrade}
       onSuccess={onSuccess}
       onCancel={onCancel}

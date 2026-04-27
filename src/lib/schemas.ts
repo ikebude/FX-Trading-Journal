@@ -106,6 +106,7 @@ export const CreateTradeSchema = z.object({
   plannedRiskPct: z.number().min(0).max(100).optional(),
 
   // Qualitative
+  methodologyId: z.string().optional(),
   setupName: z.string().max(100).optional(),
   marketCondition: z.enum(['TRENDING', 'RANGING', 'NEWS_VOLATILITY']).optional(),
   entryModel: z.enum(['LIMIT', 'MARKET', 'STOP_ENTRY', 'ON_RETEST']).optional(),
@@ -146,6 +147,7 @@ export const QuickTradeSchema = z.object({
   volumeLots: positiveReal,
   initialStopPrice: positiveReal.optional(),
   initialTargetPrice: positiveReal.optional(),
+  methodologyId: z.string().optional(),
   setupName: z.string().max(100).optional(),
   confidence: z.number().int().min(1).max(5).optional(),
   preTradeEmotion: z

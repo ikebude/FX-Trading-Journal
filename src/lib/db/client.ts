@@ -84,6 +84,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration004(sqlite);
   }
 
+  if (currentVersion < 5) {
+    applyMigration005(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -424,6 +428,40 @@ function applyMigration004(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 004 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 005 — trades.methodology_id + seed built-in methodologies
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration005(sqlite: Database.Database): void {
+  log.info('Database: applying migration 005 (trades.methodology_id + methodology seeds)');
+
+  const now = new Date().toISOString();
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN methodology_id TEXT REFERENCES methodologies(id);`);
+
+    // Seed five universal methodology presets — traders can rename/delete them
+    const seedMethods = [
+      { id: 'smc',     name: 'SMC',             description: 'Smart Money Concepts — order blocks, FVGs, liquidity sweeps' },
+      { id: 'ict',     name: 'ICT',             description: 'Inner Circle Trader — market structure, optimal trade entries' },
+      { id: 'wyckoff', name: 'Wyckoff',         description: 'Wyckoff accumulation/distribution schematics' },
+      { id: 'pa',      name: 'Price Action',    description: 'Pure price action — candle patterns, S/R, trend following' },
+      { id: 'snr',     name: 'Supply & Demand', description: 'Supply and demand zone trading' },
+    ];
+    const insert = sqlite.prepare(
+      `INSERT OR IGNORE INTO methodologies(id, name, description, is_active, created_at_utc, updated_at_utc)
+       VALUES (?, ?, ?, 1, ?, ?)`,
+    );
+    for (const m of seedMethods) {
+      insert.run(m.id, m.name, m.description, now, now);
+    }
+
+    sqlite.pragma('user_version = 5');
+  });
+
+  migrate();
+  log.info('Database: migration 005 complete');
 }
 
 /**
