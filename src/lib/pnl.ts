@@ -39,6 +39,9 @@ export interface Trade {
   setup_name?: string | null;
   session?: string | null;
   confidence?: number | null;
+  // MAE / MFE — populated by EA v2.1+ or manual entry (T3.2)
+  mae_pips?: number | null;
+  mfe_pips?: number | null;
 }
 
 export interface TradeLeg {
@@ -313,6 +316,14 @@ export function extractCacheableMetrics(
 // Aggregate metrics across many trades
 // ─────────────────────────────────────────────────────────────
 
+/** One data point for the MAE / MFE scatter chart (T3.2). */
+export interface MaeMfePoint {
+  maePips: number;
+  mfePips: number;
+  rMultiple: number | null;
+  symbol: string;
+}
+
 export interface AggregateMetrics {
   totalTrades: number;
   closedTrades: number;
@@ -337,6 +348,8 @@ export interface AggregateMetrics {
   expectancyStd?: number | null;
   expectancyCi95?: { lower: number; upper: number } | null;
   equityCurve: EquityPoint[];
+  /** MAE vs MFE scatter data — only includes closed trades that have both values set (T3.2). */
+  maeMfeScatter: MaeMfePoint[];
 }
 
 export interface EquityPoint {
@@ -526,6 +539,16 @@ export function computeAggregateMetrics(
   // Recovery factor: net P&L divided by absolute max drawdown amount
   const recoveryFactor = maxDrawdown > 0 ? netPnl / maxDrawdown : null;
 
+  // MAE / MFE scatter — closed trades that have both fields populated (T3.2)
+  const maeMfeScatter: MaeMfePoint[] = closed
+    .filter((c) => c.bundle.trade.mae_pips != null && c.bundle.trade.mfe_pips != null)
+    .map((c) => ({
+      maePips: c.bundle.trade.mae_pips!,
+      mfePips: c.bundle.trade.mfe_pips!,
+      rMultiple: c.metrics.rMultiple,
+      symbol: c.bundle.trade.symbol,
+    }));
+
   return {
     totalTrades,
     closedTrades,
@@ -548,6 +571,7 @@ export function computeAggregateMetrics(
     expectancyStd,
     expectancyCi95,
     equityCurve,
+    maeMfeScatter,
   };
 }
 

@@ -138,6 +138,10 @@ export const trades = sqliteTable(
     openedAtUtc: text('opened_at_utc'),
     closedAtUtc: text('closed_at_utc'),
 
+    // MAE / MFE — Maximum Adverse / Favorable Excursion in pips (T3.2)
+    maePips: real('mae_pips'),
+    mfePips: real('mfe_pips'),
+
     // Computed money fields (recomputed by lib/pnl.ts on every leg change)
     netPnl: real('net_pnl'),
     netPips: real('net_pips'),

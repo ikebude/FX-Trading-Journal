@@ -29,6 +29,9 @@ import {
   Area,
   BarChart,
   Bar,
+  ScatterChart,
+  Scatter,
+  ZAxis,
   XAxis,
   YAxis,
   Tooltip,
@@ -63,6 +66,7 @@ import type {
   CalendarHeatmapCell,
   StreakInfo,
   MonthlyPnl,
+  MaeMfePoint,
 } from '@/lib/pnl';
 
 // ─────────────────────────────────────────────────────────────
@@ -861,6 +865,67 @@ function CalendarHeatmapWidget({ data }: { data: CalendarHeatmapCell[] }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Widget: MAE / MFE scatter (T3.2)
+// ─────────────────────────────────────────────────────────────
+
+function MaeMfeScatterWidget({ data }: { data: MaeMfePoint[] }) {
+  if (data.length === 0) return <EmptyWidget message="No MAE/MFE data yet — set via EA v2.1+ or edit a trade" />;
+
+  const wins = data.filter((p) => p.rMultiple !== null && p.rMultiple > 0);
+  const losses = data.filter((p) => p.rMultiple !== null && p.rMultiple <= 0);
+  const noR = data.filter((p) => p.rMultiple === null);
+
+  const tooltipStyle = {
+    background: '#18181b',
+    border: '1px solid #27272a',
+    borderRadius: 6,
+    fontSize: 11,
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <ScatterChart margin={{ top: 4, right: 12, bottom: 24, left: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+        <XAxis
+          dataKey="maePips"
+          name="MAE"
+          type="number"
+          label={{ value: 'MAE (pips)', position: 'insideBottom', offset: -14, fontSize: 10, fill: '#71717a' }}
+          tick={{ fontSize: 10, fill: '#71717a' }}
+        />
+        <YAxis
+          dataKey="mfePips"
+          name="MFE"
+          type="number"
+          label={{ value: 'MFE (pips)', angle: -90, position: 'insideLeft', offset: 12, fontSize: 10, fill: '#71717a' }}
+          tick={{ fontSize: 10, fill: '#71717a' }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <ZAxis range={[28, 28]} />
+        <Tooltip
+          contentStyle={tooltipStyle}
+          cursor={{ strokeDasharray: '3 3' }}
+          formatter={(value: number, name: string) => [
+            value.toFixed(1) + ' pips',
+            name === 'MAE' ? 'MAE' : 'MFE',
+          ]}
+        />
+        {wins.length > 0 && (
+          <Scatter name="Win" data={wins} fill="#34d399" fillOpacity={0.7} />
+        )}
+        {losses.length > 0 && (
+          <Scatter name="Loss" data={losses} fill="#f87171" fillOpacity={0.7} />
+        )}
+        {noR.length > 0 && (
+          <Scatter name="No R" data={noR} fill="#71717a" fillOpacity={0.7} />
+        )}
+      </ScatterChart>
+    </ResponsiveContainer>
+  );
+}
+
 // Date range presets live in src/lib/dashboard-presets.ts so they can be
 // unit-tested without pulling in the full renderer chain (see
 // tests/dashboard-date-range.test.ts).
@@ -1028,6 +1093,13 @@ export function DashboardPage() {
           </WidgetCard>
           <WidgetCard title="Calendar heatmap">
             <CalendarHeatmapWidget data={calendarHeatmap} />
+          </WidgetCard>
+        </div>
+
+        {/* Row 6: MAE / MFE scatter */}
+        <div className="grid grid-cols-1 gap-4">
+          <WidgetCard title="MAE / MFE scatter (pips)" metric="MAE MFE">
+            <MaeMfeScatterWidget data={aggregate.maeMfeScatter} />
           </WidgetCard>
         </div>
       </div>

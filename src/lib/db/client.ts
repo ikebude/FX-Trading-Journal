@@ -92,6 +92,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration006(sqlite);
   }
 
+  if (currentVersion < 7) {
+    applyMigration007(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -501,6 +505,19 @@ function applyMigration006(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 006 complete');
+}
+
+function applyMigration007(sqlite: Database.Database): void {
+  log.info('Database: applying migration 007 (MAE/MFE columns on trades)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN mae_pips REAL`);
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN mfe_pips REAL`);
+    sqlite.pragma('user_version = 7');
+  });
+
+  migrate();
+  log.info('Database: migration 007 complete');
 }
 
 /**

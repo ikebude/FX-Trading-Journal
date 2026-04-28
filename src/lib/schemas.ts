@@ -118,6 +118,10 @@ export const CreateTradeSchema = z.object({
     .enum(['SATISFIED', 'RELIEVED', 'DISAPPOINTED', 'FRUSTRATED', 'INDIFFERENT'])
     .optional(),
 
+  // MAE / MFE — set by EA v2.1+ or manually after trade close (T3.2)
+  maePips: z.number().min(0).optional(),
+  mfePips: z.number().min(0).optional(),
+
   // Optional first entry leg (included in create so one round-trip creates both)
   entryLeg: z
     .object({

@@ -477,6 +477,8 @@ function FullForm({
           confidence: existingTrade.confidence ?? undefined,
           preTradeEmotion: existingTrade.preTradeEmotion ?? undefined,
           postTradeEmotion: existingTrade.postTradeEmotion ?? undefined,
+          maePips: existingTrade.maePips ?? undefined,
+          mfePips: existingTrade.mfePips ?? undefined,
           source: 'MANUAL',
         }
       : {
@@ -586,6 +588,8 @@ function FullForm({
             confidence: data.confidence,
             preTradeEmotion: data.preTradeEmotion,
             postTradeEmotion: data.postTradeEmotion,
+            maePips: data.maePips,
+            mfePips: data.mfePips,
           });
         } else {
           await window.ledger.trades.create(data);
@@ -878,6 +882,30 @@ function FullForm({
               </SelectContent>
             </Select>
           </Field>
+
+          {/* MAE / MFE — edit mode only; populated by EA v2.1+ or entered manually */}
+          {isEdit && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="MAE (pips)">
+                <Input
+                  {...register('maePips', { valueAsNumber: true })}
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="e.g. 12.5"
+                />
+              </Field>
+              <Field label="MFE (pips)">
+                <Input
+                  {...register('mfePips', { valueAsNumber: true })}
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="e.g. 35.0"
+                />
+              </Field>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Context tab ── */}

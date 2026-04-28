@@ -109,6 +109,11 @@ CREATE TABLE trades (
   opened_at_utc            TEXT,        -- earliest ENTRY leg timestamp
   closed_at_utc            TEXT,        -- latest EXIT leg timestamp when fully closed
 
+  -- MAE / MFE — Maximum Adverse / Favorable Excursion in pips (T3.2).
+  -- Populated by the EA v2.1+ high/low watermark fields, or entered manually.
+  mae_pips                 REAL,
+  mfe_pips                 REAL,
+
   -- Computed money fields (recomputed by lib/pnl.ts on every leg change)
   net_pnl                  REAL,
   net_pips                 REAL,

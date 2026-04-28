@@ -771,3 +771,81 @@ describe('computeAggregateMetrics — T2-3: equity curve tie-breaker', () => {
     expect(m1.equityCurve[1].equity).toBeCloseTo(11500, 0);
   });
 });
+
+describe('computeAggregateMetrics — T3.2: MAE/MFE scatter', () => {
+  it('35. Returns empty scatter when no trades have mae_pips/mfe_pips set', () => {
+    const b = {
+      trade: makeTrade({ status: 'CLOSED', initial_stop_price: 1.08 }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-01T12:00:00Z'),
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toEqual([]);
+  });
+
+  it('36. Includes closed trade with both mae_pips and mfe_pips, carries rMultiple and symbol', () => {
+    const b = {
+      trade: makeTrade({
+        id: 'win-trade',
+        symbol: 'EURUSD',
+        direction: 'LONG',
+        initial_stop_price: 1.08,
+        mae_pips: 8.5,
+        mfe_pips: 52.0,
+      }),
+      legs: [
+        { ...entry(1.085, 1.0, '2026-04-01T09:00:00Z'), trade_id: 'win-trade', id: 'e1' },
+        { ...exit(1.09, 1.0, '2026-04-01T12:00:00Z'), trade_id: 'win-trade', id: 'x1' },
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toHaveLength(1);
+    const pt = agg.maeMfeScatter[0];
+    expect(pt.maePips).toBe(8.5);
+    expect(pt.mfePips).toBe(52.0);
+    expect(pt.symbol).toBe('EURUSD');
+    // rMultiple = (exit - entry) / (entry - stop) = (1.09-1.085)/(1.085-1.08) = 0.005/0.005 = 1.0
+    expect(pt.rMultiple).toBeCloseTo(1.0, 4);
+  });
+
+  it('37. Excludes open trades even when mae_pips/mfe_pips are set', () => {
+    const b = {
+      trade: makeTrade({ status: 'OPEN', mae_pips: 5.0, mfe_pips: 10.0 }),
+      legs: [entry(1.085, 1.0, '2026-04-01T09:00:00Z')],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toEqual([]);
+  });
+
+  it('38. Excludes closed trade where only one of mae_pips/mfe_pips is set', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: 1.08, mae_pips: 8.0, mfe_pips: null }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-01T12:00:00Z'),
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toEqual([]);
+  });
+
+  it('39. rMultiple is null in scatter when trade has no stop price', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: null, mae_pips: 12.0, mfe_pips: 30.0 }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-01T12:00:00Z'),
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toHaveLength(1);
+    expect(agg.maeMfeScatter[0].rMultiple).toBeNull();
+  });
+});

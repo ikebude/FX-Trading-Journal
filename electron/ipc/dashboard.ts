@@ -240,6 +240,8 @@ export function registerDashboardHandlers(): void {
             setup_name: trade.setupName ?? null,
             session: trade.session ?? null,
             confidence: trade.confidence ?? null,
+            mae_pips: trade.maePips ?? null,
+            mfe_pips: trade.mfePips ?? null,
           },
           legs: legs.map((l) => ({
             id: l.id,
