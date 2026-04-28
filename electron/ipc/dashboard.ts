@@ -30,6 +30,8 @@ import {
   computeCalendarHeatmap,
   computeStreakInfo,
   computeMonthlyPnl,
+  computeSessionDowMatrix,
+  computeDurationVsOutcome,
   computeTradeMetrics,
   extractCacheableMetrics,
   type TradeBundle,
@@ -277,6 +279,9 @@ export function registerDashboardHandlers(): void {
         calendarHeatmap: computeCalendarHeatmap(bundles, tz),
         streakInfo: computeStreakInfo(bundles),
         monthlyPnl: computeMonthlyPnl(bundles, tz),
+        // T3.3: session × DoW cross product + duration vs outcome
+        sessionDowMatrix: computeSessionDowMatrix(bundles, tz),
+        durationVsOutcome: computeDurationVsOutcome(bundles),
         // M-5: surface unknown symbols so the UI can warn the user
         warnings: unknownSymbols.size > 0
           ? { unknownSymbols: [...unknownSymbols] }

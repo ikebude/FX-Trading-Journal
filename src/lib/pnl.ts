@@ -935,6 +935,84 @@ export function computeMonthlyPnl(
     .slice(-12);
 }
 
+export interface SessionDowCell {
+  session: string;
+  dayIndex: number; // 0 = Sunday … 6 = Saturday
+  dayName: string;
+  netPnl: number;
+  count: number;
+  wins: number;
+  winRate: number;
+}
+
+/**
+ * Session × day-of-week cross product.
+ * Returns one cell per (session, day) pair that has at least one closed trade.
+ * Useful for identifying which sessions perform best on specific days.
+ */
+export function computeSessionDowMatrix(
+  bundles: TradeBundle[],
+  displayTimezone: string,
+): SessionDowCell[] {
+  const map = new Map<string, { pnl: number; count: number; wins: number }>();
+
+  for (const b of bundles) {
+    const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
+    if (m.status !== 'CLOSED' || !m.closedAtUtc) continue;
+    const session = b.trade.session ?? 'OFF_HOURS';
+    const dow = dayOfWeekInTz(m.closedAtUtc, displayTimezone);
+    const key = `${session}::${dow}`;
+    if (!map.has(key)) map.set(key, { pnl: 0, count: 0, wins: 0 });
+    const entry = map.get(key)!;
+    entry.count++;
+    entry.pnl += m.netPnl ?? 0;
+    if (m.result === 'WIN') entry.wins++;
+  }
+
+  return [...map.entries()].map(([key, data]) => {
+    const sep = key.indexOf('::');
+    const session = key.slice(0, sep);
+    const dayIndex = parseInt(key.slice(sep + 2), 10);
+    return {
+      session,
+      dayIndex,
+      dayName: DAY_NAMES[dayIndex],
+      netPnl: data.pnl,
+      count: data.count,
+      wins: data.wins,
+      winRate: data.count > 0 ? data.wins / data.count : 0,
+    };
+  });
+}
+
+export interface DurationOutcomePoint {
+  holdingTimeMinutes: number;
+  rMultiple: number | null;
+  netPnl: number;
+  symbol: string;
+}
+
+/**
+ * Holding time (minutes) vs trade outcome (R-multiple + net P&L).
+ * Only includes closed trades with a known open and close timestamp.
+ */
+export function computeDurationVsOutcome(bundles: TradeBundle[]): DurationOutcomePoint[] {
+  const points: DurationOutcomePoint[] = [];
+
+  for (const b of bundles) {
+    const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
+    if (m.status !== 'CLOSED' || m.holdingTimeMs === null) continue;
+    points.push({
+      holdingTimeMinutes: m.holdingTimeMs / 60_000,
+      rMultiple: m.rMultiple,
+      netPnl: m.netPnl ?? 0,
+      symbol: b.trade.symbol,
+    });
+  }
+
+  return points;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────

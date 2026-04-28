@@ -67,6 +67,8 @@ import type {
   StreakInfo,
   MonthlyPnl,
   MaeMfePoint,
+  SessionDowCell,
+  DurationOutcomePoint,
 } from '@/lib/pnl';
 
 // ─────────────────────────────────────────────────────────────
@@ -85,6 +87,8 @@ interface DashboardData {
   calendarHeatmap: CalendarHeatmapCell[];
   streakInfo: StreakInfo;
   monthlyPnl: MonthlyPnl[];
+  sessionDowMatrix: SessionDowCell[];
+  durationVsOutcome: DurationOutcomePoint[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -866,6 +870,186 @@ function CalendarHeatmapWidget({ data }: { data: CalendarHeatmapCell[] }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Widget: Session × Day-of-week matrix (T3.3)
+// ─────────────────────────────────────────────────────────────
+
+const SESSION_ORDER_DISPLAY = ['LONDON', 'NY_AM', 'LONDON_CLOSE', 'TOKYO', 'SYDNEY', 'ASIAN_RANGE', 'NY_PM', 'OFF_HOURS'];
+const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function SessionDowMatrixWidget({ data }: { data: SessionDowCell[] }) {
+  if (data.length === 0) return <EmptyWidget />;
+
+  // Build lookup: session → dayIndex → cell
+  const lookup = new Map<string, Map<number, SessionDowCell>>();
+  for (const cell of data) {
+    if (!lookup.has(cell.session)) lookup.set(cell.session, new Map());
+    lookup.get(cell.session)!.set(cell.dayIndex, cell);
+  }
+
+  const sessions = SESSION_ORDER_DISPLAY.filter((s) => lookup.has(s));
+  const days = [1, 2, 3, 4, 5]; // Mon–Fri only (forex)
+
+  const allNetPnl = data.map((c) => c.netPnl);
+  const maxAbs = Math.max(1, ...allNetPnl.map(Math.abs));
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[10px]">
+        <thead>
+          <tr>
+            <th className="py-1 pr-2 text-left text-muted-foreground font-normal">Session</th>
+            {days.map((d) => (
+              <th key={d} className="px-1 py-1 text-center text-muted-foreground font-normal">
+                {DOW_LABELS[d]}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sessions.map((session) => (
+            <tr key={session}>
+              <td className="py-0.5 pr-2 text-muted-foreground whitespace-nowrap">
+                {SESSION_LABELS[session] ?? session}
+              </td>
+              {days.map((d) => {
+                const cell = lookup.get(session)?.get(d);
+                if (!cell) {
+                  return <td key={d} className="px-1 py-0.5 text-center">—</td>;
+                }
+                const intensity = Math.min(0.9, Math.abs(cell.netPnl) / maxAbs);
+                const bg =
+                  cell.netPnl > 0
+                    ? `rgba(52,211,153,${0.12 + intensity * 0.65})`
+                    : `rgba(248,113,113,${0.12 + intensity * 0.65})`;
+                return (
+                  <td
+                    key={d}
+                    className="px-1 py-0.5 text-center rounded-sm"
+                    style={{ backgroundColor: bg }}
+                    title={`${SESSION_LABELS[session] ?? session} ${DOW_LABELS[d]}: ${formatCurrency(cell.netPnl)} (${cell.count} trades, ${(cell.winRate * 100).toFixed(0)}% WR)`}
+                  >
+                    <span className={pnlColor(cell.netPnl)}>
+                      {cell.netPnl >= 0 ? '+' : ''}{cell.netPnl.toFixed(0)}
+                    </span>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Widget: Time-of-day P&L curve (T3.3)
+// ─────────────────────────────────────────────────────────────
+
+import { LineChart, Line } from 'recharts';
+
+function TimeOfDayCurveWidget({ data }: { data: HourHeatmapCell[] }) {
+  const curve = data
+    .filter((c) => c.count > 0)
+    .map((c) => ({ hour: c.hour, avgPnl: c.netPnl / c.count, count: c.count }));
+
+  if (curve.length === 0) return <EmptyWidget />;
+
+  return (
+    <ResponsiveContainer width="100%" height={160}>
+      <LineChart data={curve} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+        <XAxis
+          dataKey="hour"
+          tick={{ fontSize: 9, fill: '#71717a' }}
+          tickFormatter={(h: number) => `${h}:00`}
+        />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          tick={{ fontSize: 10, fill: '#71717a' }}
+          tickFormatter={(v) => formatCurrency(v)}
+        />
+        <ReferenceLine y={0} stroke="#52525b" />
+        <Tooltip
+          contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 6, fontSize: 11 }}
+          formatter={(v: number) => [formatCurrency(v), 'Avg P&L / trade']}
+          labelFormatter={(h: number) => `${h}:00–${h + 1}:00`}
+        />
+        <Line
+          type="monotone"
+          dataKey="avgPnl"
+          stroke="#818cf8"
+          dot={false}
+          strokeWidth={2}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Widget: Duration vs outcome scatter (T3.3)
+// ─────────────────────────────────────────────────────────────
+
+function DurationOutcomeWidget({ data }: { data: DurationOutcomePoint[] }) {
+  if (data.length === 0) return <EmptyWidget />;
+
+  const wins = data.filter((p) => p.rMultiple !== null && p.rMultiple > 0);
+  const losses = data.filter((p) => p.rMultiple !== null && p.rMultiple <= 0);
+  const noR = data.filter((p) => p.rMultiple === null);
+
+  const tooltipStyle = { background: '#18181b', border: '1px solid #27272a', borderRadius: 6, fontSize: 11 };
+
+  function fmtMins(mins: number): string {
+    if (mins < 60) return `${Math.round(mins)}m`;
+    if (mins < 1440) return `${(mins / 60).toFixed(1)}h`;
+    return `${(mins / 1440).toFixed(1)}d`;
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <ScatterChart margin={{ top: 4, right: 12, bottom: 24, left: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+        <XAxis
+          dataKey="holdingTimeMinutes"
+          name="Duration"
+          type="number"
+          scale="log"
+          domain={['auto', 'auto']}
+          label={{ value: 'Holding time (log)', position: 'insideBottom', offset: -14, fontSize: 10, fill: '#71717a' }}
+          tick={{ fontSize: 9, fill: '#71717a' }}
+          tickFormatter={fmtMins}
+        />
+        <YAxis
+          dataKey="rMultiple"
+          name="R"
+          type="number"
+          label={{ value: 'R-multiple', angle: -90, position: 'insideLeft', offset: 12, fontSize: 10, fill: '#71717a' }}
+          tick={{ fontSize: 10, fill: '#71717a' }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <ZAxis range={[24, 24]} />
+        <ReferenceLine y={0} stroke="#52525b" />
+        <Tooltip
+          contentStyle={tooltipStyle}
+          cursor={{ strokeDasharray: '3 3' }}
+          formatter={(value: number, name: string) =>
+            name === 'Duration'
+              ? [fmtMins(value), 'Duration']
+              : [value !== null ? value.toFixed(2) + 'R' : '—', 'R-multiple']
+          }
+        />
+        {wins.length > 0 && <Scatter name="Win" data={wins} fill="#34d399" fillOpacity={0.7} />}
+        {losses.length > 0 && <Scatter name="Loss" data={losses} fill="#f87171" fillOpacity={0.7} />}
+        {noR.length > 0 && <Scatter name="No R" data={noR} fill="#71717a" fillOpacity={0.7} />}
+      </ScatterChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Widget: MAE / MFE scatter (T3.2)
 // ─────────────────────────────────────────────────────────────
 
@@ -1008,6 +1192,8 @@ export function DashboardPage() {
     calendarHeatmap,
     streakInfo,
     monthlyPnl,
+    sessionDowMatrix,
+    durationVsOutcome,
   } = data;
 
   return (
@@ -1100,6 +1286,23 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 gap-4">
           <WidgetCard title="MAE / MFE scatter (pips)" metric="MAE MFE">
             <MaeMfeScatterWidget data={aggregate.maeMfeScatter} />
+          </WidgetCard>
+        </div>
+
+        {/* Row 7: Session × DoW matrix */}
+        <div className="grid grid-cols-1 gap-4">
+          <WidgetCard title="Session × day-of-week (net P&L)">
+            <SessionDowMatrixWidget data={sessionDowMatrix} />
+          </WidgetCard>
+        </div>
+
+        {/* Row 8: Duration vs outcome + Time-of-day curve */}
+        <div className="grid grid-cols-2 gap-4">
+          <WidgetCard title="Duration vs outcome">
+            <DurationOutcomeWidget data={durationVsOutcome} />
+          </WidgetCard>
+          <WidgetCard title="Avg P&L by time of day">
+            <TimeOfDayCurveWidget data={hourOfDayHeatmap} />
           </WidgetCard>
         </div>
       </div>

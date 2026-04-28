@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   computeAggregateMetrics,
   computeTradeMetrics,
+  computeSessionDowMatrix,
+  computeDurationVsOutcome,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -847,5 +849,109 @@ describe('computeAggregateMetrics — T3.2: MAE/MFE scatter', () => {
     const agg = computeAggregateMetrics([b], 10000);
     expect(agg.maeMfeScatter).toHaveLength(1);
     expect(agg.maeMfeScatter[0].rMultiple).toBeNull();
+  });
+});
+
+describe('computeSessionDowMatrix — T3.3', () => {
+  // London session, Monday close (2026-04-06 is a Monday)
+  const londonMon = {
+    trade: makeTrade({ id: 'lm', initial_stop_price: 1.08, session: 'LONDON' }),
+    legs: [
+      { ...entry(1.085, 1.0, '2026-04-06T09:00:00Z'), trade_id: 'lm', id: 'e1' },
+      { ...exit(1.09, 1.0, '2026-04-06T11:00:00Z'), trade_id: 'lm', id: 'x1' },
+    ],
+    instrument: EURUSD, // WIN, +500
+  };
+  // London session, Tuesday close (2026-04-07)
+  const londonTue = {
+    trade: makeTrade({ id: 'lt', initial_stop_price: 1.08, session: 'LONDON' }),
+    legs: [
+      { ...entry(1.085, 1.0, '2026-04-07T09:00:00Z'), trade_id: 'lt', id: 'e2' },
+      { ...exit(1.082, 1.0, '2026-04-07T10:30:00Z'), trade_id: 'lt', id: 'x2' },
+    ],
+    instrument: EURUSD, // LOSS, -300
+  };
+  const TZ = 'UTC';
+
+  it('40. Returns one cell per (session, day) combination', () => {
+    const cells = computeSessionDowMatrix([londonMon, londonTue], TZ);
+    expect(cells).toHaveLength(2);
+  });
+
+  it('41. Cell for London Monday has positive P&L and win rate 1', () => {
+    const cells = computeSessionDowMatrix([londonMon], TZ);
+    expect(cells).toHaveLength(1);
+    const cell = cells[0];
+    expect(cell.session).toBe('LONDON');
+    expect(cell.dayName).toBe('Mon');
+    expect(cell.count).toBe(1);
+    expect(cell.wins).toBe(1);
+    expect(cell.winRate).toBe(1);
+    expect(cell.netPnl).toBeGreaterThan(0);
+  });
+
+  it('42. Open trades are excluded from the matrix', () => {
+    const openTrade = {
+      trade: makeTrade({ id: 'open', session: 'LONDON' }),
+      legs: [entry(1.085, 1.0, '2026-04-06T09:00:00Z')],
+      instrument: EURUSD,
+    };
+    const cells = computeSessionDowMatrix([openTrade], TZ);
+    expect(cells).toHaveLength(0);
+  });
+
+  it('43. Trades without session field use OFF_HOURS', () => {
+    const noSession = {
+      trade: makeTrade({ id: 'ns', initial_stop_price: 1.08, session: null }),
+      legs: [
+        { ...entry(1.085, 1.0, '2026-04-06T09:00:00Z'), trade_id: 'ns', id: 'e3' },
+        { ...exit(1.09, 1.0, '2026-04-06T11:00:00Z'), trade_id: 'ns', id: 'x3' },
+      ],
+      instrument: EURUSD,
+    };
+    const cells = computeSessionDowMatrix([noSession], TZ);
+    expect(cells[0].session).toBe('OFF_HOURS');
+  });
+});
+
+describe('computeDurationVsOutcome — T3.3', () => {
+  it('44. Returns a point for every closed trade with a known holding time', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: 1.08 }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-06T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-06T11:00:00Z'), // 2h = 120m
+      ],
+      instrument: EURUSD,
+    };
+    const pts = computeDurationVsOutcome([b]);
+    expect(pts).toHaveLength(1);
+    expect(pts[0].holdingTimeMinutes).toBeCloseTo(120, 1);
+    expect(pts[0].rMultiple).toBeCloseTo(1.0, 4);
+    expect(pts[0].symbol).toBe('EURUSD');
+  });
+
+  it('45. Open trade with no exit is excluded', () => {
+    const open = {
+      trade: makeTrade(),
+      legs: [entry(1.085, 1.0, '2026-04-06T09:00:00Z')],
+      instrument: EURUSD,
+    };
+    expect(computeDurationVsOutcome([open])).toHaveLength(0);
+  });
+
+  it('46. rMultiple is null when no stop price is set', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: null }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-06T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-06T10:30:00Z'), // 90m
+      ],
+      instrument: EURUSD,
+    };
+    const pts = computeDurationVsOutcome([b]);
+    expect(pts).toHaveLength(1);
+    expect(pts[0].rMultiple).toBeNull();
+    expect(pts[0].holdingTimeMinutes).toBeCloseTo(90, 1);
   });
 });
