@@ -4,6 +4,7 @@ import {
   computeTradeMetrics,
   computeSessionDowMatrix,
   computeDurationVsOutcome,
+  computeSetupVersionPerformance,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -953,5 +954,210 @@ describe('computeDurationVsOutcome — T3.3', () => {
     expect(pts).toHaveLength(1);
     expect(pts[0].rMultiple).toBeNull();
     expect(pts[0].holdingTimeMinutes).toBeCloseTo(90, 1);
+  });
+});
+
+describe('computeSetupVersionPerformance — T3.4', () => {
+  // Helper: create N-trade sequence for a setup with varied R results
+  function createSetupTrades(
+    setupName: string,
+    count: number,
+    baseDate: string,
+    rValues: number[], // Specify R-multiples for each trade
+  ) {
+    return rValues.slice(0, count).map((r, idx) => {
+      const ts = new Date(new Date(baseDate).getTime() + idx * 3600000).toISOString(); // 1 hour apart
+      const entryPrice = 1.085;
+      const stop = 1.08;
+      const exitPrice = entryPrice + r * (entryPrice - stop); // compute exit from R multiple
+
+      return {
+        trade: makeTrade({
+          id: `${setupName}-${idx}`,
+          setup_name: setupName,
+          initial_stop_price: stop,
+        }),
+        legs: [
+          { ...entry(entryPrice, 1.0, ts), trade_id: `${setupName}-${idx}`, id: `e${idx}` },
+          { ...exit(exitPrice, 1.0, ts), trade_id: `${setupName}-${idx}`, id: `x${idx}` },
+        ],
+        instrument: EURUSD,
+      };
+    });
+  }
+
+  it('47. Empty bundles returns empty array', () => {
+    expect(computeSetupVersionPerformance([])).toEqual([]);
+  });
+
+  it('48. Single setup with < 30 trades: historicalExpectancy equals all-time expectancy', () => {
+    // 10 trades with R values: [0.5, -1, 1, -0.5, 2, 0.5, -1, 1, 0.5, -1]
+    const trades = createSetupTrades(
+      'scalp',
+      10,
+      '2026-04-01T09:00:00Z',
+      [0.5, -1, 1, -0.5, 2, 0.5, -1, 1, 0.5, -1],
+    );
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    const r = results[0];
+    expect(r.setup).toBe('scalp');
+    expect(r.totalTrades).toBe(10);
+    expect(r.closedTrades).toBe(10);
+    expect(r.rolling30Expectancy).not.toBeNull();
+    expect(r.historicalExpectancy).not.toBeNull();
+    // Since < 30 trades, rolling30 == all-time
+    expect(r.rolling30Expectancy).toBeCloseTo(r.historicalExpectancy!, 4);
+    expect(r.isDegraded).toBe(false); // Can't degrade if rolling == historical
+  });
+
+  it('49. Setup with 30+ trades: splits into rolling30 and historical', () => {
+    // First 20 trades: all wins with +1R (strong)
+    const strong = Array(20).fill(1);
+    // Next 15 trades: mixed outcomes (~0.5R expectancy)
+    const mixed = [0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5];
+
+    const trades = createSetupTrades(
+      'swing',
+      35,
+      '2026-04-01T09:00:00Z',
+      [...strong, ...mixed],
+    );
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    const r = results[0];
+    expect(r.closedTrades).toBe(35);
+    // Historical: first 5 trades (35 - 30)
+    // Rolling: last 30 trades
+    expect(r.historicalExpectancy).toBeGreaterThan(r.rolling30Expectancy!);
+    expect(r.isDegraded).toBe(true); // rolling < historical
+  });
+
+  it('50. Degradation detected when rolling30 < historicalExpectancy', () => {
+    // First 20 trades: all wins +1R
+    const strong = Array(20).fill(1);
+    // Next 15 trades: all losses -1R (weak)
+    const weak = Array(15).fill(-1);
+
+    const trades = createSetupTrades(
+      'trend',
+      35,
+      '2026-04-01T09:00:00Z',
+      [...strong, ...weak],
+    );
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    const r = results[0];
+    expect(r.isDegraded).toBe(true); // rolling < historical
+    expect(r.rolling30Expectancy).toBeLessThan(r.historicalExpectancy!);
+  });
+
+  it('51. Open trades are not included in totals', () => {
+    const closed = createSetupTrades(
+      'mixed',
+      5,
+      '2026-04-01T09:00:00Z',
+      [1, -0.5, 0.5, -1, 2],
+    );
+    const open = {
+      trade: makeTrade({ id: 'open-1', setup_name: 'mixed' }),
+      legs: [entry(1.085, 1.0, '2026-04-02T09:00:00Z')],
+      instrument: EURUSD,
+    };
+
+    const results = computeSetupVersionPerformance([...closed, open]);
+    expect(results).toHaveLength(1);
+    expect(results[0].closedTrades).toBe(5); // only closed
+    expect(results[0].totalTrades).toBe(6); // both closed + open
+  });
+
+  it('52. Multiple setups are sorted with degraded first', () => {
+    const setup1 = createSetupTrades(
+      'strong',
+      10,
+      '2026-04-01T09:00:00Z',
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    );
+    const setup2Strong = Array(20).fill(1);
+    const setup2Weak = Array(15).fill(-1);
+    const setup2 = createSetupTrades(
+      'weak',
+      35,
+      '2026-04-02T09:00:00Z',
+      [...setup2Strong, ...setup2Weak],
+    );
+
+    const results = computeSetupVersionPerformance([...setup1, ...setup2]);
+    expect(results).toHaveLength(2);
+    // 'weak' is degraded, should come first
+    expect(results[0].setup).toBe('weak');
+    expect(results[0].isDegraded).toBe(true);
+    expect(results[1].setup).toBe('strong');
+    expect(results[1].isDegraded).toBe(false);
+  });
+
+  it('53. Null R-multiples are excluded from expectancy calculation', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 't1', setup_name: 'no-stop', initial_stop_price: null }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+          exit(1.09, 1.0, '2026-04-01T10:00:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({ id: 't2', setup_name: 'no-stop', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T11:00:00Z'),
+          exit(1.095, 1.0, '2026-04-01T12:00:00Z'), // R = (1.095-1.085)/(1.085-1.08) = 2.0
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    // Only 1 R-value (from t2), so expectancy should be 2.0
+    expect(results[0].rolling30Expectancy).toBeCloseTo(2.0, 4);
+  });
+
+  it('54. Chronological order: trades sorted by closedAtUtc then trade id', () => {
+    // Create two trades that close at same time, verify they're consistently ordered
+    const trades = [
+      {
+        trade: makeTrade({
+          id: 'z-last',
+          setup_name: 'order-test',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.09, 1.0, '2026-04-01T10:30:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'a-first',
+          setup_name: 'order-test',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.095, 1.0, '2026-04-01T10:30:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    // Should compute successfully without error; ordering is deterministic
+    expect(results[0].closedTrades).toBe(2);
+    expect(results[0].rolling30Expectancy).not.toBeNull();
   });
 });

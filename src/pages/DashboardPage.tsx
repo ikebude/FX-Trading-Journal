@@ -58,6 +58,7 @@ import type {
   AggregateMetrics,
   RBucket,
   SetupPerformance,
+  SetupVersionPerformance,
   SessionPerformance,
   DayHeatmapCell,
   HourHeatmapCell,
@@ -79,6 +80,7 @@ interface DashboardData {
   aggregate: AggregateMetrics;
   rDistribution: RBucket[];
   setupPerformance: SetupPerformance[];
+  setupVersionPerformance: SetupVersionPerformance[];
   sessionPerformance: SessionPerformance[];
   dayOfWeekHeatmap: DayHeatmapCell[];
   hourOfDayHeatmap: HourHeatmapCell[];

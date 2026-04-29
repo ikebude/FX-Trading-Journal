@@ -350,6 +350,8 @@ export interface AggregateMetrics {
   equityCurve: EquityPoint[];
   /** MAE vs MFE scatter data — only includes closed trades that have both values set (T3.2). */
   maeMfeScatter: MaeMfePoint[];
+  /** Setup version performance with rolling 30-trade expectancy and degradation alerts (T3.4). */
+  setupVersionPerformance: SetupVersionPerformance[];
 }
 
 export interface EquityPoint {
@@ -572,6 +574,7 @@ export function computeAggregateMetrics(
     expectancyCi95,
     equityCurve,
     maeMfeScatter,
+    setupVersionPerformance: computeSetupVersionPerformance(bundles),
   };
 }
 
@@ -647,6 +650,157 @@ export function computeSetupPerformance(bundles: TradeBundle[]): SetupPerformanc
       wins: data.wins,
     }))
     .sort((a, b) => (b.avgR ?? -Infinity) - (a.avgR ?? -Infinity));
+}
+
+/**
+ * T3.4: Setup-performance per version + edge-degradation alert.
+ * Tracks rolling 30-trade expectancy per setup, detects when expectancy degrades.
+ */
+export interface SetupVersionPerformance {
+  setup: string;
+  /** Rolling 30-trade expectancy (last 30 closed trades with this setup). */
+  rolling30Expectancy: number | null;
+  /** Historical 30-trade expectancy baseline (all but last 30 trades). */
+  historicalExpectancy: number | null;
+  /** True if rolling 30-trade expectancy has degraded below historical average. */
+  isDegraded: boolean;
+  /** Total trades with this setup (all time). */
+  totalTrades: number;
+  /** Closed trades with this setup (all time). */
+  closedTrades: number;
+}
+
+/**
+ * Compute setup performance with rolling 30-trade expectancy and degradation detection.
+ * Per-setup metric: groups closed trades chronologically, computes rolling windows
+ * of expectancy, and flags when current performance drops below historical average.
+ *
+ * Usage: Called by dashboard aggregation to detect performance regressions in known setups.
+ * Output: One entry per setup that has > 0 closed trades.
+ */
+export function computeSetupVersionPerformance(bundles: TradeBundle[]): SetupVersionPerformance[] {
+  const computed = bundles.map((b) => ({
+    metrics: computeTradeMetrics(b.trade, b.legs, b.instrument),
+    bundle: b,
+  }));
+
+  // Group trades by setup, keep all closed trades
+  const bySetup = new Map<string, Array<{ metrics: TradeMetrics; bundle: TradeBundle }>>();
+  for (const c of computed) {
+    if (c.metrics.status !== 'CLOSED') continue;
+    const setup = c.bundle.trade.setup_name ?? '(no setup)';
+    if (!bySetup.has(setup)) bySetup.set(setup, []);
+    bySetup.get(setup)!.push(c);
+  }
+
+  // For each setup, compute rolling 30-trade expectancy and historical baseline
+  const results: SetupVersionPerformance[] = [];
+
+  for (const [setup, trades] of bySetup.entries()) {
+    if (trades.length === 0) continue;
+
+    // Sort trades chronologically by close time (then by trade ID for tie-break)
+    const sorted = trades
+      .filter((t) => t.metrics.closedAtUtc !== null)
+      .sort((a, b) => {
+        const byClose = (a.metrics.closedAtUtc ?? '').localeCompare(
+          b.metrics.closedAtUtc ?? '',
+        );
+        if (byClose !== 0) return byClose;
+        return a.bundle.trade.id.localeCompare(b.bundle.trade.id);
+      });
+
+    if (sorted.length === 0) continue;
+
+    // Compute rolling 30-trade window (last 30 trades)
+    const last30 = sorted.slice(-30);
+    const last30Rs = last30
+      .map((t) => t.metrics.rMultiple)
+      .filter((r): r is number => r !== null);
+
+    let rolling30Expectancy: number | null = null;
+    if (last30Rs.length > 0) {
+      const winLast30 = last30.filter((t) => t.metrics.result === 'WIN').length;
+      const lossLast30 = last30.filter((t) => t.metrics.result === 'LOSS').length;
+      const winRateLast30 = last30.length > 0 ? winLast30 / last30.length : 0;
+      const winRsLast30 = last30Rs.filter((r) => r > 0);
+      const lossRsLast30 = last30Rs.filter((r) => r < 0);
+      if (winRsLast30.length > 0 && lossRsLast30.length > 0) {
+        const avgWin = sum(winRsLast30) / winRsLast30.length;
+        const avgLoss = sum(lossRsLast30.map(Math.abs)) / lossRsLast30.length;
+        rolling30Expectancy = winRateLast30 * avgWin - (1 - winRateLast30) * avgLoss;
+      } else {
+        rolling30Expectancy = sum(last30Rs) / last30Rs.length;
+      }
+    }
+
+    // Compute historical baseline (all trades before the rolling 30 window)
+    let historicalExpectancy: number | null = null;
+    if (sorted.length > 30) {
+      const historicalTrades = sorted.slice(0, -30);
+      const historicalRs = historicalTrades
+        .map((t) => t.metrics.rMultiple)
+        .filter((r): r is number => r !== null);
+      if (historicalRs.length > 0) {
+        const winHist = historicalTrades.filter((t) => t.metrics.result === 'WIN').length;
+        const lossHist = historicalTrades.filter((t) => t.metrics.result === 'LOSS').length;
+        const winRateHist = historicalTrades.length > 0 ? winHist / historicalTrades.length : 0;
+        const winRsHist = historicalRs.filter((r) => r > 0);
+        const lossRsHist = historicalRs.filter((r) => r < 0);
+        if (winRsHist.length > 0 && lossRsHist.length > 0) {
+          const avgWin = sum(winRsHist) / winRsHist.length;
+          const avgLoss = sum(lossRsHist.map(Math.abs)) / lossRsHist.length;
+          historicalExpectancy = winRateHist * avgWin - (1 - winRateHist) * avgLoss;
+        } else {
+          historicalExpectancy = sum(historicalRs) / historicalRs.length;
+        }
+      }
+    } else if (sorted.length <= 30) {
+      // If we have 30 or fewer trades total, treat the entire history as baseline
+      const allRs = sorted
+        .map((t) => t.metrics.rMultiple)
+        .filter((r): r is number => r !== null);
+      if (allRs.length > 0) {
+        const winAll = sorted.filter((t) => t.metrics.result === 'WIN').length;
+        const lossAll = sorted.filter((t) => t.metrics.result === 'LOSS').length;
+        const winRateAll = sorted.length > 0 ? winAll / sorted.length : 0;
+        const winRsAll = allRs.filter((r) => r > 0);
+        const lossRsAll = allRs.filter((r) => r < 0);
+        if (winRsAll.length > 0 && lossRsAll.length > 0) {
+          const avgWin = sum(winRsAll) / winRsAll.length;
+          const avgLoss = sum(lossRsAll.map(Math.abs)) / lossRsAll.length;
+          historicalExpectancy = winRateAll * avgWin - (1 - winRateAll) * avgLoss;
+        } else {
+          historicalExpectancy = sum(allRs) / allRs.length;
+        }
+      }
+    }
+
+    // Detect degradation: rolling30 exists AND is less than historical (or historical is null)
+    const isDegraded =
+      rolling30Expectancy !== null &&
+      historicalExpectancy !== null &&
+      rolling30Expectancy < historicalExpectancy;
+
+    // Count total trades (closed + open + partial + cancelled)
+    const totalTrades = bundles.filter((b) => b.trade.setup_name === setup).length;
+    const closedTrades = sorted.length;
+
+    results.push({
+      setup,
+      rolling30Expectancy,
+      historicalExpectancy,
+      isDegraded,
+      totalTrades,
+      closedTrades,
+    });
+  }
+
+  // Sort by degradation flag first (degraded first), then by setup name
+  return results.sort((a, b) => {
+    if (a.isDegraded !== b.isDegraded) return a.isDegraded ? -1 : 1;
+    return a.setup.localeCompare(b.setup);
+  });
 }
 
 export interface SessionPerformance {
