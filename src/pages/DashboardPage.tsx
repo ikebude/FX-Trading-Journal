@@ -1112,6 +1112,89 @@ function MaeMfeScatterWidget({ data }: { data: MaeMfePoint[] }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Widget: Setup version performance with degradation alerts (T3.4)
+// ─────────────────────────────────────────────────────────────
+
+function SetupVersionPerformanceWidget({ data }: { data: SetupVersionPerformance[] }) {
+  const degraded = data.filter((s) => s.isDegraded);
+  const healthy = data.filter((s) => !s.isDegraded);
+
+  if (data.length === 0) return <EmptyWidget />;
+
+  return (
+    <div className="space-y-3 text-xs">
+      {/* Degraded setups (red alert) */}
+      {degraded.length > 0 && (
+        <div className="space-y-2">
+          <div className="font-medium text-rose-400">⚠ Degraded ({degraded.length})</div>
+          {degraded.slice(0, 4).map((s) => (
+            <div
+              key={s.setup}
+              className="flex items-start justify-between rounded border border-rose-900/40 bg-rose-950/20 p-2"
+            >
+              <div className="flex-1 space-y-0.5">
+                <div className="font-medium text-rose-300">{s.setup}</div>
+                <div className="text-muted-foreground">
+                  <span>{s.closedTrades} trades</span> • 
+                  <span className="ml-1">
+                    Hist: {s.historicalExpectancy !== null ? formatR(s.historicalExpectancy) : '—'}
+                  </span>
+                </div>
+              </div>
+              <div className="ml-2 text-right">
+                <div className="font-mono text-rose-400">
+                  {s.rolling30Expectancy !== null ? formatR(s.rolling30Expectancy) : '—'}
+                </div>
+                <div className="text-muted-foreground text-xs">Rolling 30</div>
+              </div>
+            </div>
+          ))}
+          {degraded.length > 4 && (
+            <div className="text-center text-muted-foreground/60">
+              +{degraded.length - 4} more degraded
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Healthy setups (green) */}
+      {healthy.length > 0 && (
+        <div className="space-y-2">
+          <div className="font-medium text-emerald-400">✓ Healthy ({healthy.length})</div>
+          {healthy.slice(0, 4).map((s) => (
+            <div
+              key={s.setup}
+              className="flex items-start justify-between rounded border border-emerald-900/40 bg-emerald-950/20 p-2"
+            >
+              <div className="flex-1 space-y-0.5">
+                <div className="font-medium text-emerald-300">{s.setup}</div>
+                <div className="text-muted-foreground">
+                  <span>{s.closedTrades} trades</span> •
+                  <span className="ml-1">
+                    {s.historicalExpectancy !== null ? formatR(s.historicalExpectancy) : '—'}
+                  </span>
+                </div>
+              </div>
+              <div className="ml-2 text-right">
+                <div className="font-mono text-emerald-400">
+                  {s.rolling30Expectancy !== null ? formatR(s.rolling30Expectancy) : '—'}
+                </div>
+                <div className="text-muted-foreground text-xs">Rolling 30</div>
+              </div>
+            </div>
+          ))}
+          {healthy.length > 4 && (
+            <div className="text-center text-muted-foreground/60">
+              +{healthy.length - 4} more healthy
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Date range presets live in src/lib/dashboard-presets.ts so they can be
 // unit-tested without pulling in the full renderer chain (see
 // tests/dashboard-date-range.test.ts).
@@ -1186,6 +1269,7 @@ export function DashboardPage() {
     aggregate,
     rDistribution,
     setupPerformance,
+    setupVersionPerformance,
     sessionPerformance,
     dayOfWeekHeatmap,
     hourOfDayHeatmap,
@@ -1258,6 +1342,13 @@ export function DashboardPage() {
           </WidgetCard>
           <WidgetCard title="Session performance">
             <SessionPerformanceWidget data={sessionPerformance} />
+          </WidgetCard>
+        </div>
+
+        {/* Row 3.5: Setup version performance with degradation alerts (T3.4) */}
+        <div className="grid grid-cols-1 gap-4">
+          <WidgetCard title="Setup version performance (degradation alerts)">
+            <SetupVersionPerformanceWidget data={setupVersionPerformance} />
           </WidgetCard>
         </div>
 
