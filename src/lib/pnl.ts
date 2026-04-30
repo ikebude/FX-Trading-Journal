@@ -352,6 +352,8 @@ export interface AggregateMetrics {
   maeMfeScatter: MaeMfePoint[];
   /** Setup version performance with rolling 30-trade expectancy and degradation alerts (T3.4). */
   setupVersionPerformance: SetupVersionPerformance[];
+  /** Revenge trades — trades entered shortly after losses, typically emotional (T3.5). */
+  revengeTradeIndicators: RevengeTradeIndicator[];
 }
 
 export interface EquityPoint {
@@ -575,6 +577,7 @@ export function computeAggregateMetrics(
     equityCurve,
     maeMfeScatter,
     setupVersionPerformance: computeSetupVersionPerformance(bundles),
+    revengeTradeIndicators: computeRevengeTradeIndicators(bundles),
   };
 }
 
@@ -1165,6 +1168,97 @@ export function computeDurationVsOutcome(bundles: TradeBundle[]): DurationOutcom
   }
 
   return points;
+}
+
+export interface RevengeTradeIndicator {
+  /** Trade ID of the revenge trade (entered shortly after a loss). */
+  tradeId: string;
+  /** Timestamp when the revenge trade was opened. */
+  openedAtUtc: string;
+  /** Time (minutes) between prior loss close and revenge trade open. */
+  minutesAfterLoss: number;
+  /** The loss that triggered the revenge trade. */
+  priorLossPnl: number;
+  /** Result of the revenge trade itself (WIN, LOSS, BREAKEVEN, or null if still open). */
+  revengeResult: TradeResult | null;
+  /** P&L of the revenge trade. */
+  revengePnl: number | null;
+  /** R-multiple of the revenge trade. */
+  revengeR: number | null;
+  /** True if revenge trade won money (positive pnl). */
+  recouped: boolean;
+}
+
+/**
+ * T3.5: Revenge-trade detector.
+ * Identifies trades entered shortly after losses, typically in an emotional attempt to quickly recover.
+ *
+ * Algorithm:
+ * 1. Sort closed trades by close timestamp
+ * 2. For each loss trade, look ahead to find trades opened within windowMinutes
+ * 3. Mark those trades as revenge trades
+ * 4. Track revenge result and whether it recouped the loss
+ *
+ * Usage: Called by dashboard aggregation to detect emotional trading patterns.
+ */
+export function computeRevengeTradeIndicators(
+  bundles: TradeBundle[],
+  windowMinutes: number = 15,
+): RevengeTradeIndicator[] {
+  // Compute all metrics
+  const computed = bundles.map((b) => ({
+    metrics: computeTradeMetrics(b.trade, b.legs, b.instrument),
+    bundle: b,
+  }));
+
+  // Sort by open timestamp to detect temporal patterns
+  const sorted = computed
+    .filter((c) => c.metrics.closedAtUtc !== null && c.metrics.openedAtUtc !== null)
+    .sort((a, b) => {
+      const byOpen = (a.metrics.openedAtUtc ?? '').localeCompare(
+        b.metrics.openedAtUtc ?? '',
+      );
+      if (byOpen !== 0) return byOpen;
+      return a.bundle.trade.id.localeCompare(b.bundle.trade.id);
+    });
+
+  const revenge: RevengeTradeIndicator[] = [];
+
+  // Find losses and check for subsequent revenge trades
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const current = sorted[i];
+    if (current.metrics.result !== 'LOSS') continue;
+
+    const lossCloseTime = new Date(current.metrics.closedAtUtc!).getTime();
+    const windowMs = windowMinutes * 60_000;
+
+    // Look at subsequent trades to find revenge entries
+    for (let j = i + 1; j < sorted.length; j++) {
+      const next = sorted[j];
+      const nextOpenTime = new Date(next.metrics.openedAtUtc!).getTime();
+      const deltaMs = nextOpenTime - lossCloseTime;
+
+      // Stop looking if we've gone beyond the window
+      if (deltaMs > windowMs) break;
+
+      // Only consider if this trade was opened within the window after the loss closed
+      if (deltaMs > 0 && deltaMs <= windowMs) {
+        const minutesAfter = deltaMs / 60_000;
+        revenge.push({
+          tradeId: next.bundle.trade.id,
+          openedAtUtc: next.metrics.openedAtUtc!,
+          minutesAfterLoss: minutesAfter,
+          priorLossPnl: current.metrics.netPnl ?? 0,
+          revengeResult: next.metrics.result,
+          revengePnl: next.metrics.netPnl,
+          revengeR: next.metrics.rMultiple,
+          recouped: (next.metrics.netPnl ?? 0) > 0,
+        });
+      }
+    }
+  }
+
+  return revenge;
 }
 
 // ─────────────────────────────────────────────────────────────

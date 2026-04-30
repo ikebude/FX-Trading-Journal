@@ -5,6 +5,7 @@ import {
   computeSessionDowMatrix,
   computeDurationVsOutcome,
   computeSetupVersionPerformance,
+  computeRevengeTradeIndicators,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -1159,5 +1160,248 @@ describe('computeSetupVersionPerformance — T3.4', () => {
     // Should compute successfully without error; ordering is deterministic
     expect(results[0].closedTrades).toBe(2);
     expect(results[0].rolling30Expectancy).not.toBeNull();
+  });
+});
+
+describe('T3.5: Revenge-trade detector', () => {
+  it('55. No revenge trades when no losses exist', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 't1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.095, 1.0, '2026-04-01T10:30:00Z'), // +1R win
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({ id: 't2', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T11:00:00Z'),
+          exit(1.09, 1.0, '2026-04-01T11:30:00Z'), // +0.5R win
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0);
+  });
+
+  it('56. No revenge trades when loss has no follow-up', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 't1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // Stop hit = LOSS
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0);
+  });
+
+  it('57. Detect revenge trade within 15-minute window after loss', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS -1R
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:40:00Z'), // 10 minutes after loss close
+          exit(1.095, 1.0, '2026-04-01T11:00:00Z'), // +1R win
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(1);
+    expect(results[0].tradeId).toBe('revenge-t2');
+    expect(results[0].minutesAfterLoss).toBeCloseTo(10.0, 0);
+    expect(results[0].priorLossPnl).toBeCloseTo(-500, 0); // -1R on EURUSD (50 pips * 100k * 0.0001)
+    expect(results[0].revengeResult).toBe('WIN');
+    expect(results[0].revengePnl).toBeCloseTo(1000, 0); // +1R (entry 1.085, exit 1.095, gain 100 pips = 1000 USD)
+    expect(results[0].recouped).toBe(true);
+  });
+
+  it('58. Ignore trades opened after 15-minute window (default)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'late-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:46:00Z'), // 16 minutes after loss close
+          exit(1.095, 1.0, '2026-04-01T11:00:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0); // Not within 15-minute window
+  });
+
+  it('59. Revenge trade that LOST money (failed recovery)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS -1R
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-loss-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.084,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:35:00Z'), // 5 minutes later
+          exit(1.084, 1.0, '2026-04-01T10:50:00Z'), // Stop hit again = LOSS
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(1);
+    expect(results[0].tradeId).toBe('revenge-loss-t2');
+    expect(results[0].revengeResult).toBe('LOSS');
+    expect(results[0].recouped).toBe(false); // Did not recover
+  });
+
+  it('60. Multiple consecutive losses, each can trigger revenge', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.084,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:35:00Z'), // 5 min after t1 loss
+          exit(1.084, 1.0, '2026-04-01T11:00:00Z'), // Stop = LOSS again
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-t3',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T11:05:00Z'), // 5 min after t2 loss
+          exit(1.095, 1.0, '2026-04-01T11:30:00Z'), // WIN +1R
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(2); // t2 and t3 are both revenge trades
+    // t2 is revenge after t1 loss
+    expect(results.find((r) => r.tradeId === 'revenge-t2')).toBeDefined();
+    // t3 is revenge after t2 loss
+    expect(results.find((r) => r.tradeId === 'revenge-t3')).toBeDefined();
+  });
+
+  it('61. Custom window size (30 minutes)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'far-revenge-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:55:00Z'), // 25 min after loss (outside default 15, inside 30)
+          exit(1.095, 1.0, '2026-04-01T11:15:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    // With default 15-minute window
+    let results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0);
+
+    // With 30-minute window
+    results = computeRevengeTradeIndicators(trades, 30);
+    expect(results).toHaveLength(1);
+    expect(results[0].tradeId).toBe('far-revenge-t2');
+  });
+
+  it('62. BREAKEVEN result tracking (edge case)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-be-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.085,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:35:00Z'),
+          exit(1.085, 1.0, '2026-04-01T11:00:00Z'), // BREAKEVEN (exit at entry)
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(1);
+    expect(results[0].revengeResult).toBe('BREAKEVEN');
+    expect(results[0].recouped).toBe(false); // BREAKEVEN is 0 pnl, so not >0
   });
 });
