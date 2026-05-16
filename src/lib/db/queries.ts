@@ -213,6 +213,9 @@ export async function listTrades(filters: TradeFilters): Promise<{ rows: TradeRo
   if (!filters.includeSample) {
     conditions.push(eq(trades.isSample, false));
   }
+  if (filters.pinnedOnly) {
+    conditions.push(eq(trades.isPinned, true));
+  }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -401,7 +404,9 @@ export async function hardDeleteTrades(ids: string[]): Promise<void> {
 
 export async function bulkUpdateTrades(
   ids: string[],
-  patch: Partial<Pick<Trade, 'setupName' | 'marketCondition' | 'session' | 'confidence'>>,
+  patch: Partial<
+    Pick<Trade, 'setupName' | 'marketCondition' | 'session' | 'confidence' | 'isPinned'>
+  >,
 ): Promise<void> {
   const db = getDb();
   const now = nowUtc();

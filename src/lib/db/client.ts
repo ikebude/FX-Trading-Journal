@@ -108,6 +108,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration010(sqlite);
   }
 
+  if (currentVersion < 11) {
+    applyMigration011(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -600,6 +604,17 @@ function applyMigration010(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 010 complete');
+}
+
+/** Migration 011 — T5.9 trades.is_pinned (starred trades). */
+function applyMigration011(sqlite: Database.Database): void {
+  log.info('Database: applying migration 011 (T5.9 trades.is_pinned)');
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`);
+    sqlite.pragma('user_version = 11');
+  });
+  migrate();
+  log.info('Database: migration 011 complete');
 }
 
 /**

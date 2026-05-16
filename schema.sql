@@ -171,6 +171,7 @@ CREATE TABLE trades (
   -- Soft delete + sample flag
   deleted_at_utc           TEXT,
   is_sample                INTEGER NOT NULL DEFAULT 0,
+  is_pinned                INTEGER NOT NULL DEFAULT 0,  -- T5.9: starred / pinned
 
   created_at_utc           TEXT NOT NULL,
   updated_at_utc           TEXT NOT NULL

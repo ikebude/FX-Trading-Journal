@@ -200,6 +200,7 @@ export const TradeFiltersSchema = z.object({
   includeDeleted: z.boolean().default(false),
   deletedOnly: z.boolean().default(false),
   includeSample: z.boolean().default(false),
+  pinnedOnly: z.boolean().optional(), // T5.9 — "Pinned" blotter tab
   tagIds: z.array(z.number()).optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().min(1).max(500).default(100),

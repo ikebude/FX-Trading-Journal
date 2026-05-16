@@ -175,6 +175,8 @@ export const trades = sqliteTable(
     // Soft delete + sample
     deletedAtUtc: text('deleted_at_utc'),
     isSample: integer('is_sample', { mode: 'boolean' }).notNull().default(false),
+    // T5.9 — starred/pinned for the "Pinned" blotter tab.
+    isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
 
     createdAtUtc: text('created_at_utc').notNull(),
     updatedAtUtc: text('updated_at_utc').notNull(),
