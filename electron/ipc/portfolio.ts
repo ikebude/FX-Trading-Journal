@@ -21,6 +21,7 @@ export function registerPortfolioHandlers(): void {
       try {
         const accounts = await listAccounts();
         const inputs = [];
+        const openPositions = [];
         for (const a of accounts) {
           const { rows } = await listTrades({
             page: 1,
@@ -41,9 +42,31 @@ export function registerPortfolioHandlers(): void {
             netPnl,
             group: a.brokerType ?? null,
           });
+
+          const { rows: open } = await listTrades({
+            page: 1,
+            pageSize: 100000,
+            accountId: a.id,
+            status: ['OPEN', 'PARTIAL'],
+            includeDeleted: false,
+            includeSample: false,
+            deletedOnly: false,
+            sortBy: 'opened_at_utc',
+            sortDir: 'asc',
+          });
+          for (const t of open) {
+            openPositions.push({
+              accountId: a.id,
+              accountName: a.name,
+              symbol: t.symbol,
+              direction: t.direction,
+              lots: t.totalEntryVolume ?? 0,
+              riskAmount: t.plannedRiskAmount ?? null,
+            });
+          }
         }
         const base = opts.baseCurrency ?? accounts[0]?.accountCurrency ?? 'USD';
-        return computePortfolioSummary(inputs, base, opts.rates ?? {});
+        return computePortfolioSummary(inputs, base, opts.rates ?? {}, openPositions);
       } catch (err) {
         log.error('portfolio:summary', err);
         throw err;

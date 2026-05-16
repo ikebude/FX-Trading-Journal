@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { computePortfolioSummary, type PortfolioAccountInput } from '../src/lib/portfolio';
+import {
+  computePortfolioSummary,
+  detectCrossAccountHedges,
+  computeAccountOpenRisk,
+  type PortfolioAccountInput,
+  type OpenPositionInput,
+} from '../src/lib/portfolio';
 
 const acct = (o: Partial<PortfolioAccountInput> & { accountId: string }): PortfolioAccountInput => ({
   name: o.accountId,
@@ -79,5 +85,56 @@ describe('computePortfolioSummary — T5.1', () => {
     );
     expect(s.byGroup[0]).toEqual({ group: 'Prop', netPnlBase: 150 });
     expect(s.byGroup.find((g) => g.group === 'Ungrouped')!.netPnlBase).toBe(30);
+  });
+});
+
+describe('detectCrossAccountHedges — T5.2', () => {
+  const pos = (o: Partial<OpenPositionInput> & { accountId: string; direction: 'LONG' | 'SHORT' }): OpenPositionInput => ({
+    accountName: o.accountId,
+    symbol: 'EURUSD',
+    lots: 1,
+    ...o,
+  });
+
+  it('flags a symbol long in one account, short in another', () => {
+    const h = detectCrossAccountHedges([
+      pos({ accountId: 'A', direction: 'LONG', lots: 2 }),
+      pos({ accountId: 'B', direction: 'SHORT', lots: 1.5 }),
+    ]);
+    expect(h).toHaveLength(1);
+    expect(h[0].symbol).toBe('EURUSD');
+    expect(h[0].hedgedLots).toBe(1.5);
+    expect(h[0].longAccounts).toEqual(['A']);
+    expect(h[0].shortAccounts).toEqual(['B']);
+  });
+
+  it('ignores opposite legs within the SAME account', () => {
+    expect(
+      detectCrossAccountHedges([
+        pos({ accountId: 'A', direction: 'LONG' }),
+        pos({ accountId: 'A', direction: 'SHORT' }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('no hedge when all accounts are same-direction', () => {
+    expect(
+      detectCrossAccountHedges([
+        pos({ accountId: 'A', direction: 'LONG' }),
+        pos({ accountId: 'B', direction: 'LONG' }),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe('computeAccountOpenRisk — T5.2', () => {
+  it('aggregates open count + risk per account, sorted by risk', () => {
+    const r = computeAccountOpenRisk([
+      { accountId: 'A', accountName: 'A', symbol: 'EURUSD', direction: 'LONG', lots: 1, riskAmount: 100 },
+      { accountId: 'A', accountName: 'A', symbol: 'GBPUSD', direction: 'SHORT', lots: 1, riskAmount: 50 },
+      { accountId: 'B', accountName: 'B', symbol: 'USDJPY', direction: 'LONG', lots: 1, riskAmount: 200 },
+    ]);
+    expect(r[0]).toEqual({ accountId: 'B', accountName: 'B', openPositions: 1, totalRiskAmount: 200 });
+    expect(r[1]).toEqual({ accountId: 'A', accountName: 'A', openPositions: 2, totalRiskAmount: 150 });
   });
 });

@@ -82,6 +82,45 @@ export function PortfolioPage() {
             </div>
           </section>
 
+          {data.hedges.length > 0 && (
+            <section className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+              <h2 className="mb-2 text-sm font-semibold text-amber-300">
+                Cross-account hedges detected
+              </h2>
+              <div className="flex flex-col gap-1 text-xs text-amber-200/90">
+                {data.hedges.map((h) => (
+                  <div key={h.symbol}>
+                    <strong>{h.symbol}</strong>: long in {h.longAccounts.join(', ')} (
+                    {h.longLots} lots) vs short in {h.shortAccounts.join(', ')} (
+                    {h.shortLots} lots) — {h.hedgedLots} lots effectively flat
+                    (double cost, no edge).
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {data.openRisk.length > 0 && (
+            <section className="rounded-lg border border-border bg-card p-4">
+              <h2 className="mb-2 text-sm font-semibold">Open risk by account</h2>
+              <div className="flex flex-col divide-y divide-border text-sm">
+                {data.openRisk.map((r) => (
+                  <div key={r.accountId} className="flex items-center justify-between py-2">
+                    <span>
+                      {r.accountName}{' '}
+                      <span className="text-xs text-muted-foreground">
+                        {r.openPositions} open
+                      </span>
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {formatCurrency(r.totalRiskAmount)} at risk
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {data.byGroup.length > 1 && (
             <section className="rounded-lg border border-border bg-card p-4">
               <h2 className="mb-2 text-sm font-semibold">By group</h2>
