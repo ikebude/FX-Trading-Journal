@@ -179,3 +179,53 @@ Run this playbook against a **clean install** of the release `.exe` — not the 
 
 **Sign-off:**
 > ☐ Passed — initials: ________  date: __________  version: _______
+
+---
+
+# v1.1 Acceptance Criteria (AC-V.x)
+
+> New manual criteria for the v1.1 release gate. Run on a packaged build
+> after the automated gate (`npm test && typecheck && lint && build &&
+> test:e2e`) passes.
+
+## AC-V.1 — Balance reconciliation (T1.5)
+
+**Steps:**
+1. Create/select an account; import or add closed trades.
+2. Add a deposit and a withdrawal via Account → Balance ledger.
+3. Trigger a balance op from the EA bridge (or simulate one).
+4. Open the account — the DriftBanner should be **absent** when the
+   computed balance matches the broker-reported balance.
+5. Edit a balance op so computed ≠ actual by > 0.01%.
+6. Reload — the DriftBanner appears with the drift amount; "Create
+   correction" zeroes it and the banner clears.
+
+**Expected:** Drift detected only when > 0.01%; correction op resolves it.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.2 — Prop-rule breach (T2.4/T2.5)
+
+**Steps:**
+1. Create a PROP account; apply a prop-firm preset (e.g. FTMO).
+2. Add losing trades until the daily-loss limit is exceeded.
+3. The persistent PropFirmBanner turns red and states the breached rule.
+4. Open the trade form — the daily-loss circuit-breaker modal warns
+   before a new entry is allowed.
+
+**Expected:** Breach is detected, banner + pre-trade warning both fire.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.3 — Zip-slip rejection (T1.8)
+
+**Steps:**
+1. Obtain/craft a malicious backup ZIP containing an entry with a
+   `../` traversal path.
+2. Settings → Restore from backup → choose the malicious ZIP.
+3. Restore must abort with a clear error; no file is written outside
+   the data dir.
+
+**Expected:** Path-traversal entries are rejected; data dir untouched.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
