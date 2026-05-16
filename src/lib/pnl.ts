@@ -56,6 +56,9 @@ export interface TradeLeg {
   commission: number;
   swap: number;
   broker_profit: number | null;
+  // T3.9 — execution quality. null = unknown (manual entry / pre-EA-v2).
+  slippage_pips?: number | null;
+  spread_at_entry_pips?: number | null;
 }
 
 export interface TradeMetrics {
@@ -1514,4 +1517,60 @@ export function computePostMortem(
 
 function formatLossWord(amount: number): string {
   return amount > 0 ? `-${amount.toFixed(2)}` : amount.toFixed(2);
+}
+
+// ─────────────────────────────────────────────────────────────
+// T3.9 — Slippage + spread baseline per (symbol, session)
+// ─────────────────────────────────────────────────────────────
+
+export interface SlippageStat {
+  symbol: string;
+  session: string;
+  /** Trades contributing at least one slippage or spread sample. */
+  sampleCount: number;
+  /** Mean signed slippage in pips (negative = filled worse than requested). */
+  avgSlippagePips: number | null;
+  /** Mean spread at entry in pips. */
+  avgSpreadPips: number | null;
+}
+
+/**
+ * Per-symbol, per-session execution-quality baseline. Pure. Ignores legs with
+ * null slippage/spread (manual entry / pre-EA-v2). Sessions fall back to
+ * 'UNKNOWN' when the trade has none. Sorted by sampleCount desc.
+ */
+export function computeSlippageStats(bundles: TradeBundle[]): SlippageStat[] {
+  const groups = new Map<
+    string,
+    { symbol: string; session: string; slip: number[]; spread: number[] }
+  >();
+
+  for (const { trade, legs } of bundles) {
+    const session = trade.session ?? 'UNKNOWN';
+    const key = `${trade.symbol}__${session}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { symbol: trade.symbol, session, slip: [], spread: [] };
+      groups.set(key, g);
+    }
+    for (const leg of legs) {
+      if (leg.slippage_pips != null) g.slip.push(leg.slippage_pips);
+      if (leg.leg_type === 'ENTRY' && leg.spread_at_entry_pips != null) {
+        g.spread.push(leg.spread_at_entry_pips);
+      }
+    }
+  }
+
+  const out: SlippageStat[] = [];
+  for (const g of groups.values()) {
+    if (g.slip.length === 0 && g.spread.length === 0) continue;
+    out.push({
+      symbol: g.symbol,
+      session: g.session,
+      sampleCount: Math.max(g.slip.length, g.spread.length),
+      avgSlippagePips: g.slip.length ? sum(g.slip) / g.slip.length : null,
+      avgSpreadPips: g.spread.length ? sum(g.spread) / g.spread.length : null,
+    });
+  }
+  return out.sort((a, b) => b.sampleCount - a.sampleCount);
 }

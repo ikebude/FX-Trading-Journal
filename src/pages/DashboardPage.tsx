@@ -72,6 +72,8 @@ import type {
   MaeMfePoint,
   SessionDowCell,
   DurationOutcomePoint,
+  PostMortem,
+  SlippageStat,
 } from '@/lib/pnl';
 
 // ─────────────────────────────────────────────────────────────
@@ -94,6 +96,8 @@ interface DashboardData {
   monthlyPnl: MonthlyPnl[];
   sessionDowMatrix: SessionDowCell[];
   durationVsOutcome: DurationOutcomePoint[];
+  postMortem: PostMortem;
+  slippageStats: SlippageStat[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1217,6 +1221,42 @@ function SetupVersionPerformanceWidget({ data }: { data: SetupVersionPerformance
   );
 }
 
+// Widget: Slippage / spread baseline (T3.9)
+function SlippageWidget({ data }: { data: SlippageStat[] }) {
+  if (data.length === 0)
+    return <EmptyWidget message="No execution data yet (EA v2 required)" />;
+  return (
+    <div className="flex flex-col divide-y divide-border text-sm">
+      {data.slice(0, 8).map((s) => (
+        <div
+          key={`${s.symbol}-${s.session}`}
+          className="flex items-center justify-between py-1.5"
+        >
+          <span className="font-medium">
+            {s.symbol}{' '}
+            <span className="text-xs text-muted-foreground">{s.session}</span>
+          </span>
+          <span className="flex gap-4 text-xs tabular-nums">
+            <span
+              className={cn(
+                s.avgSlippagePips != null && s.avgSlippagePips < 0
+                  ? 'text-rose-400'
+                  : 'text-muted-foreground',
+              )}
+            >
+              slip {s.avgSlippagePips != null ? s.avgSlippagePips.toFixed(2) : '—'}
+            </span>
+            <span className="text-muted-foreground">
+              spread {s.avgSpreadPips != null ? s.avgSpreadPips.toFixed(2) : '—'}
+            </span>
+            <span className="text-muted-foreground">n={s.sampleCount}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RevengeTradeWidget({ data }: { data: RevengeTradeIndicator[] }) {
   if (data.length === 0) return <EmptyWidget />;
 
@@ -1465,6 +1505,12 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 gap-4">
           <WidgetCard title="Revenge trades (emotional recovery attempts)">
             <RevengeTradeWidget data={revengeTradeIndicators} />
+          </WidgetCard>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          <WidgetCard title="Execution quality — slippage & spread (T3.9)">
+            <SlippageWidget data={data.slippageStats} />
           </WidgetCard>
         </div>
 

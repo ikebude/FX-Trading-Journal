@@ -214,6 +214,8 @@ CREATE TABLE trade_legs (
   commission          REAL NOT NULL DEFAULT 0,
   swap                REAL NOT NULL DEFAULT 0,
   broker_profit       REAL,                          -- if broker supplied per-leg P&L
+  slippage_pips       REAL,                          -- T3.9: signed requested-vs-filled (EA v2); null = unknown
+  spread_at_entry_pips REAL,                         -- T3.9: spread observed at fill (ENTRY legs); null = unknown
   external_deal_id    TEXT,
   notes               TEXT,
   created_at_utc      TEXT NOT NULL

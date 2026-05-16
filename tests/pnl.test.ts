@@ -10,6 +10,7 @@ import {
   anxietyOutcomeCorrelation,
   pearson,
   computePostMortem,
+  computeSlippageStats,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -1566,5 +1567,56 @@ describe('computePostMortem — T3.8', () => {
     expect(pm.worstTrades[0].netPnl).toBeLessThan(0);
     expect(pm.drawdownPeriod).not.toBeNull();
     expect(pm.contributingFactors.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.9 — Slippage / spread baseline
+// ─────────────────────────────────────────────────────────────
+
+describe('computeSlippageStats — T3.9', () => {
+  function legBundle(
+    symbol: string,
+    session: string | null,
+    entrySlip: number | null,
+    spread: number | null,
+  ) {
+    const id = `${symbol}-${session}-${entrySlip}-${spread}`;
+    return {
+      trade: makeTrade({ id, symbol, session }),
+      legs: [
+        {
+          ...entry(1.09, 1.0, '2026-04-01T10:00:00Z'),
+          trade_id: id,
+          slippage_pips: entrySlip,
+          spread_at_entry_pips: spread,
+        },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('ignores legs with no slippage/spread data', () => {
+    expect(computeSlippageStats([legBundle('EURUSD', 'LONDON', null, null)])).toEqual([]);
+  });
+
+  it('averages slippage and spread per (symbol, session)', () => {
+    const stats = computeSlippageStats([
+      legBundle('EURUSD', 'LONDON', -0.4, 0.8),
+      legBundle('EURUSD', 'LONDON', -0.6, 1.2),
+      legBundle('EURUSD', 'NEWYORK', -0.2, 0.5),
+    ]);
+    const london = stats.find((s) => s.session === 'LONDON')!;
+    expect(london.avgSlippagePips).toBeCloseTo(-0.5, 10);
+    expect(london.avgSpreadPips).toBeCloseTo(1.0, 10);
+    expect(london.sampleCount).toBe(2);
+    // sorted by sampleCount desc → LONDON (2) before NEWYORK (1)
+    expect(stats[0].session).toBe('LONDON');
+  });
+
+  it('falls back to UNKNOWN session', () => {
+    const stats = computeSlippageStats([legBundle('GBPUSD', null, -1, null)]);
+    expect(stats[0].session).toBe('UNKNOWN');
+    expect(stats[0].avgSpreadPips).toBeNull();
   });
 });

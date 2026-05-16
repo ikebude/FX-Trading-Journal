@@ -207,6 +207,9 @@ export const tradeLegs = sqliteTable(
     commission: real('commission').notNull().default(0),
     swap: real('swap').notNull().default(0),
     brokerProfit: real('broker_profit'),
+    // T3.9 — execution quality (EA v2 emits; null = unknown / manual entry).
+    slippagePips: real('slippage_pips'),
+    spreadAtEntryPips: real('spread_at_entry_pips'),
     externalDealId: text('external_deal_id'),
     notes: text('notes'),
     createdAtUtc: text('created_at_utc').notNull(),

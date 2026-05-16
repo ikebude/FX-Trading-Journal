@@ -100,6 +100,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration008(sqlite);
   }
 
+  if (currentVersion < 9) {
+    applyMigration009(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -556,6 +560,23 @@ function applyMigration008(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 008 complete');
+}
+
+/**
+ * Migration 009 — T3.9 execution-quality columns on trade_legs.
+ * Nullable; populated by EA v2 / advanced importers, null for manual entry.
+ */
+function applyMigration009(sqlite: Database.Database): void {
+  log.info('Database: applying migration 009 (T3.9 slippage + spread on trade_legs)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trade_legs ADD COLUMN slippage_pips REAL`);
+    sqlite.exec(`ALTER TABLE trade_legs ADD COLUMN spread_at_entry_pips REAL`);
+    sqlite.pragma('user_version = 9');
+  });
+
+  migrate();
+  log.info('Database: migration 009 complete');
 }
 
 /**
