@@ -9,6 +9,7 @@ import {
   computeCooldown,
   anxietyOutcomeCorrelation,
   pearson,
+  computePostMortem,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -1518,5 +1519,52 @@ describe('anxietyOutcomeCorrelation — T3.7', () => {
     expect(r).not.toBeNull();
     expect(r as number).toBeGreaterThanOrEqual(-1);
     expect(r as number).toBeLessThanOrEqual(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.8 — Post-mortem (drawdown autopsy)
+// ─────────────────────────────────────────────────────────────
+
+describe('computePostMortem — T3.8', () => {
+  function pmBundle(id: string, entryP: number, exitP: number, ts: string) {
+    return {
+      trade: makeTrade({ id, status: 'CLOSED' as const, initial_stop_price: 1.08 }),
+      legs: [
+        { ...entry(entryP, 1.0, ts), trade_id: id },
+        { ...exit(exitP, 1.0, ts.replace('T10', 'T12')), trade_id: id },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('empty book → not triggered, no drawdown period, benign message', () => {
+    const pm = computePostMortem([], 10000);
+    expect(pm.triggered).toBe(false);
+    expect(pm.drawdownPeriod).toBeNull();
+    expect(pm.worstTrades).toEqual([]);
+    expect(pm.tradesInDrawdown).toBe(0);
+    expect(pm.contributingFactors).toHaveLength(1);
+    expect(pm.contributingFactors[0]).toMatch(/no significant drawdown/i);
+  });
+
+  it('a losing run breaches the trigger and surfaces the worst trade + factors', () => {
+    // Small starting balance so a few 1-lot losses exceed a 10% drawdown.
+    const bundles = [
+      pmBundle('w1', 1.0850, 1.0900, '2026-04-01T10:00:00Z'), // +50 pips win
+      pmBundle('l1', 1.0900, 1.0820, '2026-04-02T10:00:00Z'), // -80 pips
+      pmBundle('l2', 1.0900, 1.0780, '2026-04-03T10:00:00Z'), // -120 pips (worst)
+      pmBundle('l3', 1.0900, 1.0850, '2026-04-04T10:00:00Z'), // -50 pips
+    ];
+    const pm = computePostMortem(bundles, 2000, 0.1);
+
+    expect(pm.maxDrawdownPct).toBeGreaterThan(0);
+    expect(pm.triggered).toBe(pm.maxDrawdownPct >= 0.1);
+    expect(pm.worstTrades.length).toBeGreaterThan(0);
+    // 'l2' is the most negative.
+    expect(pm.worstTrades[0].tradeId).toBe('l2');
+    expect(pm.worstTrades[0].netPnl).toBeLessThan(0);
+    expect(pm.drawdownPeriod).not.toBeNull();
+    expect(pm.contributingFactors.length).toBeGreaterThanOrEqual(1);
   });
 });

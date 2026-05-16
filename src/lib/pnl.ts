@@ -1361,3 +1361,157 @@ export function anxietyOutcomeCorrelation(bundles: TradeBundle[]): number | null
   }
   return pearson(anx, r);
 }
+
+// ─────────────────────────────────────────────────────────────
+// T3.8 — Post-mortem (drawdown autopsy / blown-account root cause)
+// ─────────────────────────────────────────────────────────────
+
+export interface PostMortemWorstTrade {
+  tradeId: string;
+  symbol: string;
+  netPnl: number;
+  closedAtUtc: string | null;
+}
+
+export interface PostMortem {
+  /** True once the worst drawdown breaches `triggerPct` (default 10%). */
+  triggered: boolean;
+  maxDrawdown: number;
+  maxDrawdownPct: number;
+  /** Equity-curve window from peak to the deepest trough. Null if no drawdown. */
+  drawdownPeriod: {
+    startUtc: string;
+    endUtc: string;
+    peakEquity: number;
+    troughEquity: number;
+  } | null;
+  /** Number of closed trades whose close falls inside the drawdown window. */
+  tradesInDrawdown: number;
+  /** Up to 3 largest losers (most negative net P&L). */
+  worstTrades: PostMortemWorstTrade[];
+  /** Plain-language root-cause signals, ordered most-to-least severe. */
+  contributingFactors: string[];
+}
+
+/**
+ * Drawdown autopsy. Pure: derives everything from computeAggregateMetrics +
+ * per-trade metrics. `triggerPct` is the drawdown depth (decimal, e.g. 0.10)
+ * at which a post-mortem is considered warranted.
+ */
+export function computePostMortem(
+  bundles: TradeBundle[],
+  startingBalance: number,
+  triggerPct = 0.1,
+): PostMortem {
+  const agg = computeAggregateMetrics(bundles, startingBalance);
+  const curve = agg.equityCurve;
+
+  let drawdownPeriod: PostMortem['drawdownPeriod'] = null;
+  if (curve.length > 0) {
+    // Deepest trough by drawdownPct.
+    let troughIdx = 0;
+    for (let i = 1; i < curve.length; i++) {
+      if (curve[i].drawdownPct > curve[troughIdx].drawdownPct) troughIdx = i;
+    }
+    if (curve[troughIdx].drawdownPct > 0) {
+      // Walk back to the equity peak that preceded the trough.
+      let peakIdx = troughIdx;
+      for (let i = troughIdx; i >= 0; i--) {
+        if (curve[i].drawdown === 0 || curve[i].equity >= curve[peakIdx].equity) peakIdx = i;
+        if (curve[i].drawdown === 0) break;
+      }
+      drawdownPeriod = {
+        startUtc: curve[peakIdx].timestamp,
+        endUtc: curve[troughIdx].timestamp,
+        peakEquity: curve[peakIdx].equity,
+        troughEquity: curve[troughIdx].equity,
+      };
+    }
+  }
+
+  // Per-trade metrics for worst-trade ranking + in-window counting.
+  const scored = bundles
+    .map(({ trade, legs, instrument }) => ({
+      trade,
+      m: computeTradeMetrics(trade, legs, instrument),
+    }))
+    .filter((s) => s.m.netPnl !== null);
+
+  const worstTrades: PostMortemWorstTrade[] = [...scored]
+    .sort((a, b) => (a.m.netPnl as number) - (b.m.netPnl as number))
+    .slice(0, 3)
+    .filter((s) => (s.m.netPnl as number) < 0)
+    .map((s) => ({
+      tradeId: s.trade.id,
+      symbol: s.trade.symbol,
+      netPnl: s.m.netPnl as number,
+      closedAtUtc: s.m.closedAtUtc ?? null,
+    }));
+
+  let tradesInDrawdown = 0;
+  if (drawdownPeriod) {
+    const lo = new Date(drawdownPeriod.startUtc).getTime();
+    const hi = new Date(drawdownPeriod.endUtc).getTime();
+    tradesInDrawdown = scored.filter((s) => {
+      if (!s.m.closedAtUtc) return false;
+      const t = new Date(s.m.closedAtUtc).getTime();
+      return t >= lo && t <= hi;
+    }).length;
+  }
+
+  const factors: string[] = [];
+  if (agg.maxDrawdownPct >= triggerPct) {
+    factors.push(
+      `Peak-to-trough drawdown of ${(agg.maxDrawdownPct * 100).toFixed(1)}% ` +
+        `(${formatLossWord(agg.maxDrawdown)}).`,
+    );
+  }
+  const revengeInDd = drawdownPeriod
+    ? agg.revengeTradeIndicators.filter((r) => {
+        const t = new Date(r.openedAtUtc).getTime();
+        return (
+          t >= new Date(drawdownPeriod!.startUtc).getTime() &&
+          t <= new Date(drawdownPeriod!.endUtc).getTime()
+        );
+      }).length
+    : agg.revengeTradeIndicators.length;
+  if (revengeInDd > 0) {
+    factors.push(
+      `${revengeInDd} revenge trade${revengeInDd === 1 ? '' : 's'} during the drawdown — ` +
+        `emotional re-entry after losses.`,
+    );
+  }
+  const degraded = agg.setupVersionPerformance.filter(
+    (s) => 'isDegraded' in s && (s as { isDegraded?: boolean }).isDegraded,
+  ).length;
+  if (degraded > 0) {
+    factors.push(`${degraded} setup version(s) showing edge degradation.`);
+  }
+  if (worstTrades.length > 0 && drawdownPeriod) {
+    const biggest = worstTrades[0];
+    const span = drawdownPeriod.peakEquity || startingBalance || 1;
+    if (Math.abs(biggest.netPnl) >= 0.25 * Math.abs(span)) {
+      factors.push(
+        `A single trade (${biggest.symbol}) lost ` +
+          `${(Math.abs(biggest.netPnl / span) * 100).toFixed(1)}% of peak equity.`,
+      );
+    }
+  }
+  if (factors.length === 0) {
+    factors.push('No significant drawdown detected. Account is within normal variance.');
+  }
+
+  return {
+    triggered: agg.maxDrawdownPct >= triggerPct,
+    maxDrawdown: agg.maxDrawdown,
+    maxDrawdownPct: agg.maxDrawdownPct,
+    drawdownPeriod,
+    tradesInDrawdown,
+    worstTrades,
+    contributingFactors: factors,
+  };
+}
+
+function formatLossWord(amount: number): string {
+  return amount > 0 ? `-${amount.toFixed(2)}` : amount.toFixed(2);
+}

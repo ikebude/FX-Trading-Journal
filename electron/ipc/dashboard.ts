@@ -34,6 +34,7 @@ import {
   computeMonthlyPnl,
   computeSessionDowMatrix,
   computeDurationVsOutcome,
+  computePostMortem,
   computeTradeMetrics,
   extractCacheableMetrics,
   type TradeBundle,
@@ -283,6 +284,8 @@ export function registerDashboardHandlers(): void {
         calendarHeatmap: computeCalendarHeatmap(bundles, tz),
         streakInfo: computeStreakInfo(bundles),
         monthlyPnl: computeMonthlyPnl(bundles, tz),
+        // T3.8: drawdown autopsy / blown-account root cause
+        postMortem: computePostMortem(bundles, startingBalance),
         // T3.3: session × DoW cross product + duration vs outcome
         sessionDowMatrix: computeSessionDowMatrix(bundles, tz),
         durationVsOutcome: computeDurationVsOutcome(bundles),

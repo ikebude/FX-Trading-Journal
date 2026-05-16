@@ -45,6 +45,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { OverlayPage } from '@/pages/OverlayPage';
 import { ImporterPage } from '@/pages/ImporterPage';
 import { LibraryPage } from '@/pages/LibraryPage';
+import { PostMortemPage } from '@/pages/PostMortemPage';
 
 // ─────────────────────────────────────────────────────────────
 // TanStack Query client
@@ -241,6 +242,12 @@ const libraryRoute = createRoute({
   component: LibraryPage,
 });
 
+const postMortemRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/post-mortem',
+  component: PostMortemPage,
+});
+
 const eaGuideRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/settings/ea-guide',
@@ -257,6 +264,7 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     importRoute,
     libraryRoute,
+    postMortemRoute,
     trashRoute,
     settingsRoute,
     eaGuideRoute,
