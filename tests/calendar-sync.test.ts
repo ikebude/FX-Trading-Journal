@@ -37,6 +37,12 @@ vi.mock('../src/lib/db/client', () => {
     delete: () => chain,
     returning: async () => [],
     execute: async () => ({ rows: [] }),
+    // Make the chain awaitable: a terminal `.where()` / `.from()` (e.g.
+    // retagTradesInternal's `select().from().where()` and `select().from()`)
+    // is `await`-ed directly with no `.limit()`/`.returning()`. Without a
+    // `then`, `await chain` yields the chain object and `for..of` throws
+    // "allTrades is not iterable". Resolving to [] keeps it chainable too.
+    then: (resolve: (v: unknown[]) => void) => resolve([]),
   };
   return { getDb: () => chain };
 });
