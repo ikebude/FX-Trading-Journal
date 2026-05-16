@@ -9,6 +9,8 @@
 import { BrowserWindow } from 'electron';
 import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater';
 import log from 'electron-log/main.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { sha256File, hashesMatch } from '../../src/lib/hash';
 
 const COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
 let lastCheckedAt = 0;
@@ -56,7 +58,38 @@ export function initAutoUpdateService(): void {
   });
 
   autoUpdater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
-    forward({ type: 'downloaded', version: event.version });
+    // T4.11 — SHA-256 integrity gate. electron-updater already checks the
+    // feed's sha512, but we add an independent SHA-256 verification against
+    // a sidecar "<installer>.sha256" when present (offline, no network).
+    // On mismatch we surface an error and do NOT signal "downloaded", so
+    // the user is never prompted to install a tampered artifact.
+    void (async () => {
+      try {
+        const file = event.downloadedFile;
+        if (file) {
+          const actual = await sha256File(file);
+          log.info(`auto-update: SHA-256(${file}) = ${actual}`);
+          const sidecar = `${file}.sha256`;
+          if (existsSync(sidecar)) {
+            const expected = readFileSync(sidecar, 'utf-8').trim().split(/\s+/)[0];
+            if (!hashesMatch(actual, expected)) {
+              log.error(
+                `auto-update: SHA-256 mismatch — expected ${expected}, got ${actual}. Aborting.`,
+              );
+              forward({
+                type: 'error',
+                message: 'Update integrity check failed (SHA-256 mismatch). Not installed.',
+              });
+              return;
+            }
+            log.info('auto-update: SHA-256 verified against sidecar');
+          }
+        }
+      } catch (err) {
+        log.warn('auto-update: SHA-256 verification error (non-fatal)', err);
+      }
+      forward({ type: 'downloaded', version: event.version });
+    })();
   });
 
   autoUpdater.on('error', (err: Error) => {
