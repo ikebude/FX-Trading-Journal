@@ -47,6 +47,13 @@ CREATE TABLE accounts (
   broker_type              TEXT CHECK(broker_type IN
                            ('RETAIL','PROP','ECN','MARKET_MAKER','CRYPTO_EXCHANGE')),
 
+  -- Commission model (T3.10). Optional per-account modeling, used to
+  -- compute expected commission when the broker does not report it.
+  commission_type          TEXT CHECK(commission_type IN
+                           ('PER_LOT','PER_NOTIONAL','ROUND_TRIP')),
+  commission_value         REAL,
+  commission_currency      TEXT,
+
   created_at_utc           TEXT NOT NULL,
   updated_at_utc           TEXT NOT NULL
 );

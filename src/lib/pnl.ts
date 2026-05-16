@@ -82,6 +82,41 @@ export interface TradeMetrics {
 export interface ComputeOptions {
   /** Tolerance for breakeven classification, as a fraction of |1R|. Default 0.1 */
   breakevenTolerance?: number;
+  /** T3.10: account commission model, applied only when broker commission is 0. */
+  commissionModel?: CommissionModel;
+}
+
+/** T3.10 — per-account commission model. */
+export interface CommissionModel {
+  type: 'PER_LOT' | 'PER_NOTIONAL' | 'ROUND_TRIP';
+  /**
+   * PER_LOT: cost per lot (charged on entry + exit volume).
+   * PER_NOTIONAL: cost per $1,000,000 of traded notional (entry + exit).
+   * ROUND_TRIP: flat cost per closed trade.
+   */
+  value: number;
+}
+
+/**
+ * Modeled commission as a positive cost. Pure. Used by computeTradeMetrics
+ * only when the broker did not report a commission.
+ */
+export function computeModeledCommission(
+  model: CommissionModel,
+  totalLots: number,
+  notionalUsd: number,
+): number {
+  if (model.value <= 0) return 0;
+  switch (model.type) {
+    case 'PER_LOT':
+      return model.value * totalLots;
+    case 'PER_NOTIONAL':
+      return model.value * (notionalUsd / 1_000_000);
+    case 'ROUND_TRIP':
+      return model.value;
+    default:
+      return 0;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -116,8 +151,23 @@ export function computeTradeMetrics(
   const totalExitVolume = sum(exits.map((l) => l.volume_lots));
   const remainingVolume = round(totalEntryVolume - totalExitVolume, 4);
 
-  const totalCommission =
+  const brokerCommission =
     sum(entries.map((l) => l.commission)) + sum(exits.map((l) => l.commission));
+  // T3.10: if the broker reported no commission and the account carries a
+  // commission model, substitute the modeled cost (negative = a cost).
+  let totalCommission = brokerCommission;
+  if (brokerCommission === 0 && opts.commissionModel) {
+    const notionalUsd =
+      [...entries, ...exits].reduce(
+        (s, l) => s + l.volume_lots * instrument.contractSize * l.price,
+        0,
+      );
+    totalCommission = -computeModeledCommission(
+      opts.commissionModel,
+      totalEntryVolume + totalExitVolume,
+      notionalUsd,
+    );
+  }
   const totalSwap =
     sum(entries.map((l) => l.swap)) + sum(exits.map((l) => l.swap));
 

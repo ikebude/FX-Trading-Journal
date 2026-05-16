@@ -349,6 +349,73 @@ export function AccountFormFields({ data, onChange, errors = {} }: AccountFormFi
         </div>
       </div>
 
+      {/* ── Commission Model (T3.10) ───────────────────────────────────────────── */}
+      <div className="space-y-2 border-t border-border pt-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Commission Model (optional)
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Used to estimate commission only when the broker statement doesn’t report it.
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="commission-type" className="text-xs font-medium">
+              Type
+            </Label>
+            <Select
+              value={data.commissionType ?? ''}
+              onValueChange={(v) =>
+                onChange('commissionType', (v || undefined) as typeof data.commissionType)
+              }
+            >
+              <SelectTrigger id="commission-type">
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PER_LOT">Per lot</SelectItem>
+                <SelectItem value="PER_NOTIONAL">Per $1M notional</SelectItem>
+                <SelectItem value="ROUND_TRIP">Flat round-trip</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="commission-value" className="text-xs font-medium">
+              Value
+            </Label>
+            <Input
+              id="commission-value"
+              type="number"
+              step="0.01"
+              min="0"
+              value={data.commissionValue ?? ''}
+              onChange={(e) =>
+                onChange(
+                  'commissionValue',
+                  e.target.value ? parseFloat(e.target.value) : undefined,
+                )
+              }
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="commission-currency" className="text-xs font-medium">
+              Currency
+            </Label>
+            <Input
+              id="commission-currency"
+              maxLength={3}
+              placeholder="USD"
+              value={data.commissionCurrency ?? ''}
+              onChange={(e) =>
+                onChange(
+                  'commissionCurrency',
+                  e.target.value ? e.target.value.toUpperCase() : undefined,
+                )
+              }
+            />
+          </div>
+        </div>
+      </div>
+
       {/* ── Prop Firm Section (Conditional) ────────────────────────────────────── */}
       {isProp && (
         <div className="space-y-4 border-t border-border pt-4">

@@ -56,6 +56,11 @@ export const CreateAccountSchema = z.object({
   brokerType: z
     .enum(['RETAIL', 'PROP', 'ECN', 'MARKET_MAKER', 'CRYPTO_EXCHANGE'])
     .optional(),
+
+  // Commission model (T3.10) — all optional
+  commissionType: z.enum(['PER_LOT', 'PER_NOTIONAL', 'ROUND_TRIP']).optional(),
+  commissionValue: nonNegativeReal.optional(),
+  commissionCurrency: z.string().length(3, 'Must be 3-letter currency code').optional(),
 });
 
 export const UpdateAccountSchema = CreateAccountSchema.partial();

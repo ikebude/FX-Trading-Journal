@@ -11,6 +11,7 @@ import {
   pearson,
   computePostMortem,
   computeSlippageStats,
+  computeModeledCommission,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -1618,5 +1619,57 @@ describe('computeSlippageStats — T3.9', () => {
     const stats = computeSlippageStats([legBundle('GBPUSD', null, -1, null)]);
     expect(stats[0].session).toBe('UNKNOWN');
     expect(stats[0].avgSpreadPips).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.10 — Modeled commission
+// ─────────────────────────────────────────────────────────────
+
+describe('computeModeledCommission — T3.10', () => {
+  it('PER_LOT charges value per total lot', () => {
+    expect(computeModeledCommission({ type: 'PER_LOT', value: 3.5 }, 2, 0)).toBe(7);
+  });
+
+  it('PER_NOTIONAL charges value per $1M traded', () => {
+    expect(
+      computeModeledCommission({ type: 'PER_NOTIONAL', value: 50 }, 0, 2_000_000),
+    ).toBe(100);
+  });
+
+  it('ROUND_TRIP is a flat per-trade cost', () => {
+    expect(computeModeledCommission({ type: 'ROUND_TRIP', value: 6 }, 99, 9e9)).toBe(6);
+  });
+
+  it('non-positive value → 0', () => {
+    expect(computeModeledCommission({ type: 'PER_LOT', value: 0 }, 5, 0)).toBe(0);
+  });
+
+  it('applies in computeTradeMetrics only when broker commission is 0', () => {
+    const legs = [
+      entry(1.1, 1.0, '2026-04-01T10:00:00Z'),
+      exit(1.105, 1.0, '2026-04-01T12:00:00Z'),
+    ];
+    const withModel = computeTradeMetrics(
+      makeTrade({ status: 'CLOSED', initial_stop_price: 1.09 }),
+      legs,
+      EURUSD,
+      { commissionModel: { type: 'PER_LOT', value: 3 } },
+    );
+    // 2 lots total (1 entry + 1 exit) * $3 = $6 cost.
+    expect(withModel.totalCommission).toBe(-6);
+
+    // Broker-reported commission wins; model is ignored.
+    const brokerLegs = [
+      { ...entry(1.1, 1.0, '2026-04-01T10:00:00Z'), commission: -4 },
+      exit(1.105, 1.0, '2026-04-01T12:00:00Z'),
+    ];
+    const withBroker = computeTradeMetrics(
+      makeTrade({ status: 'CLOSED', initial_stop_price: 1.09 }),
+      brokerLegs,
+      EURUSD,
+      { commissionModel: { type: 'PER_LOT', value: 3 } },
+    );
+    expect(withBroker.totalCommission).toBe(-4);
   });
 });

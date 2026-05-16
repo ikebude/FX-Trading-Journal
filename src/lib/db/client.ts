@@ -104,6 +104,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration009(sqlite);
   }
 
+  if (currentVersion < 10) {
+    applyMigration010(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -577,6 +581,25 @@ function applyMigration009(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 009 complete');
+}
+
+/**
+ * Migration 010 — T3.10 per-account commission model.
+ * Nullable; CHECK omitted on ALTER (Zod enforces enum). Fresh DBs get the
+ * CHECK from schema.sql.
+ */
+function applyMigration010(sqlite: Database.Database): void {
+  log.info('Database: applying migration 010 (T3.10 account commission model)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE accounts ADD COLUMN commission_type TEXT`);
+    sqlite.exec(`ALTER TABLE accounts ADD COLUMN commission_value REAL`);
+    sqlite.exec(`ALTER TABLE accounts ADD COLUMN commission_currency TEXT`);
+    sqlite.pragma('user_version = 10');
+  });
+
+  migrate();
+  log.info('Database: migration 010 complete');
 }
 
 /**

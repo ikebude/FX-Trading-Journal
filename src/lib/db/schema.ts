@@ -59,6 +59,14 @@ export const accounts = sqliteTable(
       enum: ['RETAIL', 'PROP', 'ECN', 'MARKET_MAKER', 'CRYPTO_EXCHANGE'],
     }),
 
+    // Commission model (T3.10). Optional; used to model expected commission
+    // when the broker does not report it. Mirrors schema.sql.
+    commissionType: text('commission_type', {
+      enum: ['PER_LOT', 'PER_NOTIONAL', 'ROUND_TRIP'],
+    }),
+    commissionValue: real('commission_value'),
+    commissionCurrency: text('commission_currency'),
+
     createdAtUtc: text('created_at_utc').notNull(),
     updatedAtUtc: text('updated_at_utc').notNull(),
   },
