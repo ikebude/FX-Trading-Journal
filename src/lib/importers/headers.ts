@@ -37,14 +37,14 @@ export const SYNONYMS: Record<CanonicalField, readonly string[]> = {
   openTime: ['open time', 'time open', 'entry time', 'opening time', 'time'],
   closeTime: ['close time', 'time close', 'exit time', 'closing time'],
   time: ['time', 'date', 'datetime'],
-  openPrice: ['open price', 'price open', 'entry price', 'opening price', 'fill price'],
+  openPrice: ['open price', 'price open', 'entry price', 'opening price', 'fill price', 'tradeprice', 'trade price'],
   closePrice: ['close price', 'price close', 'exit price', 'closing price'],
   price: ['price', 'rate'],
   stopLoss: ['s / l', 's/l', 'sl', 'stop loss', 'stoploss', 'stop'],
   takeProfit: ['t / p', 't/p', 'tp', 'take profit', 'takeprofit', 'target'],
-  commission: ['commission', 'comm', 'fee', 'fees', 'commissions'],
+  commission: ['commission', 'comm', 'fee', 'fees', 'commissions', 'ibcommission'],
   swap: ['swap', 'rollover', 'storage', 'swaps'],
-  profit: ['profit', 'p/l', 'pnl', 'p / l', 'net', 'gross', 'profit/loss'],
+  profit: ['profit', 'p/l', 'pnl', 'p / l', 'net', 'gross', 'profit/loss', 'fifopnlrealized', 'realizedpnl'],
   comment: ['comment', 'note', 'notes', 'description'],
 };
 

@@ -91,3 +91,16 @@ describe('MatchTrader / DXtrade dialects (T4.2)', () => {
     expect(eur.legs[0].timestampUtc).toMatch(/^2026-04-01T08:00:00\.000Z$/);
   });
 });
+
+describe('IBKR Flex CSV dialect (T4.3)', () => {
+  it('parses IBKR camelCase headers (TradePrice, FifoPnlRealized, IBCommission)', () => {
+    const c = readFileSync(join(DIR, 'ibkr-flex.csv'), 'utf-8');
+    const { format, result } = detectAndParse(c, 'ibkr-flex.csv');
+    expect(format).toBe('CSV');
+    expect(result.trades.length).toBe(5);
+    expect(result.failed.length).toBe(0);
+    const buy = result.trades.find((t) => t.legs[0].price === 1.0855)!;
+    expect(buy.symbol).toBe('EUR.USD');
+    expect(buy.direction).toBe('LONG');
+  });
+});
