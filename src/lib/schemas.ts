@@ -272,6 +272,32 @@ export const UpsertReviewSchema = z.object({
 export type UpsertReviewInput = z.infer<typeof UpsertReviewSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// Rituals & Reflections (T3.6)
+// ─────────────────────────────────────────────────────────────
+
+export const RitualSchema = z.object({
+  name: z.string().min(1, 'Ritual name is required').max(200),
+  setupName: z.string().max(100).nullable().optional(),
+  items: z
+    .array(
+      z.object({
+        id: z.string(),
+        text: z.string().min(1, 'Item text is required'),
+        optional: z.boolean().optional().default(false),
+      }),
+    )
+    .min(1, 'At least one ritual item is required'),
+});
+
+export type RitualInput = z.infer<typeof RitualSchema>;
+
+export const ReflectionSchema = z.object({
+  reflection: z.string().min(1, 'Reflection is required').max(5000),
+});
+
+export type ReflectionInput = z.infer<typeof ReflectionSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // Settings patch
 // ─────────────────────────────────────────────────────────────
 

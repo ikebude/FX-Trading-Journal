@@ -603,6 +603,30 @@ export const bridgeFiles = sqliteTable('bridge_files', {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Rituals & Reflections (T3.6)
+// ─────────────────────────────────────────────────────────────
+
+export const rituals = sqliteTable('rituals', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').references(() => accounts.id),
+  name: text('name').notNull(), // e.g., "Breakout Checklist"
+  setupName: text('setup_name'), // Optional: ritual applies only to this setup
+  items: text('items').notNull(), // JSON array of {id, text, optional}
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAtUtc: text('created_at_utc').notNull(),
+  updatedAtUtc: text('updated_at_utc').notNull(),
+});
+
+export const tradeReflections = sqliteTable('trade_reflections', {
+  id: text('id').primaryKey(),
+  tradeId: text('trade_id')
+    .notNull()
+    .references(() => trades.id),
+  reflection: text('reflection'), // User's written reflection
+  reflectedAtUtc: text('reflected_at_utc').notNull(), // When reflection was written
+});
+
+// ─────────────────────────────────────────────────────────────
 // Settings
 // ─────────────────────────────────────────────────────────────
 

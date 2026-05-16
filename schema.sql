@@ -77,6 +77,34 @@ CREATE TABLE instruments (
 );
 
 -- ─────────────────────────────────────────────────────────────
+-- Methodologies (T2.2) — trading methodology taxonomy (SMC/ICT/Wyckoff…).
+-- Referenced by trades.methodology_id. Mirrors schema.ts `methodologies`.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE methodologies (
+  id               TEXT PRIMARY KEY,
+  name             TEXT NOT NULL UNIQUE,
+  description      TEXT,
+  is_active        INTEGER NOT NULL DEFAULT 1,
+  created_at_utc   TEXT NOT NULL,
+  updated_at_utc   TEXT NOT NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- Prop firm presets (T2.4) — seeded FTMO/MFF/Topstep… rule presets.
+-- Mirrors schema.ts `prop_firm_presets`.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE prop_firm_presets (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL UNIQUE,
+  max_drawdown_pct    REAL,
+  max_daily_loss_pct  REAL,
+  max_drawdown_amount REAL,
+  is_active           INTEGER NOT NULL DEFAULT 1,
+  created_at_utc      TEXT NOT NULL,
+  updated_at_utc      TEXT NOT NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
 -- Trades — position-level "trade idea".
 -- Multiple ENTRY legs allowed (scaling in).
 -- Multiple EXIT legs allowed (partials).
@@ -97,6 +125,7 @@ CREATE TABLE trades (
   planned_risk_pct         REAL,        -- as % of account at time of entry
 
   -- Qualitative context
+  methodology_id           TEXT REFERENCES methodologies(id),
   setup_name               TEXT,
   session                  TEXT,
   market_condition         TEXT CHECK(market_condition IN ('TRENDING','RANGING','NEWS_VOLATILITY')),
@@ -452,6 +481,27 @@ CREATE TABLE bridge_files (
   trade_id        TEXT REFERENCES trades(id),
   error_message   TEXT,
   processed_at_utc TEXT NOT NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- Rituals & Reflections (T3.6)
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE rituals (
+  id              TEXT PRIMARY KEY,
+  account_id      TEXT REFERENCES accounts(id),
+  name            TEXT NOT NULL,
+  setup_name      TEXT,
+  items           TEXT NOT NULL,
+  is_active       INTEGER NOT NULL DEFAULT 1,
+  created_at_utc  TEXT NOT NULL,
+  updated_at_utc  TEXT NOT NULL
+);
+
+CREATE TABLE trade_reflections (
+  id                TEXT PRIMARY KEY,
+  trade_id          TEXT NOT NULL REFERENCES trades(id),
+  reflection        TEXT,
+  reflected_at_utc  TEXT NOT NULL
 );
 
 -- ─────────────────────────────────────────────────────────────

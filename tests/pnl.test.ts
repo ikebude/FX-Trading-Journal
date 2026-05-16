@@ -1014,26 +1014,28 @@ describe('computeSetupVersionPerformance — T3.4', () => {
   });
 
   it('49. Setup with 30+ trades: splits into rolling30 and historical', () => {
-    // First 20 trades: all wins with +1R (strong)
-    const strong = Array(20).fill(1);
-    // Next 15 trades: mixed outcomes (~0.5R expectancy)
-    const mixed = [0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5];
+    // First 5 trades: all losses (-1R) → poor historical baseline
+    // Last 30 trades: all wins (+1R) → strong rolling window
+    // Expected: rolling30Expectancy > historicalExpectancy → isDegraded = false
+    const poor5 = Array(5).fill(-1);   // avg -1R historical
+    const strong30 = Array(30).fill(1); // avg +1R rolling
 
     const trades = createSetupTrades(
       'swing',
       35,
       '2026-04-01T09:00:00Z',
-      [...strong, ...mixed],
+      [...poor5, ...strong30],
     );
 
     const results = computeSetupVersionPerformance(trades);
     expect(results).toHaveLength(1);
     const r = results[0];
     expect(r.closedTrades).toBe(35);
-    // Historical: first 5 trades (35 - 30)
-    // Rolling: last 30 trades
-    expect(r.historicalExpectancy).toBeGreaterThan(r.rolling30Expectancy!);
-    expect(r.isDegraded).toBe(true); // rolling < historical
+    expect(r.rolling30Expectancy).not.toBeNull();
+    expect(r.historicalExpectancy).not.toBeNull();
+    // rolling (last 30, all +1R) > historical (first 5, all -1R)
+    expect(r.rolling30Expectancy!).toBeGreaterThan(r.historicalExpectancy!);
+    expect(r.isDegraded).toBe(false);
   });
 
   it('50. Degradation detected when rolling30 < historicalExpectancy', () => {

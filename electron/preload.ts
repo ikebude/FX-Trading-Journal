@@ -266,6 +266,27 @@ const api = {
       ipcRenderer.invoke('balance-ops:delete', id) as Promise<void>,
   },
 
+  // ── Rituals & Reflections ─────────────────────────
+  rituals: {
+    list: (accountId: string) =>
+      ipcRenderer.invoke('rituals:list', { accountId }) as Promise<unknown[]>,
+    create: (accountId: string, data: Record<string, unknown>) =>
+      ipcRenderer.invoke('rituals:create', { accountId, ...data }) as Promise<unknown>,
+    update: (id: string, data: Record<string, unknown>) =>
+      ipcRenderer.invoke('rituals:update', { id, ...data }) as Promise<void>,
+    delete: (id: string) =>
+      ipcRenderer.invoke('rituals:delete', { id }) as Promise<void>,
+  },
+
+  reflections: {
+    getForTrade: (tradeId: string) =>
+      ipcRenderer.invoke('reflections:get-for-trade', { tradeId }) as Promise<unknown | null>,
+    createOrUpdate: (tradeId: string, reflection: string) =>
+      ipcRenderer.invoke('reflections:create-or-update', { tradeId, reflection }) as Promise<unknown>,
+    listUnrefected: (hoursBack?: number) =>
+      ipcRenderer.invoke('reflections:list-unrefected', { hoursBack }) as Promise<unknown>,
+  },
+
   // ── File dialogs ──────────────────────────────────
   file: {
     pickFile: (filters?: Array<{ name: string; extensions: string[] }>) =>

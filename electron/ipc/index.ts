@@ -29,6 +29,7 @@ import { registerUpdaterHandlers } from './updater';
 import { registerReconciliationHandlers } from './reconciliation';
 import { registerLibraryHandlers } from './library';
 import { registerBalanceOpHandlers } from './balance-ops';
+import { registerRitualHandlers, registerReflectionHandlers } from './rituals';
 
 interface AppConfig {
   data_dir: string;
@@ -73,6 +74,8 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   registerReconciliationHandlers();
   registerLibraryHandlers();
   registerBalanceOpHandlers();
+  registerRitualHandlers();
+  registerReflectionHandlers();
 
   log.info('IPC: all handlers registered');
 }

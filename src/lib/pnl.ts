@@ -703,13 +703,13 @@ export function computeSetupVersionPerformance(bundles: TradeBundle[]): SetupVer
     if (trades.length === 0) continue;
 
     // Sort trades chronologically by close time (then by trade ID for tie-break)
+    // Use numeric timestamp comparison to guarantee ascending order regardless of locale
     const sorted = trades
       .filter((t) => t.metrics.closedAtUtc !== null)
       .sort((a, b) => {
-        const byClose = (a.metrics.closedAtUtc ?? '').localeCompare(
-          b.metrics.closedAtUtc ?? '',
-        );
-        if (byClose !== 0) return byClose;
+        const ta = new Date(a.metrics.closedAtUtc!).getTime();
+        const tb = new Date(b.metrics.closedAtUtc!).getTime();
+        if (ta !== tb) return ta - tb;
         return a.bundle.trade.id.localeCompare(b.bundle.trade.id);
       });
 
