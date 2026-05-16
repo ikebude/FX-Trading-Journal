@@ -45,6 +45,10 @@ interface AppConfig {
   last_account_id: string | null;
   auto_launch: boolean;
   auto_update: boolean;
+  // T4.8 — load demo trades on first run (user-toggleable in Settings).
+  load_sample_data: boolean;
+  // T4.8 — last app version the "what's new" banner was dismissed for.
+  whats_new_seen_version: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -97,6 +101,8 @@ function loadOrCreateConfig(): AppConfig {
     last_account_id: null,
     auto_launch: false,
     auto_update: false,
+    load_sample_data: true,
+    whats_new_seen_version: null,
   };
   writeFileSync(configPath, JSON.stringify(defaults, null, 2));
   return defaults;
@@ -417,7 +423,7 @@ app.whenReady().then(async () => {
   // On first run, populate the DB with sample trades so the dashboard
   // is not empty. The guided tour (App.tsx) checks first_run_complete === false
   // and shows itself; it sets first_run_complete = true on completion.
-  if (!config.first_run_complete) {
+  if (!config.first_run_complete && config.load_sample_data !== false) {
     seedSampleData().catch((err) => {
       log.warn('seed: sample data population failed (non-fatal)', err);
     });

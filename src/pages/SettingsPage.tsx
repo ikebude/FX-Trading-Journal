@@ -152,6 +152,7 @@ function GeneralSection() {
   const tz = (settings?.display_timezone as string | undefined) ?? 'America/New_York';
   const autoLaunch = (settings?.auto_launch as boolean | undefined) ?? false;
   const autoUpdate = (settings?.auto_update as boolean | undefined) ?? false;
+  const loadSampleData = (settings?.load_sample_data as boolean | undefined) ?? true;
 
   return (
     <Section title="General" icon={Settings2}>
@@ -199,6 +200,17 @@ function GeneralSection() {
         <Toggle
           checked={autoUpdate}
           onChange={(val) => updateMutation.mutate({ auto_update: val })}
+          disabled={updateMutation.isPending}
+        />
+      </Row>
+
+      <Row
+        label="Load sample data on first run"
+        description="Populate a fresh install with demo trades. Turn off before first launch for a clean start."
+      >
+        <Toggle
+          checked={loadSampleData}
+          onChange={(val) => updateMutation.mutate({ load_sample_data: val })}
           disabled={updateMutation.isPending}
         />
       </Row>

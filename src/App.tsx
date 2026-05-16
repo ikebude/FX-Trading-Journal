@@ -23,6 +23,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { PropFirmBanner } from '@/components/layout/PropFirmBanner';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
+import { WhatsNewBanner } from '@/components/layout/WhatsNewBanner';
 import { DriftBanner } from '@/components/session-header/DriftBanner';
 import { KeyboardShortcuts } from '@/components/help/KeyboardShortcuts';
 import { CommandPalette } from '@/components/command/CommandPalette';
@@ -150,6 +151,7 @@ function AppShell() {
           onGlossary={() => setGlossaryOpen(true)}
         />
         <PropFirmBanner />
+        <WhatsNewBanner />
         <UpdateBanner />
         {activeAccountId && <DriftBanner accountId={activeAccountId} />}
         <main className="flex flex-1 flex-col overflow-hidden">

@@ -41,6 +41,8 @@ interface AppConfig {
   last_account_id: string | null;
   auto_launch: boolean;
   auto_update: boolean;
+  load_sample_data: boolean;
+  whats_new_seen_version: string | null;
 }
 
 export interface IpcContext {

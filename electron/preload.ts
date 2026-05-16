@@ -208,6 +208,12 @@ const api = {
     showInExplorer: (path: string) => ipcRenderer.invoke('shell:show-in-explorer', path),
   },
 
+  // T4.8 — app metadata
+  app: {
+    version: () => ipcRenderer.invoke('app:version') as Promise<string>,
+    releaseNotes: () => ipcRenderer.invoke('app:release-notes') as Promise<string>,
+  },
+
   // ── Updater ───────────────────────────────────────
   updater: {
     check: () =>
