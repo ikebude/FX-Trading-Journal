@@ -177,6 +177,8 @@ const api = {
     tradePdf: (tradeId: string) => ipcRenderer.invoke('reports:trade-pdf', tradeId),
     summaryPdf: (filters: unknown) =>
       ipcRenderer.invoke('reports:summary-pdf', filters),
+    monthlyPdf: (filters: unknown) =>
+      ipcRenderer.invoke('reports:monthly-pdf', filters),
     exportCsv: (filters: unknown) => ipcRenderer.invoke('reports:export-csv', filters),
   },
 

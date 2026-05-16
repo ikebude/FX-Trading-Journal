@@ -122,6 +122,16 @@ export function ReportsPage() {
     },
   });
 
+  const monthlyMutation = useMutation({
+    mutationFn: () => window.ledger.reports.monthlyPdf(filters),
+    onSuccess: (path) => {
+      if (path) {
+        setResultPath(path);
+        setResultKind('pdf');
+      }
+    },
+  });
+
   const csvMutation = useMutation({
     mutationFn: () => window.ledger.reports.exportCsv(filters),
     onSuccess: (path) => {
@@ -172,6 +182,16 @@ export function ReportsPage() {
             action={() => summaryMutation.mutate()}
             actionLabel="Generate PDF"
             loading={summaryMutation.isPending}
+            disabled={!activeAccountId}
+          />
+
+          <ReportCard
+            icon={FileText}
+            title="Monthly Report"
+            description="Prop-firm submission bundle: KPI grid, highlights, and full trade ledger for the period."
+            action={() => monthlyMutation.mutate()}
+            actionLabel="Generate Monthly PDF"
+            loading={monthlyMutation.isPending}
             disabled={!activeAccountId}
           />
 

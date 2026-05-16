@@ -310,6 +310,127 @@ async function generateSummaryPdf(filters: unknown): Promise<string | null> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// T4.4 — Monthly trader PDF / prop-firm submission bundle
+// ─────────────────────────────────────────────────────────────
+
+async function generateMonthlyPdf(filters: unknown): Promise<string | null> {
+  const safeFilters = (filters ?? {}) as Partial<TradeFilters> & { month?: string };
+  const { rows } = await listTrades({
+    page: 1,
+    deletedOnly: false,
+    ...safeFilters,
+    status: ['CLOSED'],
+    includeDeleted: false,
+    includeSample: false,
+    pageSize: 10000,
+    sortBy: 'closed_at_utc',
+    sortDir: 'asc',
+  });
+  if (rows.length === 0) return null;
+
+  const monthLabel = safeFilters.dateFrom
+    ? format(new Date(safeFilters.dateFrom), 'MMMM yyyy')
+    : format(new Date(), 'MMMM yyyy');
+
+  const wins = rows.filter((t) => (t.netPnl ?? 0) > 0);
+  const losses = rows.filter((t) => (t.netPnl ?? 0) < 0);
+  const netPnl = rows.reduce((a, t) => a + (t.netPnl ?? 0), 0);
+  const grossWin = wins.reduce((a, t) => a + (t.netPnl ?? 0), 0);
+  const grossLoss = Math.abs(losses.reduce((a, t) => a + (t.netPnl ?? 0), 0));
+  const winRate = (wins.length / rows.length) * 100;
+  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : null;
+  const avgWin = wins.length ? grossWin / wins.length : 0;
+  const avgLoss = losses.length ? grossLoss / losses.length : 0;
+  const best = [...rows].sort((a, b) => (b.netPnl ?? 0) - (a.netPnl ?? 0))[0];
+  const worst = [...rows].sort((a, b) => (a.netPnl ?? 0) - (b.netPnl ?? 0))[0];
+  const tradingDays = new Set(rows.map((t) => (t.closedAtUtc ?? '').slice(0, 10))).size;
+
+  const pdfBuffer = await bufferFromPdf((doc) => {
+    const DARK = '#111827';
+    const MID = '#6b7280';
+    const ACCENT = '#2563eb';
+
+    // Cover
+    doc.fontSize(26).fillColor(DARK).text('Monthly Trading Report');
+    doc.fontSize(14).fillColor(ACCENT).text(monthLabel);
+    doc.moveDown(0.5);
+    doc.fontSize(9).fillColor(MID).text(
+      `Prop-firm submission bundle · Generated ${format(new Date(), 'dd MMM yyyy HH:mm')}`,
+    );
+    doc.moveDown(1.5);
+
+    const kpis: Array<[string, string]> = [
+      ['Net P&L', `${netPnl >= 0 ? '+' : ''}$${fmt(netPnl)}`],
+      ['Win Rate', `${winRate.toFixed(1)}%`],
+      ['Profit Factor', profitFactor != null ? fmt(profitFactor) : '—'],
+      ['Trades', String(rows.length)],
+      ['Trading Days', String(tradingDays)],
+      ['Avg Win / Loss', `$${fmt(avgWin)} / $${fmt(avgLoss)}`],
+    ];
+    const colW = (doc.page.width - 100) / 3;
+    kpis.forEach(([label, value], i) => {
+      const col = i % 3;
+      const rowI = Math.floor(i / 3);
+      const x = 50 + col * colW;
+      const y = doc.y + rowI * 50;
+      doc.fontSize(8).fillColor(MID).text(label, x, y, { width: colW });
+      doc.fontSize(15).fillColor(DARK).text(value, x, y + 12, { width: colW });
+    });
+    doc.y += 2 * 50 + 10;
+    doc.moveDown(1);
+
+    doc.fontSize(11).fillColor(DARK).text('Highlights');
+    doc.moveDown(0.3);
+    doc.fontSize(9).fillColor(MID).text(
+      `Best trade: ${best.symbol} ${best.netPnl != null ? `$${fmt(best.netPnl)}` : '—'}  ·  ` +
+        `Worst trade: ${worst.symbol} ${worst.netPnl != null ? `$${fmt(worst.netPnl)}` : '—'}`,
+    );
+    doc.moveDown(1.2);
+
+    // Per-trade ledger (paginates)
+    doc.fontSize(11).fillColor(DARK).text('Trade Ledger');
+    doc.moveDown(0.3);
+    const cols = ['Date', 'Symbol', 'Dir', 'Lots', 'Pips', 'P&L', 'R'];
+    const widths = [92, 60, 34, 44, 50, 60, 40];
+    let x = 50;
+    doc.fontSize(7).fillColor(MID);
+    cols.forEach((c, i) => {
+      doc.text(c, x, doc.y, { width: widths[i], continued: i < cols.length - 1 });
+      x += widths[i];
+    });
+    doc.moveDown(0.2);
+    doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).strokeColor('#e5e7eb').stroke();
+    doc.moveDown(0.2);
+    for (const t of rows) {
+      if (doc.y > doc.page.height - 70) doc.addPage();
+      x = 50;
+      const pnl = t.netPnl ?? 0;
+      const vals = [
+        fmtDate(t.closedAtUtc),
+        t.symbol,
+        t.direction === 'LONG' ? 'L' : 'S',
+        fmt(t.totalEntryVolume),
+        fmt(t.netPips, 1),
+        `${pnl >= 0 ? '+' : ''}$${fmt(pnl)}`,
+        t.rMultiple != null ? fmt(t.rMultiple) : '—',
+      ];
+      doc.fontSize(7).fillColor(DARK);
+      vals.forEach((v, i) => {
+        doc.text(v, x, doc.y, { width: widths[i], continued: i < vals.length - 1 });
+        x += widths[i];
+      });
+      doc.moveDown(0.25);
+    }
+  });
+
+  const tmpDir = join(app.getPath('temp'), 'ledger-reports');
+  mkdirSync(tmpDir, { recursive: true });
+  const outPath = join(tmpDir, `monthly-${Date.now()}.pdf`);
+  writeFileSync(outPath, pdfBuffer);
+  return outPath;
+}
+
+// ─────────────────────────────────────────────────────────────
 // CSV export
 // ─────────────────────────────────────────────────────────────
 
@@ -374,7 +495,17 @@ async function exportCsv(filters: unknown): Promise<string | null> {
 export function registerReportHandlers(): void {
   ipcMain.removeHandler('reports:trade-pdf');
   ipcMain.removeHandler('reports:summary-pdf');
+  ipcMain.removeHandler('reports:monthly-pdf');
   ipcMain.removeHandler('reports:export-csv');
+
+  ipcMain.handle('reports:monthly-pdf', async (_e, filters: unknown) => {
+    try {
+      return await generateMonthlyPdf(filters);
+    } catch (err) {
+      log.error('reports:monthly-pdf', err);
+      throw new Error('Failed to generate monthly PDF');
+    }
+  });
 
   ipcMain.handle('reports:trade-pdf', async (_e, tradeId: string) => {
     try {
