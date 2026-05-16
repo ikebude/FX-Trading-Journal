@@ -12,6 +12,7 @@ import {
   computePostMortem,
   computeSlippageStats,
   computeModeledCommission,
+  computeKelly,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -1619,6 +1620,66 @@ describe('computeSlippageStats — T3.9', () => {
     const stats = computeSlippageStats([legBundle('GBPUSD', null, -1, null)]);
     expect(stats[0].session).toBe('UNKNOWN');
     expect(stats[0].avgSpreadPips).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T4.12 — Kelly criterion
+// ─────────────────────────────────────────────────────────────
+
+describe('computeKelly — T4.12', () => {
+  function kBundle(id: string, entryP: number, exitP: number) {
+    return {
+      trade: makeTrade({ id, status: 'CLOSED' as const, initial_stop_price: 1.0 }),
+      legs: [
+        { ...entry(entryP, 1.0, '2026-04-01T10:00:00Z'), trade_id: id },
+        { ...exit(exitP, 1.0, '2026-04-01T12:00:00Z'), trade_id: id },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('null payoff/kelly when there are no losses', () => {
+    const k = computeKelly([kBundle('w1', 1.0, 1.1), kBundle('w2', 1.0, 1.1)]);
+    expect(k.winRate).toBe(1);
+    expect(k.payoffRatio).toBeNull();
+    expect(k.kellyFraction).toBeNull();
+  });
+
+  it('computes Kelly for a 50% win rate, 2:1 payoff', () => {
+    // 2 wins of +1000, 2 losses of -500 → W=0.5, R=2 → f* = 0.5 - 0.5/2 = 0.25
+    const k = computeKelly([
+      kBundle('w1', 1.0, 1.1),
+      kBundle('w2', 1.0, 1.1),
+      kBundle('l1', 1.0, 0.95),
+      kBundle('l2', 1.0, 0.95),
+    ]);
+    expect(k.winRate).toBeCloseTo(0.5, 10);
+    expect(k.payoffRatio).toBeCloseTo(2, 6);
+    expect(k.kellyFraction).toBeCloseTo(0.25, 6);
+    expect(k.halfKelly).toBeCloseTo(0.125, 6);
+  });
+
+  it('clamps a negative edge to 0 (do not bet)', () => {
+    // 1 win +500, 3 losses -1000 → strongly negative edge
+    const k = computeKelly([
+      kBundle('w1', 1.0, 1.05),
+      kBundle('l1', 1.0, 0.9),
+      kBundle('l2', 1.0, 0.9),
+      kBundle('l3', 1.0, 0.9),
+    ]);
+    expect(k.kellyFraction).toBe(0);
+  });
+
+  it('empty book → all null, sampleSize 0', () => {
+    const k = computeKelly([]);
+    expect(k).toEqual({
+      winRate: null,
+      payoffRatio: null,
+      kellyFraction: null,
+      halfKelly: null,
+      sampleSize: 0,
+    });
   });
 });
 

@@ -288,6 +288,24 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
           : undefined,
     },
     {
+      label: '½-Kelly',
+      value:
+        agg.kelly.halfKelly !== null
+          ? `${(agg.kelly.halfKelly * 100).toFixed(1)}%`
+          : '—',
+      metric: 'Kelly Criterion (T4.12)',
+      tooltip:
+        'Half-Kelly risk fraction from realized win rate + payoff ratio. ' +
+        'Advisory only — full Kelly is volatile; most traders size at ½ or less. ' +
+        'Needs both wins and losses.',
+      color:
+        agg.kelly.halfKelly !== null
+          ? agg.kelly.halfKelly > 0
+            ? 'text-emerald-400'
+            : 'text-rose-400'
+          : undefined,
+    },
+    {
       label: 'Anxiety↔R',
       value:
         agg.anxietyOutcomeCorrelation !== null

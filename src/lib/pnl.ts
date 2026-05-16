@@ -411,6 +411,8 @@ export interface AggregateMetrics {
   revengeTradeIndicators: RevengeTradeIndicator[];
   /** Pearson r between pre-trade anxiety (0-10) and R-multiple; null if < 3 usable points (T3.7). */
   anxietyOutcomeCorrelation: number | null;
+  /** Kelly sizing advisory derived from realized win rate + payoff (T4.12). */
+  kelly: KellyAdvice;
 }
 
 export interface EquityPoint {
@@ -636,6 +638,7 @@ export function computeAggregateMetrics(
     setupVersionPerformance: computeSetupVersionPerformance(bundles),
     revengeTradeIndicators: computeRevengeTradeIndicators(bundles),
     anxietyOutcomeCorrelation: anxietyOutcomeCorrelation(bundles),
+    kelly: computeKelly(bundles),
   };
 }
 
@@ -1623,4 +1626,58 @@ export function computeSlippageStats(bundles: TradeBundle[]): SlippageStat[] {
     });
   }
   return out.sort((a, b) => b.sampleCount - a.sampleCount);
+}
+
+// ─────────────────────────────────────────────────────────────
+// T4.12 — Kelly criterion (advisory)
+// ─────────────────────────────────────────────────────────────
+
+export interface KellyAdvice {
+  /** Realized win rate over closed trades with a P&L, or null if none. */
+  winRate: number | null;
+  /** Avg win / avg loss magnitude (payoff ratio), or null. */
+  payoffRatio: number | null;
+  /** Full Kelly fraction, clamped to [0, 1]; null if undefined. */
+  kellyFraction: number | null;
+  /** Half-Kelly — the practical, less-volatile sizing recommendation. */
+  halfKelly: number | null;
+  sampleSize: number;
+}
+
+/**
+ * Kelly sizing from realized results: f* = W − (1−W)/R, where W = win rate
+ * and R = avg win / avg loss. Pure, advisory only. Returns nulls when there
+ * are no wins or no losses (R undefined). Negative edge → 0 (don't bet).
+ */
+export function computeKelly(bundles: TradeBundle[]): KellyAdvice {
+  const pnls: number[] = [];
+  for (const { trade, legs, instrument } of bundles) {
+    const { netPnl } = computeTradeMetrics(trade, legs, instrument);
+    if (netPnl != null && netPnl !== 0) pnls.push(netPnl);
+  }
+  const wins = pnls.filter((p) => p > 0);
+  const losses = pnls.filter((p) => p < 0);
+  const n = pnls.length;
+  if (n === 0 || wins.length === 0 || losses.length === 0) {
+    return {
+      winRate: n > 0 ? wins.length / n : null,
+      payoffRatio: null,
+      kellyFraction: null,
+      halfKelly: null,
+      sampleSize: n,
+    };
+  }
+  const winRate = wins.length / n;
+  const avgWin = sum(wins) / wins.length;
+  const avgLoss = Math.abs(sum(losses) / losses.length);
+  const payoffRatio = avgWin / avgLoss;
+  const raw = winRate - (1 - winRate) / payoffRatio;
+  const kellyFraction = Math.max(0, Math.min(1, raw));
+  return {
+    winRate,
+    payoffRatio,
+    kellyFraction,
+    halfKelly: kellyFraction / 2,
+    sampleSize: n,
+  };
 }
