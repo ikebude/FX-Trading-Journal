@@ -25,6 +25,9 @@ export function initAutoUpdateService(): void {
   autoUpdater.logger = log;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  // T4.10 — permit installing an older feed version (one-click rollback to
+  // the prior release if a regression ships). Off by default in electron-updater.
+  autoUpdater.allowDowngrade = true;
 
   autoUpdater.on('checking-for-update', () => {
     forward({ type: 'checking' });

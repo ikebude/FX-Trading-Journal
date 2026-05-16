@@ -43,6 +43,7 @@ interface AppConfig {
   auto_update: boolean;
   load_sample_data: boolean;
   whats_new_seen_version: string | null;
+  crash_reporter: boolean;
 }
 
 export interface IpcContext {

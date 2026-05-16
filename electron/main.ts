@@ -10,7 +10,7 @@
  *  - Handle clean shutdown (auto-backup)
  */
 
-import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage, session, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage, session, ipcMain, crashReporter } from 'electron';
 import log from 'electron-log/main.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -49,6 +49,8 @@ interface AppConfig {
   load_sample_data: boolean;
   // T4.8 — last app version the "what's new" banner was dismissed for.
   whats_new_seen_version: string | null;
+  // T4.10 — opt-in local-only crash reporter (no upload, ever).
+  crash_reporter: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -103,12 +105,35 @@ function loadOrCreateConfig(): AppConfig {
     auto_update: false,
     load_sample_data: true,
     whats_new_seen_version: null,
+    crash_reporter: false,
   };
   writeFileSync(configPath, JSON.stringify(defaults, null, 2));
   return defaults;
 }
 
 let config = loadOrCreateConfig();
+
+// T4.10 — opt-in, local-only crash reporter. Dumps to <data_dir>/crashes;
+// uploadToServer is hard-false (Rule 11: no network/telemetry). Started as
+// early as possible so it captures startup crashes too.
+if (config.crash_reporter) {
+  try {
+    const crashesDir = join(config.data_dir, 'crashes');
+    mkdirSync(crashesDir, { recursive: true });
+    app.setPath('crashDumps', crashesDir);
+    crashReporter.start({
+      productName: APP_NAME,
+      companyName: APP_NAME,
+      submitURL: '',
+      uploadToServer: false,
+      compress: true,
+    });
+    log.info(`crash-reporter: enabled (local-only) → ${crashesDir}`);
+  } catch (err) {
+    log.warn('crash-reporter: failed to start (non-fatal)', err);
+  }
+}
+
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;

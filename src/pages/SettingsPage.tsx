@@ -153,6 +153,7 @@ function GeneralSection() {
   const autoLaunch = (settings?.auto_launch as boolean | undefined) ?? false;
   const autoUpdate = (settings?.auto_update as boolean | undefined) ?? false;
   const loadSampleData = (settings?.load_sample_data as boolean | undefined) ?? true;
+  const crashReporter = (settings?.crash_reporter as boolean | undefined) ?? false;
 
   return (
     <Section title="General" icon={Settings2}>
@@ -211,6 +212,17 @@ function GeneralSection() {
         <Toggle
           checked={loadSampleData}
           onChange={(val) => updateMutation.mutate({ load_sample_data: val })}
+          disabled={updateMutation.isPending}
+        />
+      </Row>
+
+      <Row
+        label="Crash reporter (local-only)"
+        description="Write crash dumps to your data folder for debugging. Never uploaded anywhere. Takes effect on next launch."
+      >
+        <Toggle
+          checked={crashReporter}
+          onChange={(val) => updateMutation.mutate({ crash_reporter: val })}
           disabled={updateMutation.isPending}
         />
       </Row>
