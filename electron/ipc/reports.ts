@@ -29,7 +29,7 @@ import { format, parseISO } from 'date-fns';
 
 import { getTrade, listTrades } from '../../src/lib/db/queries';
 import type { TradeFilters } from '../../src/lib/schemas';
-import { toTaxRows, taxRowsToCsv } from '../../src/lib/tax-export';
+import { toTaxRows, taxRowsToCsv, type TaxRow } from '../../src/lib/tax-export';
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -474,6 +474,80 @@ async function generateTaxCsv(filters: unknown): Promise<string | null> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// T5.7 — Year-end P&L statement PDF (credit-segregated)
+// ─────────────────────────────────────────────────────────────
+
+async function generateYearEndPdf(filters: unknown): Promise<string | null> {
+  const safe = (filters ?? {}) as Partial<TradeFilters> & { taxYear?: number };
+  const taxYear = safe.taxYear ?? new Date().getUTCFullYear();
+  const { rows } = await listTrades({
+    page: 1,
+    deletedOnly: false,
+    ...safe,
+    status: ['CLOSED'],
+    includeDeleted: false,
+    includeSample: false,
+    pageSize: 100000,
+    sortBy: 'closed_at_utc',
+    sortDir: 'asc',
+  });
+  const taxRows: TaxRow[] = toTaxRows(
+    rows.map((t) => ({
+      symbol: t.symbol,
+      direction: t.direction,
+      openedAtUtc: t.openedAtUtc,
+      closedAtUtc: t.closedAtUtc,
+      netPnl: t.netPnl,
+      totalCommission: t.totalCommission,
+      totalSwap: t.totalSwap,
+    })),
+    taxYear,
+  );
+  if (taxRows.length === 0) return null;
+
+  const gross = taxRows.reduce((s, r) => s + r.grossPnl, 0);
+  const fees = taxRows.reduce((s, r) => s + r.commission + r.swap, 0);
+  const net = taxRows.reduce((s, r) => s + r.netPnl, 0);
+  const byMonth = new Map<string, number>();
+  for (const r of taxRows) {
+    const m = r.closedAtUtc.slice(0, 7);
+    byMonth.set(m, (byMonth.get(m) ?? 0) + r.netPnl);
+  }
+
+  const pdfBuffer = await bufferFromPdf((doc) => {
+    const DARK = '#111827';
+    const MID = '#6b7280';
+    doc.fontSize(22).fillColor(DARK).text(`Year-End P&L Statement — ${taxYear}`);
+    doc.fontSize(9).fillColor(MID).text(
+      `Generated ${format(new Date(), 'dd MMM yyyy HH:mm')} · ` +
+        'Realized trading P&L only — deposits, withdrawals, bonuses and ' +
+        'credits are excluded (credit segregation).',
+    );
+    doc.moveDown(1);
+    doc.fontSize(12).fillColor(DARK).text(`Gross P&L: $${fmt(gross)}`);
+    doc.fontSize(12).text(`Fees (commission + swap): $${fmt(fees)}`);
+    doc.fontSize(14).fillColor(DARK).text(`Net P&L: $${fmt(net)}`);
+    doc.moveDown(1);
+    doc.fontSize(11).text('Monthly breakdown');
+    doc.moveDown(0.3);
+    for (const [m, v] of [...byMonth.entries()].sort()) {
+      doc.fontSize(9).fillColor(MID).text(`${m}:  ${v >= 0 ? '+' : ''}$${fmt(v)}`);
+    }
+    doc.moveDown(1);
+    doc.fontSize(8).fillColor(MID).text(
+      `${taxRows.length} closed trades. This statement is generated locally ` +
+        'and unsigned; have it counter-signed by your accountant as required.',
+    );
+  });
+
+  const tmpDir = join(app.getPath('temp'), 'ledger-reports');
+  mkdirSync(tmpDir, { recursive: true });
+  const outPath = join(tmpDir, `year-end-${taxYear}-${Date.now()}.pdf`);
+  writeFileSync(outPath, pdfBuffer);
+  return outPath;
+}
+
+// ─────────────────────────────────────────────────────────────
 // CSV export
 // ─────────────────────────────────────────────────────────────
 
@@ -540,6 +614,7 @@ export function registerReportHandlers(): void {
   ipcMain.removeHandler('reports:summary-pdf');
   ipcMain.removeHandler('reports:monthly-pdf');
   ipcMain.removeHandler('reports:tax-csv');
+  ipcMain.removeHandler('reports:year-end-pdf');
   ipcMain.removeHandler('reports:export-csv');
 
   ipcMain.handle('reports:tax-csv', async (_e, filters: unknown) => {
@@ -548,6 +623,15 @@ export function registerReportHandlers(): void {
     } catch (err) {
       log.error('reports:tax-csv', err);
       throw new Error('Failed to generate tax CSV');
+    }
+  });
+
+  ipcMain.handle('reports:year-end-pdf', async (_e, filters: unknown) => {
+    try {
+      return await generateYearEndPdf(filters);
+    } catch (err) {
+      log.error('reports:year-end-pdf', err);
+      throw new Error('Failed to generate year-end PDF');
     }
   });
 

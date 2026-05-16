@@ -185,6 +185,7 @@ const api = {
     monthlyPdf: (filters: unknown) =>
       ipcRenderer.invoke('reports:monthly-pdf', filters),
     taxCsv: (filters: unknown) => ipcRenderer.invoke('reports:tax-csv', filters),
+    yearEndPdf: (filters: unknown) => ipcRenderer.invoke('reports:year-end-pdf', filters),
     exportCsv: (filters: unknown) => ipcRenderer.invoke('reports:export-csv', filters),
   },
 
