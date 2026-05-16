@@ -213,6 +213,12 @@ const api = {
     showInExplorer: (path: string) => ipcRenderer.invoke('shell:show-in-explorer', path),
   },
 
+  // T5.1 — multi-account portfolio
+  portfolio: {
+    summary: (opts?: { baseCurrency?: string; rates?: Record<string, number> }) =>
+      ipcRenderer.invoke('portfolio:summary', opts ?? {}),
+  },
+
   // T4.8 — app metadata
   app: {
     version: () => ipcRenderer.invoke('app:version') as Promise<string>,

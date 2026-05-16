@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/calendar', label: 'Calendar', icon: Calendar },
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/post-mortem', label: 'Post-mortem', icon: Activity },
+  { path: '/portfolio', label: 'Portfolio', icon: TrendingUp },
   { path: '/trash', label: 'Trash', icon: Trash2 },
   { path: '/settings', label: 'Settings', icon: Settings, tourId: 'sidebar-settings' },
 ];
