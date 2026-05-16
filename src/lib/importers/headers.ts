@@ -34,8 +34,8 @@ export const SYNONYMS: Record<CanonicalField, readonly string[]> = {
   type: ['type', 'side', 'action', 'direction', 'buy/sell', 'b/s'],
   direction: ['direction', 'buy/sell', 'side', 'b/s'],
   volume: ['volume', 'size', 'lots', 'qty', 'quantity', 'lot', 'lot size'],
-  openTime: ['open time', 'time open', 'entry time', 'opening time', 'time'],
-  closeTime: ['close time', 'time close', 'exit time', 'closing time'],
+  openTime: ['open time', 'time open', 'entry time', 'opening time', 'time', 'entry date', 'open date'],
+  closeTime: ['close time', 'time close', 'exit time', 'closing time', 'exit date', 'close date'],
   time: ['time', 'date', 'datetime'],
   openPrice: ['open price', 'price open', 'entry price', 'opening price', 'fill price', 'tradeprice', 'trade price'],
   closePrice: ['close price', 'price close', 'exit price', 'closing price'],
@@ -44,7 +44,7 @@ export const SYNONYMS: Record<CanonicalField, readonly string[]> = {
   takeProfit: ['t / p', 't/p', 'tp', 'take profit', 'takeprofit', 'target'],
   commission: ['commission', 'comm', 'fee', 'fees', 'commissions', 'ibcommission'],
   swap: ['swap', 'rollover', 'storage', 'swaps'],
-  profit: ['profit', 'p/l', 'pnl', 'p / l', 'net', 'gross', 'profit/loss', 'fifopnlrealized', 'realizedpnl'],
+  profit: ['profit', 'p/l', 'pnl', 'p / l', 'net', 'gross', 'profit/loss', 'fifopnlrealized', 'realizedpnl', 'p&l', 'net p&l', 'net pnl', 'result'],
   comment: ['comment', 'note', 'notes', 'description'],
 };
 

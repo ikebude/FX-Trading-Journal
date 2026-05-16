@@ -92,6 +92,25 @@ describe('MatchTrader / DXtrade dialects (T4.2)', () => {
   });
 });
 
+describe('Journal-tool migration dialects (T5.3)', () => {
+  for (const [file, n] of [
+    ['tradervue.csv', 3],
+    ['tradezella.csv', 3],
+    ['edgewonk.csv', 3],
+  ] as const) {
+    it(`${file} parses ${n} trades via the shared engine`, () => {
+      const c = readFileSync(join(DIR, file), 'utf-8');
+      const { format, result } = detectAndParse(c, file);
+      expect(format).toBe('CSV');
+      expect(result.trades.length).toBe(n);
+      expect(result.failed.length).toBe(0);
+      for (const t of result.trades) {
+        expect(['LONG', 'SHORT']).toContain(t.direction);
+      }
+    });
+  }
+});
+
 describe('IBKR Flex CSV dialect (T4.3)', () => {
   it('parses IBKR camelCase headers (TradePrice, FifoPnlRealized, IBCommission)', () => {
     const c = readFileSync(join(DIR, 'ibkr-flex.csv'), 'utf-8');
