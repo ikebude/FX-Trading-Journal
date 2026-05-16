@@ -111,7 +111,13 @@ function BridgeToastListener() {
         });
       }
     });
-    return unsub;
+    const unsubHealth = window.ledger.bridge.onHealth((h) => {
+      toast(h.message, { variant: h.kind === 'drift' ? 'error' : 'default' });
+    });
+    return () => {
+      unsub();
+      unsubHealth();
+    };
   }, [toast, qc]);
   return null;
 }

@@ -32,6 +32,7 @@ import { BrowserWindow } from 'electron';
 import { nanoid } from 'nanoid';
 import { eq, and, isNull } from 'drizzle-orm';
 import { format } from 'date-fns';
+import { evaluateBridgeHealth } from '../../src/lib/bridge-health';
 import { z } from 'zod';
 
 import { getDb, withAsyncTransaction } from '../../src/lib/db/client';
@@ -45,6 +46,13 @@ import { detectSession } from '../../src/lib/tz';
 // ─────────────────────────────────────────────────────────────
 
 let _watcher: FSWatcher | null = null;
+
+// T4.9 — heartbeat / server-time drift state.
+let _lastFileAtUtc: string | null = null;
+let _lastServerTimeUtc: string | null = null;
+let _healthTimer: ReturnType<typeof setInterval> | null = null;
+let _quietNotified = false;
+let _driftNotified = false;
 
 // ─────────────────────────────────────────────────────────────
 // Toast broadcaster
@@ -67,6 +75,41 @@ function broadcastEvent(event: BridgeEvent) {
     // bridge:trade-received — consumed by App.tsx for toast + blotter refresh
     win.webContents.send('bridge:trade-received', event);
   });
+}
+
+// T4.9 — periodic bridge health check; emits 'bridge:health' on transitions
+// only (no toast spam). Cleared by stopBridgeWatcher.
+function startHealthMonitor(): void {
+  if (_healthTimer) clearInterval(_healthTimer);
+  _healthTimer = setInterval(() => {
+    const h = evaluateBridgeHealth({
+      lastFileAtUtc: _lastFileAtUtc,
+      now: new Date(),
+      serverTimeUtc: _lastServerTimeUtc,
+    });
+    if (h.quiet !== _quietNotified) {
+      _quietNotified = h.quiet;
+      if (h.quiet) {
+        BrowserWindow.getAllWindows().forEach((w) =>
+          w.webContents.send('bridge:health', {
+            kind: 'quiet',
+            message: 'Bridge has been quiet for 5+ min during market hours. Check the EA.',
+          }),
+        );
+      }
+    }
+    if (h.driftAlert !== _driftNotified) {
+      _driftNotified = h.driftAlert;
+      if (h.driftAlert && h.driftSeconds != null) {
+        BrowserWindow.getAllWindows().forEach((w) =>
+          w.webContents.send('bridge:health', {
+            kind: 'drift',
+            message: `Server-time drift ${h.driftSeconds}s — check broker/PC clock.`,
+          }),
+        );
+      }
+    }
+  }, 60_000);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -668,6 +711,13 @@ async function processFile(filePath: string, dataDir: string): Promise<void> {
     const raw = readFileSync(filePath, 'utf-8');
     const json = JSON.parse(raw) as Record<string, unknown>;
 
+    // T4.9 — heartbeat: record receipt + EA server time (if present).
+    _lastFileAtUtc = new Date().toISOString();
+    {
+      const st = json.server_time ?? json.serverTime ?? json.time;
+      if (typeof st === 'string') _lastServerTimeUtc = st;
+    }
+
     // ── v2 balance_op path ───────────────────────────────────────────
     // event_type === 'balance_op' routes to balance_operations insert.
     // v1 EA events (ea_version < 2 or missing): handled below.
@@ -838,6 +888,7 @@ export async function startBridgeWatcher(dataDir: string): Promise<void> {
     log.error('bridge-watcher: chokidar error', err);
   });
 
+  startHealthMonitor();
   log.info(`bridge-watcher: watching ${inboxDir}`);
 }
 
@@ -845,6 +896,10 @@ export async function startBridgeWatcher(dataDir: string): Promise<void> {
  * Gracefully closes the file watcher. Called from `app.on('will-quit')`.
  */
 export async function stopBridgeWatcher(): Promise<void> {
+  if (_healthTimer) {
+    clearInterval(_healthTimer);
+    _healthTimer = null;
+  }
   if (_watcher) {
     await _watcher.close();
     _watcher = null;

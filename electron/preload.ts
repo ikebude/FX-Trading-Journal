@@ -141,6 +141,11 @@ const api = {
       ipcRenderer.on('bridge:trade-received', handler);
       return () => { ipcRenderer.removeListener('bridge:trade-received', handler); };
     },
+    onHealth: (cb: (h: { kind: string; message: string }) => void): (() => void) => {
+      const handler = (_: unknown, h: { kind: string; message: string }) => cb(h);
+      ipcRenderer.on('bridge:health', handler);
+      return () => { ipcRenderer.removeListener('bridge:health', handler); };
+    },
   },
 
   // ── Capture overlay ───────────────────────────────
