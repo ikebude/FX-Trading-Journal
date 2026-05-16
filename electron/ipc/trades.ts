@@ -83,6 +83,7 @@ export function registerTradeHandlers(): void {
           marketCondition: parsed.marketCondition ?? null,
           entryModel: parsed.entryModel ?? null,
           confidence: parsed.confidence ?? null,
+          anxietyLevel: parsed.anxietyLevel ?? null,
           preTradeEmotion: parsed.preTradeEmotion ?? null,
           postTradeEmotion: null,
           openedAtUtc: parsed.entryLeg?.timestampUtc ?? null,

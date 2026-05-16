@@ -49,6 +49,7 @@ import {
   TooltipTrigger as HintTooltipTrigger,
 } from '@/components/ui/tooltip';
 import { MetricTooltip } from '@/components/help/MetricTooltip';
+import { MoodCheckin } from '@/components/dashboard/MoodCheckin';
 import { useAppStore } from '@/stores/app-store';
 import {
   getDashboardDateRange,
@@ -280,6 +281,25 @@ function StatsRow({ agg }: { agg: AggregateMetrics }) {
             : agg.recoveryFactor >= 1
             ? 'text-amber-400'
             : 'text-rose-400'
+          : undefined,
+    },
+    {
+      label: 'Anxiety↔R',
+      value:
+        agg.anxietyOutcomeCorrelation !== null
+          ? agg.anxietyOutcomeCorrelation.toFixed(2)
+          : '—',
+      metric: 'Anxiety vs Outcome (T3.7)',
+      tooltip:
+        'Pearson r between pre-trade anxiety (0-10) and realized R-multiple. ' +
+        'Negative → higher anxiety tends to worse outcomes. Needs ≥ 3 trades with anxiety logged.',
+      color:
+        agg.anxietyOutcomeCorrelation !== null
+          ? agg.anxietyOutcomeCorrelation <= -0.3
+            ? 'text-rose-400'
+            : agg.anxietyOutcomeCorrelation >= 0.3
+            ? 'text-emerald-400'
+            : 'text-amber-400'
           : undefined,
     },
   ];
@@ -1392,6 +1412,13 @@ export function DashboardPage() {
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {/* Stats row */}
         <StatsRow agg={aggregate} />
+
+        {/* Mood check-in (T3.7) — optional, standalone */}
+        <div className="grid grid-cols-3 gap-4">
+          <WidgetCard title="Mood check-in">
+            <MoodCheckin />
+          </WidgetCard>
+        </div>
 
         {/* Row 1: Equity curve (wide) + Streak */}
         <div className="grid grid-cols-3 gap-4">

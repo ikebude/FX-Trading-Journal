@@ -6,6 +6,9 @@ import {
   computeDurationVsOutcome,
   computeSetupVersionPerformance,
   computeRevengeTradeIndicators,
+  computeCooldown,
+  anxietyOutcomeCorrelation,
+  pearson,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -1405,5 +1408,115 @@ describe('T3.5: Revenge-trade detector', () => {
     expect(results).toHaveLength(1);
     expect(results[0].revengeResult).toBe('BREAKEVEN');
     expect(results[0].recouped).toBe(false); // BREAKEVEN is 0 pnl, so not >0
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.7 — Cool-down timer (pure helper)
+// ─────────────────────────────────────────────────────────────
+
+describe('computeCooldown — T3.7', () => {
+  const now = new Date('2026-05-16T12:00:00Z');
+
+  it('inactive when there is no prior closed loss', () => {
+    expect(computeCooldown(null, 15, now)).toEqual({ active: false, secondsRemaining: 0 });
+  });
+
+  it('inactive when cooldownMinutes is 0 (feature off)', () => {
+    expect(computeCooldown('2026-05-16T11:59:00Z', 0, now)).toEqual({
+      active: false,
+      secondsRemaining: 0,
+    });
+  });
+
+  it('active with remaining seconds when loss is within the window', () => {
+    // loss closed 5 minutes ago, 15-minute cooldown → 10 minutes (600s) left
+    const r = computeCooldown('2026-05-16T11:55:00Z', 15, now);
+    expect(r.active).toBe(true);
+    expect(r.secondsRemaining).toBe(600);
+  });
+
+  it('inactive once the window has fully elapsed', () => {
+    // loss closed 20 minutes ago, 15-minute cooldown → expired
+    expect(computeCooldown('2026-05-16T11:40:00Z', 15, now)).toEqual({
+      active: false,
+      secondsRemaining: 0,
+    });
+  });
+
+  it('treats a future timestamp defensively as inactive', () => {
+    expect(computeCooldown('2026-05-16T12:05:00Z', 15, now).active).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.7 — Pearson correlation core + anxiety/outcome correlation
+// ─────────────────────────────────────────────────────────────
+
+describe('pearson — T3.7', () => {
+  it('returns null for fewer than 3 points', () => {
+    expect(pearson([1, 2], [2, 4])).toBeNull();
+  });
+
+  it('returns +1 for a perfectly positive linear relationship', () => {
+    expect(pearson([1, 2, 3, 4], [2, 4, 6, 8])).toBeCloseTo(1, 10);
+  });
+
+  it('returns -1 for a perfectly negative linear relationship', () => {
+    expect(pearson([1, 2, 3, 4], [8, 6, 4, 2])).toBeCloseTo(-1, 10);
+  });
+
+  it('returns null when a series has zero variance (undefined correlation)', () => {
+    expect(pearson([5, 5, 5, 5], [1, 2, 3, 4])).toBeNull();
+  });
+});
+
+describe('anxietyOutcomeCorrelation — T3.7', () => {
+  function anxBundle(anxiety: number | null, exitPrice: number) {
+    const ts = `2026-04-0${1}T1${exitPrice}:00:00Z`;
+    return {
+      trade: makeTrade({
+        id: `anx-${anxiety}-${exitPrice}`,
+        status: 'CLOSED' as const,
+        initial_stop_price: 1.08,
+        anxiety_level: anxiety,
+      }),
+      legs: [
+        { ...entry(1.09, 1.0, ts), trade_id: `anx-${anxiety}-${exitPrice}` },
+        {
+          ...exit(exitPrice, 1.0, ts.replace('T1', 'T2')),
+          trade_id: `anx-${anxiety}-${exitPrice}`,
+        },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('returns null with fewer than 3 usable (anxiety, R) pairs', () => {
+    expect(anxietyOutcomeCorrelation([anxBundle(2, 1.1), anxBundle(8, 1.05)])).toBeNull();
+  });
+
+  it('excludes trades with no anxiety recorded', () => {
+    // 4 trades but only 2 carry an anxiety value → still null
+    const bundles = [
+      anxBundle(null, 1.1),
+      anxBundle(null, 1.05),
+      anxBundle(3, 1.1),
+      anxBundle(7, 1.0),
+    ];
+    expect(anxietyOutcomeCorrelation(bundles)).toBeNull();
+  });
+
+  it('returns a correlation coefficient in [-1, 1] for >= 3 usable pairs', () => {
+    const bundles = [
+      anxBundle(1, 1.12),
+      anxBundle(5, 1.1),
+      anxBundle(9, 1.07),
+      anxBundle(7, 1.08),
+    ];
+    const r = anxietyOutcomeCorrelation(bundles);
+    expect(r).not.toBeNull();
+    expect(r as number).toBeGreaterThanOrEqual(-1);
+    expect(r as number).toBeLessThanOrEqual(1);
   });
 });

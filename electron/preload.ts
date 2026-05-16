@@ -287,6 +287,14 @@ const api = {
       ipcRenderer.invoke('reflections:list-unrefected', { hoursBack }) as Promise<unknown>,
   },
 
+  // ── Mood check-ins (T3.7) ─────────────────────────
+  mood: {
+    checkin: (payload: { accountId?: string | null; moodScore: number; note?: string | null }) =>
+      ipcRenderer.invoke('mood:checkin', payload) as Promise<unknown>,
+    list: (accountId?: string | null) =>
+      ipcRenderer.invoke('mood:list', { accountId }) as Promise<unknown[]>,
+  },
+
   // ── File dialogs ──────────────────────────────────
   file: {
     pickFile: (filters?: Array<{ name: string; extensions: string[] }>) =>

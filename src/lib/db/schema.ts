@@ -133,6 +133,8 @@ export const trades = sqliteTable(
     postTradeEmotion: text('post_trade_emotion', {
       enum: ['SATISFIED', 'RELIEVED', 'DISAPPOINTED', 'FRUSTRATED', 'INDIFFERENT'],
     }),
+    // T3.7: optional 0-10 pre-trade anxiety slider. NULL = not recorded.
+    anxietyLevel: integer('anxiety_level'),
 
     // Timing
     openedAtUtc: text('opened_at_utc'),
@@ -627,6 +629,19 @@ export const tradeReflections = sqliteTable('trade_reflections', {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Mood check-ins (T3.7) — standalone optional wellness data.
+// accountId nullable: a check-in may be global. Mirrors schema.sql.
+// ─────────────────────────────────────────────────────────────
+export const moodCheckins = sqliteTable('mood_checkins', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').references(() => accounts.id),
+  moodScore: integer('mood_score').notNull(), // 1-5
+  note: text('note'),
+  checkedInAtUtc: text('checked_in_at_utc').notNull(),
+  createdAtUtc: text('created_at_utc').notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────
 // Settings
 // ─────────────────────────────────────────────────────────────
 
@@ -663,3 +678,5 @@ export type Methodology = typeof methodologies.$inferSelect;
 export type NewMethodology = typeof methodologies.$inferInsert;
 export type PropFirmPreset = typeof propFirmPresets.$inferSelect;
 export type NewPropFirmPreset = typeof propFirmPresets.$inferInsert;
+export type MoodCheckin = typeof moodCheckins.$inferSelect;
+export type NewMoodCheckin = typeof moodCheckins.$inferInsert;

@@ -111,6 +111,8 @@ export const CreateTradeSchema = z.object({
   marketCondition: z.enum(['TRENDING', 'RANGING', 'NEWS_VOLATILITY']).optional(),
   entryModel: z.enum(['LIMIT', 'MARKET', 'STOP_ENTRY', 'ON_RETEST']).optional(),
   confidence: z.number().int().min(1).max(5).optional(),
+  // T3.7 — optional 0-10 pre-trade anxiety slider.
+  anxietyLevel: z.number().int().min(0).max(10).nullable().optional(),
   preTradeEmotion: z
     .enum(['CALM', 'NEUTRAL', 'ANXIOUS', 'EXCITED', 'FRUSTRATED', 'TIRED'])
     .optional(),
@@ -154,6 +156,8 @@ export const QuickTradeSchema = z.object({
   methodologyId: z.string().optional(),
   setupName: z.string().max(100).optional(),
   confidence: z.number().int().min(1).max(5).optional(),
+  // T3.7 — optional 0-10 pre-trade anxiety slider.
+  anxietyLevel: z.number().int().min(0).max(10).nullable().optional(),
   preTradeEmotion: z
     .enum(['CALM', 'NEUTRAL', 'ANXIOUS', 'EXCITED', 'FRUSTRATED', 'TIRED'])
     .optional(),
@@ -296,6 +300,17 @@ export const ReflectionSchema = z.object({
 });
 
 export type ReflectionInput = z.infer<typeof ReflectionSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// Mood check-in (T3.7) — standalone optional wellness data.
+// ─────────────────────────────────────────────────────────────
+export const MoodCheckinSchema = z.object({
+  accountId: z.string().nullable().optional(),
+  moodScore: z.number().int().min(1).max(5),
+  note: z.string().max(1000).nullable().optional(),
+});
+
+export type MoodCheckinInput = z.infer<typeof MoodCheckinSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // Settings patch

@@ -133,6 +133,7 @@ CREATE TABLE trades (
   confidence               INTEGER CHECK(confidence BETWEEN 1 AND 5),
   pre_trade_emotion        TEXT CHECK(pre_trade_emotion IN ('CALM','NEUTRAL','ANXIOUS','EXCITED','FRUSTRATED','TIRED')),
   post_trade_emotion       TEXT CHECK(post_trade_emotion IN ('SATISFIED','RELIEVED','DISAPPOINTED','FRUSTRATED','INDIFFERENT')),
+  anxiety_level            INTEGER CHECK(anxiety_level BETWEEN 0 AND 10), -- T3.7: optional 0-10 pre-trade slider
 
   -- Timing
   opened_at_utc            TEXT,        -- earliest ENTRY leg timestamp
@@ -503,6 +504,23 @@ CREATE TABLE trade_reflections (
   reflection        TEXT,
   reflected_at_utc  TEXT NOT NULL
 );
+
+-- ─────────────────────────────────────────────────────────────
+-- Mood check-ins (T3.7) — standalone, optional wellness data.
+-- account_id nullable: a check-in can be global, not tied to an account.
+-- Independent of `reviews`; feeds mood-trend analytics. Mirrors schema.ts.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE mood_checkins (
+  id                 TEXT PRIMARY KEY,
+  account_id         TEXT REFERENCES accounts(id),
+  mood_score         INTEGER NOT NULL CHECK(mood_score BETWEEN 1 AND 5),
+  note               TEXT,
+  checked_in_at_utc  TEXT NOT NULL,
+  created_at_utc     TEXT NOT NULL
+);
+
+CREATE INDEX idx_mood_checkins_account_time
+  ON mood_checkins(account_id, checked_in_at_utc);
 
 -- ─────────────────────────────────────────────────────────────
 -- Settings (key/value).

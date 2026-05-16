@@ -96,6 +96,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration007(sqlite);
   }
 
+  if (currentVersion < 8) {
+    applyMigration008(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -518,6 +522,40 @@ function applyMigration007(sqlite: Database.Database): void {
 
   migrate();
   log.info('Database: migration 007 complete');
+}
+
+/**
+ * Migration 008 — T3.7 anxiety slider + mood check-ins.
+ *  1. trades.anxiety_level (nullable INTEGER, 0-10).
+ *  2. mood_checkins table + (account_id, checked_in_at_utc) index.
+ * SQLite ALTER TABLE ADD COLUMN cannot carry an inline CHECK on older
+ * engines; the 0-10 / 1-5 bounds are enforced by Zod at the IPC layer.
+ * Fresh DBs get the CHECKs from schema.sql.
+ */
+function applyMigration008(sqlite: Database.Database): void {
+  log.info('Database: applying migration 008 (T3.7 anxiety_level + mood_checkins)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN anxiety_level INTEGER`);
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS mood_checkins (
+        id                 TEXT PRIMARY KEY,
+        account_id         TEXT REFERENCES accounts(id),
+        mood_score         INTEGER NOT NULL,
+        note               TEXT,
+        checked_in_at_utc  TEXT NOT NULL,
+        created_at_utc     TEXT NOT NULL
+      );
+    `);
+    sqlite.exec(`
+      CREATE INDEX IF NOT EXISTS idx_mood_checkins_account_time
+        ON mood_checkins(account_id, checked_in_at_utc);
+    `);
+    sqlite.pragma('user_version = 8');
+  });
+
+  migrate();
+  log.info('Database: migration 008 complete');
 }
 
 /**

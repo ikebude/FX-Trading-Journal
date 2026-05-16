@@ -42,6 +42,8 @@ export interface Trade {
   // MAE / MFE — populated by EA v2.1+ or manual entry (T3.2)
   mae_pips?: number | null;
   mfe_pips?: number | null;
+  // T3.7 — optional 0-10 pre-trade anxiety slider value. NULL = not recorded.
+  anxiety_level?: number | null;
 }
 
 export interface TradeLeg {
@@ -354,6 +356,8 @@ export interface AggregateMetrics {
   setupVersionPerformance: SetupVersionPerformance[];
   /** Revenge trades — trades entered shortly after losses, typically emotional (T3.5). */
   revengeTradeIndicators: RevengeTradeIndicator[];
+  /** Pearson r between pre-trade anxiety (0-10) and R-multiple; null if < 3 usable points (T3.7). */
+  anxietyOutcomeCorrelation: number | null;
 }
 
 export interface EquityPoint {
@@ -578,6 +582,7 @@ export function computeAggregateMetrics(
     maeMfeScatter,
     setupVersionPerformance: computeSetupVersionPerformance(bundles),
     revengeTradeIndicators: computeRevengeTradeIndicators(bundles),
+    anxietyOutcomeCorrelation: anxietyOutcomeCorrelation(bundles),
   };
 }
 
@@ -1274,4 +1279,85 @@ function sum(xs: number[]): number {
 function round(n: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(n * factor) / factor;
+}
+
+// ─────────────────────────────────────────────────────────────
+// T3.7 — Cool-down timer + anxiety/outcome correlation
+// ─────────────────────────────────────────────────────────────
+
+export interface CooldownState {
+  active: boolean;
+  /** Whole seconds left before the cool-down window elapses (0 when inactive). */
+  secondsRemaining: number;
+}
+
+/**
+ * Advisory cool-down after a losing trade. Pure and timezone-safe (all inputs
+ * are UTC ISO-8601 strings). Returns inactive when there is no prior loss, the
+ * feature is off (`cooldownMinutes <= 0`), the window has elapsed, or the
+ * timestamp is in the future (treated defensively as inactive).
+ */
+export function computeCooldown(
+  lastClosedLossAtUtc: string | null,
+  cooldownMinutes: number,
+  now: Date | string = new Date(),
+): CooldownState {
+  const inactive: CooldownState = { active: false, secondsRemaining: 0 };
+  if (!lastClosedLossAtUtc || cooldownMinutes <= 0) return inactive;
+
+  const lossMs = new Date(lastClosedLossAtUtc).getTime();
+  const nowMs = (now instanceof Date ? now : new Date(now)).getTime();
+  if (Number.isNaN(lossMs) || Number.isNaN(nowMs)) return inactive;
+
+  const elapsedMs = nowMs - lossMs;
+  if (elapsedMs < 0) return inactive; // future timestamp — defensive
+
+  const windowMs = cooldownMinutes * 60_000;
+  if (elapsedMs >= windowMs) return inactive;
+
+  return { active: true, secondsRemaining: Math.ceil((windowMs - elapsedMs) / 1000) };
+}
+
+/**
+ * Pearson product-moment correlation. Returns null when there are fewer than
+ * 3 points or either series has zero variance (correlation undefined).
+ */
+export function pearson(xs: number[], ys: number[]): number | null {
+  const n = xs.length;
+  if (n < 3 || ys.length !== n) return null;
+
+  const meanX = sum(xs) / n;
+  const meanY = sum(ys) / n;
+
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - meanX;
+    const dy = ys[i] - meanY;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+
+  if (sxx === 0 || syy === 0) return null; // no variance → undefined
+  return sxy / Math.sqrt(sxx * syy);
+}
+
+/**
+ * Correlation between pre-trade anxiety (0-10) and realized R-multiple over
+ * trades that carry both an `anxiety_level` and a computable R. Null until at
+ * least 3 usable pairs exist. Pure — recomputes per-trade metrics internally.
+ */
+export function anxietyOutcomeCorrelation(bundles: TradeBundle[]): number | null {
+  const anx: number[] = [];
+  const r: number[] = [];
+  for (const { trade, legs, instrument } of bundles) {
+    if (trade.anxiety_level == null) continue;
+    const { rMultiple } = computeTradeMetrics(trade, legs, instrument);
+    if (rMultiple == null) continue;
+    anx.push(trade.anxiety_level);
+    r.push(rMultiple);
+  }
+  return pearson(anx, r);
 }

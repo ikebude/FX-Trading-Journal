@@ -33,6 +33,8 @@ import { AlertTriangle } from 'lucide-react';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { cn } from '@/lib/cn';
 import { CreateTradeSchema, QuickTradeSchema } from '@/lib/schemas';
+import { AnxietySlider } from './AnxietySlider';
+import { CooldownNotice } from './CooldownBanner';
 import type { Account, Instrument, Methodology, Trade, Setup } from '@/lib/db/schema';
 
 // ─────────────────────────────────────────────────────────────
@@ -246,6 +248,7 @@ function QuickForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3 p-4">
+      <CooldownNotice accountId={activeAccountId} />
       {/* Account */}
       <Field label="Account" error={errors.accountId?.message}>
         <Select defaultValue={activeAccountId ?? undefined} onValueChange={(v) => setValue('accountId', v)}>
@@ -408,6 +411,16 @@ function QuickForm({
             </button>
           ))}
         </div>
+      </Field>
+
+      {/* Pre-trade anxiety (T3.7) — optional 0-10 */}
+      <Field label="Anxiety (optional)">
+        <AnxietySlider
+          value={watch('anxietyLevel')}
+          onChange={(v) =>
+            setValue('anxietyLevel', v as QuickFormValues['anxietyLevel'])
+          }
+        />
       </Field>
 
       <div className="flex gap-2 pt-1">
@@ -586,6 +599,7 @@ function FullForm({
             marketCondition: data.marketCondition,
             entryModel: data.entryModel,
             confidence: data.confidence,
+            anxietyLevel: data.anxietyLevel,
             preTradeEmotion: data.preTradeEmotion,
             postTradeEmotion: data.postTradeEmotion,
             maePips: data.maePips,
@@ -611,6 +625,9 @@ function FullForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-0 overflow-hidden">
+      <div className="px-4 pt-3">
+        <CooldownNotice accountId={watchedAccountId || activeAccountId} />
+      </div>
       <Tabs defaultValue="basic" className="flex flex-1 flex-col overflow-hidden">
         <TabsList className="mx-4 mt-4 self-start">
           <TabsTrigger value="basic">Basic</TabsTrigger>
@@ -933,6 +950,16 @@ function FullForm({
                 </button>
               ))}
             </div>
+          </Field>
+
+          {/* Pre-trade anxiety (T3.7) — optional 0-10 */}
+          <Field label="Anxiety (optional)">
+            <AnxietySlider
+              value={watch('anxietyLevel')}
+              onChange={(v) =>
+                setValue('anxietyLevel', v as FullFormValues['anxietyLevel'])
+              }
+            />
           </Field>
 
           <Field label="Post-trade emotion">
