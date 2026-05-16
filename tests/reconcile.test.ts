@@ -9,6 +9,7 @@ import {
   computeComputedEquity,
   detectAccountDrift,
   createCorrectionBalanceOp,
+  reconcileBrokerStatement,
 } from '../src/lib/reconcile';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -473,6 +474,40 @@ describe('Balance reconciliation (T1.5)', () => {
       expect(ops[0].opType).toBe('CORRECTION');
       expect(ops[0].amount).toBe(100); // Negated: drift was -100, correction is +100
       expect(ops[0].source).toBe('RECONCILIATION');
+    });
+  });
+
+  describe('reconcileBrokerStatement (T5.4)', () => {
+    it('no drift when figures match within tolerance', () => {
+      const r = reconcileBrokerStatement(
+        { endingBalance: 10500, totalPnl: 500, netDepositsWithdrawals: 10000 },
+        { endingBalance: 10500.005, totalPnl: 500, netDepositsWithdrawals: 10000 },
+      );
+      expect(r.hasDrift).toBe(false);
+      expect(r.lines).toHaveLength(3);
+      expect(r.lines.every((l) => !l.flagged)).toBe(true);
+    });
+
+    it('flags a balance mismatch beyond tolerance', () => {
+      const r = reconcileBrokerStatement(
+        { endingBalance: 10000, totalPnl: 0, netDepositsWithdrawals: 10000 },
+        { endingBalance: 10250, totalPnl: 250, netDepositsWithdrawals: 10000 },
+      );
+      expect(r.hasDrift).toBe(true);
+      const bal = r.lines.find((l) => l.field === 'endingBalance')!;
+      expect(bal.flagged).toBe(true);
+      expect(bal.drift).toBe(250);
+      expect(bal.driftPercent).toBeCloseTo(2.5, 4);
+      expect(r.lines.find((l) => l.field === 'netDepositsWithdrawals')!.flagged).toBe(false);
+    });
+
+    it('uses the percentage tolerance for large figures', () => {
+      // 0.05% drift on 1,000,000 → within 0.1% pct tolerance
+      const r = reconcileBrokerStatement(
+        { endingBalance: 1_000_000, totalPnl: 0, netDepositsWithdrawals: 1_000_000 },
+        { endingBalance: 1_000_500, totalPnl: 0, netDepositsWithdrawals: 1_000_000 },
+      );
+      expect(r.lines.find((l) => l.field === 'endingBalance')!.flagged).toBe(false);
     });
   });
 });
