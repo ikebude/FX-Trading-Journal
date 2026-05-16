@@ -25,6 +25,7 @@ import { PropFirmBanner } from '@/components/layout/PropFirmBanner';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
 import { DriftBanner } from '@/components/session-header/DriftBanner';
 import { KeyboardShortcuts } from '@/components/help/KeyboardShortcuts';
+import { CommandPalette } from '@/components/command/CommandPalette';
 import { Glossary } from '@/components/help/Glossary';
 import { EAInstallGuide } from '@/components/help/EAInstallGuide';
 import { GuidedTour } from '@/components/tour/GuidedTour';
@@ -117,9 +118,13 @@ function BridgeToastListener() {
 function AppShell() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   const activeAccountId = useAppStore((s) => s.activeAccountId);
-  useGlobalKeys({ onShortcuts: () => setShortcutsOpen(true) });
+  useGlobalKeys({
+    onShortcuts: () => setShortcutsOpen(true),
+    onCommand: () => setCommandOpen((o) => !o),
+  });
 
   // Show tour on first run
   const { data: settings } = useQuery<Record<string, unknown>>({
@@ -154,6 +159,12 @@ function AppShell() {
       <NewTradeDialog />
       <TradeDetailDrawer />
       <BridgeToastListener />
+      {commandOpen && (
+        <CommandPalette
+          onClose={() => setCommandOpen(false)}
+          onShortcuts={() => setShortcutsOpen(true)}
+        />
+      )}
       {shortcutsOpen && <KeyboardShortcuts onClose={() => setShortcutsOpen(false)} />}
       {glossaryOpen && <Glossary open={glossaryOpen} onClose={() => setGlossaryOpen(false)} />}
       {tourActive && (

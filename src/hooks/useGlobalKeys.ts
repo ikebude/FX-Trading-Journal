@@ -23,6 +23,7 @@ import { useAppStore } from '@/stores/app-store';
 
 export function useGlobalKeys(options: {
   onShortcuts: () => void;
+  onCommand?: () => void;
 }) {
   const navigate = useNavigate();
   const setNewTradeOpen = useAppStore((s) => s.setNewTradeOpen);
@@ -33,6 +34,14 @@ export function useGlobalKeys(options: {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Ctrl/Cmd+K — command palette. Checked before the editable guard so it
+      // works from anywhere, including focused inputs.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        options.onCommand?.();
+        return;
+      }
+
       // Ignore keypresses inside inputs, textareas, and contenteditable elements
       const target = e.target as HTMLElement;
       const tag = target?.tagName;
