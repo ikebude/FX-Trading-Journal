@@ -6,6 +6,48 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.0-rc.1] — 2026-05-16 — v1.1 Release Candidate (Weeks 2–4)
+
+> Mid-cycle release candidate on `v1.1/build-sprint`. Not yet tagged or
+> published — the final v1.1.0 ship is T6.11 after Weeks 5–6. Branch is
+> not merged to `main` pending the agreed integration step.
+
+### Added — Week 2 (libraries) & Week 3 (analytics)
+- Setup library + versioning, methodology/mistake/confluence tags,
+  prop-firm presets, daily-loss circuit breaker, news blackout, risk
+  enforcement, deposit/withdrawal ledger UI, theme/a11y, Modified-Dietz
+  equity curve (T2.1–T2.10).
+- Sharpe/Sortino/Calmar/Recovery + expectancy CI, MAE/MFE, session×DoW
+  analytics, setup-version edge-degradation, revenge/tilt detector
+  (T3.1–T3.5).
+- **T3.6** pre-trade ritual + post-trade reflection queue.
+- **T3.7** anxiety slider + mood check-in + advisory cool-down.
+- **T3.8** post-mortem mode (`/post-mortem` drawdown autopsy).
+- **T3.9** slippage + spread-at-entry baseline.
+- **T3.10** per-account commission model.
+
+### Added — Week 4 (imports / UX / hardening)
+- **T4.1–T4.3** cTrader / MatchTrader / DXtrade / IBKR-Flex CSV importers
+  via the shared fuzzy-header engine + parametrized fixture harness.
+- **T4.4** monthly trader / prop-firm PDF report.
+- **T4.5** tax-prep CSV (credit-segregated).
+- **T4.6** Ctrl/Cmd-K command palette (no new deps).
+- **T4.7** bulk blotter tag/delete/export.
+- **T4.8** first-run sample-data toggle + what's-new banner + release notes.
+- **T4.9** bridge heartbeat + server-time drift alert.
+- **T4.10** local-only crash reporter + update downgrade/rollback.
+- **T4.11** SHA-256 integrity verification on auto-update.
+- **T4.12** Kelly criterion advisory.
+- **T4.13** +15 Playwright v1.1 acceptance tests.
+- **T4.14** acceptance playbook AC-V.1/V.2/V.3.
+
+### Technical
+- Schema migrations 008–010 (parity rule upheld: schema.sql ↔ schema.ts
+  ↔ client.ts + a parity test for every new column/table).
+- Tests: 417 unit (+ e2e suite); 0 typecheck / 0 lint errors.
+
+---
+
 ## [1.0.9] — 2026-04-24 — Nightly E2E Fix + Importer Diagnostics & Smoke CI
 
 ### Fixed
