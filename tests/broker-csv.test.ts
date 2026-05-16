@@ -69,3 +69,25 @@ describe('cTrader dialect specifics (T4.1)', () => {
     expect(eur.legs[0].timestampUtc).toMatch(/^2026-04-01T08:15:00\.000Z$/);
   });
 });
+
+describe('MatchTrader / DXtrade dialects (T4.2)', () => {
+  it('MatchTrader (semicolon-delimited) parses all rows', () => {
+    const c = readFileSync(join(DIR, 'matchtrader.csv'), 'utf-8');
+    const { format, result } = detectAndParse(c, 'matchtrader.csv');
+    expect(format).toBe('CSV');
+    expect(result.trades.length).toBe(4);
+    expect(result.failed.length).toBe(0);
+    expect(result.trades.find((t) => t.symbol === 'US30')?.direction).toBe('SHORT');
+  });
+
+  it('DXtrade ("B/S", "Fill Price", ISO-Z) parses all rows', () => {
+    const c = readFileSync(join(DIR, 'dxtrade.csv'), 'utf-8');
+    const { format, result } = detectAndParse(c, 'dxtrade.csv');
+    expect(format).toBe('CSV');
+    expect(result.trades.length).toBe(3);
+    expect(result.failed.length).toBe(0);
+    const eur = result.trades.find((t) => t.symbol === 'EURUSD')!;
+    expect(eur.direction).toBe('LONG');
+    expect(eur.legs[0].timestampUtc).toMatch(/^2026-04-01T08:00:00\.000Z$/);
+  });
+});
