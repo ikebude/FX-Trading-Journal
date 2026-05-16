@@ -179,6 +179,7 @@ const api = {
       ipcRenderer.invoke('reports:summary-pdf', filters),
     monthlyPdf: (filters: unknown) =>
       ipcRenderer.invoke('reports:monthly-pdf', filters),
+    taxCsv: (filters: unknown) => ipcRenderer.invoke('reports:tax-csv', filters),
     exportCsv: (filters: unknown) => ipcRenderer.invoke('reports:export-csv', filters),
   },
 

@@ -132,6 +132,16 @@ export function ReportsPage() {
     },
   });
 
+  const taxMutation = useMutation({
+    mutationFn: () => window.ledger.reports.taxCsv(filters),
+    onSuccess: (path) => {
+      if (path) {
+        setResultPath(path);
+        setResultKind('csv');
+      }
+    },
+  });
+
   const csvMutation = useMutation({
     mutationFn: () => window.ledger.reports.exportCsv(filters),
     onSuccess: (path) => {
@@ -192,6 +202,16 @@ export function ReportsPage() {
             action={() => monthlyMutation.mutate()}
             actionLabel="Generate Monthly PDF"
             loading={monthlyMutation.isPending}
+            disabled={!activeAccountId}
+          />
+
+          <ReportCard
+            icon={FileDown}
+            title="Tax-Prep CSV"
+            description="Closed trades only (deposits/bonuses excluded): gross/net P&L, fees, holding days, tax year."
+            action={() => taxMutation.mutate()}
+            actionLabel="Export Tax CSV"
+            loading={taxMutation.isPending}
             disabled={!activeAccountId}
           />
 

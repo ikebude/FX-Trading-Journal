@@ -29,6 +29,7 @@ import { format, parseISO } from 'date-fns';
 
 import { getTrade, listTrades } from '../../src/lib/db/queries';
 import type { TradeFilters } from '../../src/lib/schemas';
+import { toTaxRows, taxRowsToCsv } from '../../src/lib/tax-export';
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -431,6 +432,48 @@ async function generateMonthlyPdf(filters: unknown): Promise<string | null> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// T4.5 — Tax-prep CSV (credit-segregated: closed trades only)
+// ─────────────────────────────────────────────────────────────
+
+async function generateTaxCsv(filters: unknown): Promise<string | null> {
+  const safe = (filters ?? {}) as Partial<TradeFilters> & { taxYear?: number };
+  const { rows } = await listTrades({
+    page: 1,
+    deletedOnly: false,
+    ...safe,
+    status: ['CLOSED'],
+    includeDeleted: false,
+    includeSample: false,
+    pageSize: 100000,
+    sortBy: 'closed_at_utc',
+    sortDir: 'asc',
+  });
+  if (rows.length === 0) return null;
+
+  const taxRows = toTaxRows(
+    rows.map((t) => ({
+      symbol: t.symbol,
+      direction: t.direction,
+      openedAtUtc: t.openedAtUtc,
+      closedAtUtc: t.closedAtUtc,
+      netPnl: t.netPnl,
+      totalCommission: t.totalCommission,
+      totalSwap: t.totalSwap,
+    })),
+    safe.taxYear,
+  );
+  if (taxRows.length === 0) return null;
+
+  const csv = taxRowsToCsv(taxRows);
+  const tmpDir = join(app.getPath('temp'), 'ledger-reports');
+  mkdirSync(tmpDir, { recursive: true });
+  const yr = safe.taxYear ?? 'all';
+  const outPath = join(tmpDir, `tax-${yr}-${Date.now()}.csv`);
+  writeFileSync(outPath, csv, 'utf-8');
+  return outPath;
+}
+
+// ─────────────────────────────────────────────────────────────
 // CSV export
 // ─────────────────────────────────────────────────────────────
 
@@ -496,7 +539,17 @@ export function registerReportHandlers(): void {
   ipcMain.removeHandler('reports:trade-pdf');
   ipcMain.removeHandler('reports:summary-pdf');
   ipcMain.removeHandler('reports:monthly-pdf');
+  ipcMain.removeHandler('reports:tax-csv');
   ipcMain.removeHandler('reports:export-csv');
+
+  ipcMain.handle('reports:tax-csv', async (_e, filters: unknown) => {
+    try {
+      return await generateTaxCsv(filters);
+    } catch (err) {
+      log.error('reports:tax-csv', err);
+      throw new Error('Failed to generate tax CSV');
+    }
+  });
 
   ipcMain.handle('reports:monthly-pdf', async (_e, filters: unknown) => {
     try {
