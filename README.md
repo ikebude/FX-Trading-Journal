@@ -80,11 +80,11 @@ discipline platform**, while keeping the local-first, zero-telemetry promise.
 
 **[⬇ Download FXLedger Setup (latest release)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)**
 
-Download `FXLedger-Setup-x.x.x.exe` from the Assets section of the latest release.
+Download `FXLedger.Setup.x.x.x.exe` from the Assets section of the latest release.
 
 ### Installation Steps
 
-1. Run `FXLedger-Setup-x.x.x.exe`.
+1. Run `FXLedger.Setup.x.x.x.exe`.
 2. If Windows shows a SmartScreen warning ("Windows protected your PC"), click **More info → Run anyway**. FXLedger is not digitally signed (no subscription required for the certificate), but the source code is fully open and auditable.
 3. Choose your installation directory (default: `C:\Program Files\FXLedger`).
 4. Click **Install**. The installer creates a desktop shortcut and Start Menu entry.
@@ -360,7 +360,7 @@ npm run build        # Build renderer + main (no installer)
 npm run package:win  # Build Windows NSIS installer → release/
 ```
 
-The packaged installer will be at `release/FXLedger Setup x.x.x.exe`.
+The packaged installer will be at `release/FXLedger.Setup.x.x.x.exe`.
 
 **⚠️ CRITICAL:** If you see errors about `better-sqlite3` native module version mismatch, you are using the wrong Node.js version. Switch to v20.14.0 and try again.
 

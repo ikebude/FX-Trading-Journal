@@ -18,11 +18,11 @@ Run this playbook against a **clean install** of the release `.exe` — not the 
 
 **Prereqs:**
 - A Windows machine (or VM) with no prior FXLedger installation.
-- The `FXLedger Setup {version}.exe` installer from the GitHub release.
+- The `FXLedger.Setup.{version}.exe` installer from the GitHub release.
 - A stopwatch (phone timer works).
 
 **Steps:**
-1. Double-click `FXLedger Setup {version}.exe`.
+1. Double-click `FXLedger.Setup.{version}.exe`.
 2. Click through the NSIS installer (one-click or custom path — either is valid).
 3. Start the stopwatch the moment you click "Finish" in the installer.
 4. Watch the screen until the FXLedger blotter is fully visible (sidebar + column headers + any empty-state message).

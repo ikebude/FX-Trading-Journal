@@ -1,7 +1,7 @@
 {
   "name": "fxledger",
   "version": "1.1.0",
-  "description": "FXLedger — local-first forex trading journal for Windows",
+  "description": "FXLedger \u00e2\u20ac\u201d local-first forex trading journal for Windows",
   "author": "ikebude",
   "repository": {
     "type": "git",
@@ -123,7 +123,9 @@
       {
         "from": "build/models",
         "to": "models",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
@@ -145,6 +147,7 @@
       "owner": "ikebude",
       "repo": "FX-Trading-Journal",
       "releaseType": "release"
-    }
+    },
+    "artifactName": "${productName}.Setup.${version}.${ext}"
   }
 }
