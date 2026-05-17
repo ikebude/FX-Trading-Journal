@@ -642,6 +642,21 @@ export const tradeReflections = sqliteTable('trade_reflections', {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Voice memos (T6.1) — audio note + optional local transcript.
+// audioPath is relative to data_dir (Rule 7). Mirrors schema.sql.
+// ─────────────────────────────────────────────────────────────
+export const voiceMemos = sqliteTable('voice_memos', {
+  id: text('id').primaryKey(),
+  tradeId: text('trade_id')
+    .notNull()
+    .references(() => trades.id, { onDelete: 'cascade' }),
+  audioPath: text('audio_path').notNull(),
+  transcript: text('transcript'),
+  durationSec: real('duration_sec'),
+  createdAtUtc: text('created_at_utc').notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────
 // Mood check-ins (T3.7) — standalone optional wellness data.
 // accountId nullable: a check-in may be global. Mirrors schema.sql.
 // ─────────────────────────────────────────────────────────────
@@ -693,3 +708,5 @@ export type PropFirmPreset = typeof propFirmPresets.$inferSelect;
 export type NewPropFirmPreset = typeof propFirmPresets.$inferInsert;
 export type MoodCheckin = typeof moodCheckins.$inferSelect;
 export type NewMoodCheckin = typeof moodCheckins.$inferInsert;
+export type VoiceMemo = typeof voiceMemos.$inferSelect;
+export type NewVoiceMemo = typeof voiceMemos.$inferInsert;

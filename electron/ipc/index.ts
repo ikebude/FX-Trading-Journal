@@ -32,6 +32,7 @@ import { registerBalanceOpHandlers } from './balance-ops';
 import { registerRitualHandlers, registerReflectionHandlers } from './rituals';
 import { registerMoodHandlers } from './mood';
 import { registerPortfolioHandlers } from './portfolio';
+import { registerVoiceHandlers } from './voice';
 
 interface AppConfig {
   data_dir: string;
@@ -83,6 +84,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   registerReflectionHandlers();
   registerMoodHandlers();
   registerPortfolioHandlers();
+  registerVoiceHandlers(ctx);
 
   log.info('IPC: all handlers registered');
 }

@@ -112,6 +112,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration011(sqlite);
   }
 
+  if (currentVersion < 12) {
+    applyMigration012(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -615,6 +619,29 @@ function applyMigration011(sqlite: Database.Database): void {
   });
   migrate();
   log.info('Database: migration 011 complete');
+}
+
+/** Migration 012 — T6.1 voice_memos table. */
+function applyMigration012(sqlite: Database.Database): void {
+  log.info('Database: applying migration 012 (T6.1 voice_memos)');
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS voice_memos (
+        id              TEXT PRIMARY KEY,
+        trade_id        TEXT NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+        audio_path      TEXT NOT NULL,
+        transcript      TEXT,
+        duration_sec    REAL,
+        created_at_utc  TEXT NOT NULL
+      );
+    `);
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS idx_voice_memos_trade ON voice_memos(trade_id);`,
+    );
+    sqlite.pragma('user_version = 12');
+  });
+  migrate();
+  log.info('Database: migration 012 complete');
 }
 
 /**

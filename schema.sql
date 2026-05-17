@@ -516,6 +516,22 @@ CREATE TABLE trade_reflections (
 );
 
 -- ─────────────────────────────────────────────────────────────
+-- Voice memos (T6.1) — short audio notes attached to a trade, with an
+-- optional local Whisper transcript. audio_path is relative to data_dir
+-- (Rule 7). Mirrors schema.ts.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE voice_memos (
+  id              TEXT PRIMARY KEY,
+  trade_id        TEXT NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+  audio_path      TEXT NOT NULL,
+  transcript      TEXT,
+  duration_sec    REAL,
+  created_at_utc  TEXT NOT NULL
+);
+
+CREATE INDEX idx_voice_memos_trade ON voice_memos(trade_id);
+
+-- ─────────────────────────────────────────────────────────────
 -- Mood check-ins (T3.7) — standalone, optional wellness data.
 -- account_id nullable: a check-in can be global, not tied to an account.
 -- Independent of `reviews`; feeds mood-trend analytics. Mirrors schema.ts.

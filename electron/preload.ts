@@ -214,6 +214,25 @@ const api = {
     showInExplorer: (path: string) => ipcRenderer.invoke('shell:show-in-explorer', path),
   },
 
+  // T6.1 — voice memos
+  voice: {
+    add: (payload: {
+      tradeId: string;
+      bytes: ArrayBuffer | Uint8Array;
+      durationSec?: number;
+      transcript?: string | null;
+      autoTranscribe?: boolean;
+    }) => ipcRenderer.invoke('voice:add', payload) as Promise<{
+      id: string;
+      transcript: string | null;
+      transcriptionStatus: string;
+    }>,
+    list: (tradeId: string) =>
+      ipcRenderer.invoke('voice:list', { tradeId }) as Promise<unknown[]>,
+    setTranscript: (id: string, transcript: string) =>
+      ipcRenderer.invoke('voice:set-transcript', { id, transcript }),
+  },
+
   // T5.1 — multi-account portfolio
   portfolio: {
     summary: (opts?: { baseCurrency?: string; rates?: Record<string, number> }) =>
