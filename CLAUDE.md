@@ -1,5 +1,11 @@
 # FXLedger — Developer Guide
 
+## Commit Rules
+
+**Never add `Co-Authored-By:` trailers to any commit message.** Do not attribute AI assistants in commits.
+
+---
+
 ## Project Identity
 
 **App name:** FXLedger (renamed from "Ledger" in v1.1; see T1.2)  
