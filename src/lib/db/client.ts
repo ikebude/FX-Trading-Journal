@@ -116,6 +116,10 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
     applyMigration012(sqlite);
   }
 
+  if (currentVersion < 13) {
+    applyMigration013(sqlite);
+  }
+
   _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   log.info(`Database: ready (schema v${sqlite.pragma('user_version', { simple: true })})`);
@@ -642,6 +646,17 @@ function applyMigration012(sqlite: Database.Database): void {
   });
   migrate();
   log.info('Database: migration 012 complete');
+}
+
+/** Migration 013 — T6.3 screenshots.ocr_text. */
+function applyMigration013(sqlite: Database.Database): void {
+  log.info('Database: applying migration 013 (T6.3 screenshots.ocr_text)');
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE screenshots ADD COLUMN ocr_text TEXT`);
+    sqlite.pragma('user_version = 13');
+  });
+  migrate();
+  log.info('Database: migration 013 complete');
 }
 
 /**

@@ -105,6 +105,12 @@ const api = {
       ipcRenderer.invoke('screenshots:save-from-path', tradeId, kind, path, caption),
     delete: (id: string) => ipcRenderer.invoke('screenshots:delete', id),
     getDataUrl: (id: string) => ipcRenderer.invoke('screenshots:data-url', id),
+    ocr: (id: string) =>
+      ipcRenderer.invoke('screenshots:ocr', id) as Promise<{
+        ok: boolean;
+        status: string;
+        ocrText?: string | null;
+      }>,
   },
 
   // ── Tags & setups ─────────────────────────────────

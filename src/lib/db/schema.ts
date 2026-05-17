@@ -249,6 +249,8 @@ export const screenshots = sqliteTable(
     widthPx: integer('width_px'),
     heightPx: integer('height_px'),
     byteSize: integer('byte_size'),
+    // T6.3 — local OCR text extracted from the chart screenshot.
+    ocrText: text('ocr_text'),
     createdAtUtc: text('created_at_utc').notNull(),
   },
   (t) => ({

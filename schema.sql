@@ -245,6 +245,7 @@ CREATE TABLE screenshots (
   width_px        INTEGER,
   height_px       INTEGER,
   byte_size       INTEGER,
+  ocr_text        TEXT,                              -- T6.3: extracted chart text (local OCR)
   created_at_utc  TEXT NOT NULL
 );
 

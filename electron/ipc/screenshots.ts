@@ -12,6 +12,7 @@ import { getDb } from '../../src/lib/db/client';
 import { screenshots as screenshotsTable } from '../../src/lib/db/schema';
 import { createScreenshot, deleteScreenshot, listScreenshots } from '../../src/lib/db/queries';
 import { stripExif } from '../../src/lib/exif-stripper';
+import { normalizeOcrText } from '../../src/lib/ocr';
 import type { IpcContext } from './index';
 
 // ─────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ export function registerScreenshotHandlers(ctx: IpcContext): void {
           widthPx: width ?? null,
           heightPx: height ?? null,
           byteSize: cleanBuf.byteLength,
+          ocrText: null,
         });
       } catch (err) {
         log.error('screenshots:save-from-buffer', err);
@@ -137,6 +139,7 @@ export function registerScreenshotHandlers(ctx: IpcContext): void {
           widthPx: width ?? null,
           heightPx: height ?? null,
           byteSize: size ?? null,
+          ocrText: null,
         });
       } catch (err) {
         log.error('screenshots:save-from-path', err);
@@ -172,6 +175,46 @@ export function registerScreenshotHandlers(ctx: IpcContext): void {
       await deleteScreenshot(id);
     } catch (err) {
       log.error('screenshots:delete', err);
+      throw err;
+    }
+  });
+
+  // T6.3 — local OCR over a screenshot. Model-gated: tesseract.js is an
+  // optional lazy import; lang data is never auto-fetched (Rule 11). On
+  // any failure the screenshot is simply left without ocr_text.
+  ipcMain.removeHandler('screenshots:ocr');
+  ipcMain.handle('screenshots:ocr', async (_e, id: string) => {
+    try {
+      const db = getDb();
+      const rows = await db
+        .select()
+        .from(screenshotsTable)
+        .where(eq(screenshotsTable.id, id));
+      if (rows.length === 0) return { ok: false, status: 'not-found' };
+      const absPath = resolve(ctx.config.data_dir, rows[0].filePath);
+      assertWithinDataDir(ctx.config.data_dir, absPath);
+
+      let text: string | null = null;
+      try {
+        const spec = 'tesseract.js';
+        const t = (await import(/* @vite-ignore */ spec)) as unknown as {
+          recognize: (
+            img: string,
+            lang: string,
+            opts: Record<string, unknown>,
+          ) => Promise<{ data: { text: string } }>;
+        };
+        const res = await t.recognize(absPath, 'eng', {});
+        text = normalizeOcrText(res?.data?.text ?? '') || null;
+      } catch (err) {
+        log.warn('screenshots:ocr — engine/lang unavailable (non-fatal)', err);
+        return { ok: false, status: 'engine-missing' };
+      }
+
+      await db.update(screenshotsTable).set({ ocrText: text }).where(eq(screenshotsTable.id, id));
+      return { ok: true, status: 'available', ocrText: text };
+    } catch (err) {
+      log.error('screenshots:ocr', err);
       throw err;
     }
   });
