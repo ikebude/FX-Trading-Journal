@@ -1,7 +1,7 @@
 # FXLedger — End-to-End Architecture
 
 > **Audience:** Developers building or maintaining FXLedger.  
-> **Status:** v1.0.5 — Foundation complete (T1.1–T1.10). See [CHANGELOG.md](../CHANGELOG.md) for release notes.
+> **Status:** v1.1.0 (shipped 2026-05-17) — all T1.1–T6.11 delivered. See [CHANGELOG.md](../CHANGELOG.md) for release notes.
 > **Relationship to PROJECT_BRIEF:** This document explains *how* the system is built. PROJECT_BRIEF.md defines *what* it does. Both must be read. When they conflict, PROJECT_BRIEF wins.
 
 ---
@@ -388,7 +388,7 @@ Windows installer:
   npm run package:win
   → electron-vite build (above)
   → electron-builder --win
-  → NSIS installer: release/Ledger Setup 1.0.0.exe
+  → NSIS installer: release/FXLedger Setup 1.1.0.exe
   → Bundles: dist/, dist-electron/, electron/mql/ (EAs)
   → Creates: Desktop shortcut, Start Menu entry
   → Allows: Custom install directory

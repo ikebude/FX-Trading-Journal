@@ -1,0 +1,3 @@
+# Keeps build/models present so electron-builder extraResources never fails.
+# Real model weights are fetched at package time by scripts/fetch-models.js
+# and are gitignored (large binaries, never committed).

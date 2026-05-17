@@ -6,7 +6,7 @@ verification steps.
 
 Run this playbook against a **clean install** of the release `.exe` — not the dev server.
 
-**Latest tested version:** v1.0.5 (April 19, 2026)
+**Latest tested version:** v1.1.0 (May 17, 2026)
 
 **Sign-off format for each section:**
 
