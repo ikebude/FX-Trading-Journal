@@ -23,12 +23,16 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { PropFirmBanner } from '@/components/layout/PropFirmBanner';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
+import { WhatsNewBanner } from '@/components/layout/WhatsNewBanner';
 import { DriftBanner } from '@/components/session-header/DriftBanner';
 import { KeyboardShortcuts } from '@/components/help/KeyboardShortcuts';
+import { CommandPalette } from '@/components/command/CommandPalette';
 import { Glossary } from '@/components/help/Glossary';
 import { EAInstallGuide } from '@/components/help/EAInstallGuide';
 import { GuidedTour } from '@/components/tour/GuidedTour';
 import { useGlobalKeys } from '@/hooks/useGlobalKeys';
+import { useTheme } from '@/hooks/useTheme';
+import { localeDir } from '@/lib/locale';
 import { NewTradeDialog } from '@/components/trade-form/NewTradeDialog';
 import { TradeDetailDrawer } from '@/components/trade-detail/TradeDetailDrawer';
 import { ToastProvider, useToast } from '@/components/ui/toast';
@@ -43,6 +47,9 @@ import { TrashPage } from '@/pages/TrashPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { OverlayPage } from '@/pages/OverlayPage';
 import { ImporterPage } from '@/pages/ImporterPage';
+import { LibraryPage } from '@/pages/LibraryPage';
+import { PostMortemPage } from '@/pages/PostMortemPage';
+import { PortfolioPage } from '@/pages/PortfolioPage';
 
 // ─────────────────────────────────────────────────────────────
 // TanStack Query client
@@ -106,7 +113,13 @@ function BridgeToastListener() {
         });
       }
     });
-    return unsub;
+    const unsubHealth = window.ledger.bridge.onHealth((h) => {
+      toast(h.message, { variant: h.kind === 'drift' ? 'error' : 'default' });
+    });
+    return () => {
+      unsub();
+      unsubHealth();
+    };
   }, [toast, qc]);
   return null;
 }
@@ -114,15 +127,33 @@ function BridgeToastListener() {
 function AppShell() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   const activeAccountId = useAppStore((s) => s.activeAccountId);
-  useGlobalKeys({ onShortcuts: () => setShortcutsOpen(true) });
+  useGlobalKeys({
+    onShortcuts: () => setShortcutsOpen(true),
+    onCommand: () => setCommandOpen((o) => !o),
+  });
 
   // Show tour on first run
   const { data: settings } = useQuery<Record<string, unknown>>({
     queryKey: ['settings'],
     queryFn: () => window.ledger.settings.get(),
   });
+
+  useTheme(settings?.theme);
+
+  // T6.6 — apply locale direction/lang to the document so RTL locales
+  // (ar/he/fa/…) actually render right-to-left. Locale falls back to the
+  // OS/browser locale; no network, display-only (Rule 2 timestamps stay UTC).
+  useEffect(() => {
+    const locale =
+      (settings?.locale as string | undefined) ||
+      (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
+    document.documentElement.lang = locale;
+    document.documentElement.dir = localeDir(locale);
+  }, [settings?.locale]);
+
   // Show tour once: when first_run_complete is false and we have settings loaded
   const firstRunRef = useState(false);
   if (settings && settings.first_run_complete === false && !firstRunRef[0]) {
@@ -140,6 +171,7 @@ function AppShell() {
           onGlossary={() => setGlossaryOpen(true)}
         />
         <PropFirmBanner />
+        <WhatsNewBanner />
         <UpdateBanner />
         {activeAccountId && <DriftBanner accountId={activeAccountId} />}
         <main className="flex flex-1 flex-col overflow-hidden">
@@ -149,6 +181,12 @@ function AppShell() {
       <NewTradeDialog />
       <TradeDetailDrawer />
       <BridgeToastListener />
+      {commandOpen && (
+        <CommandPalette
+          onClose={() => setCommandOpen(false)}
+          onShortcuts={() => setShortcutsOpen(true)}
+        />
+      )}
       {shortcutsOpen && <KeyboardShortcuts onClose={() => setShortcutsOpen(false)} />}
       {glossaryOpen && <Glossary open={glossaryOpen} onClose={() => setGlossaryOpen(false)} />}
       {tourActive && (
@@ -231,6 +269,24 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const libraryRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/library',
+  component: LibraryPage,
+});
+
+const postMortemRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/post-mortem',
+  component: PostMortemPage,
+});
+
+const portfolioRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/portfolio',
+  component: PortfolioPage,
+});
+
 const eaGuideRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/settings/ea-guide',
@@ -246,6 +302,9 @@ const routeTree = rootRoute.addChildren([
     calendarRoute,
     reportsRoute,
     importRoute,
+    libraryRoute,
+    postMortemRoute,
+    portfolioRoute,
     trashRoute,
     settingsRoute,
     eaGuideRoute,

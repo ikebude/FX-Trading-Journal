@@ -6,6 +6,69 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.0] — 2026-05-17 — FXLedger v1.1 (feature-complete)
+
+> All 61 v1.1 tasks (T1.1–T6.11) implemented on `v1.1/build-sprint`,
+> green at every step (513 unit tests + e2e suite, 0 typecheck, 0 lint).
+> Tag / GitHub release / merge to `main` are intentionally deferred to an
+> explicit maintainer trigger (the branch is held unmerged by request).
+>
+> Weeks 5–6 additions on top of the rc.1 entry below:
+> - **T5.1/5.2** multi-account portfolio + cross-account hedge / open-risk.
+> - **T5.3** Edgewonk/TradeZella/TraderVue importers. **T5.4** broker
+>   statement reconciler. **T5.5** payout/consistency/weekend-flat.
+>   **T5.6** scale-out ladder planner. **T5.7** year-end P&L PDF.
+>   **T5.8** undo/redo + autosave primitives. **T5.9** pinnable trades.
+>   **T5.10** margin/leverage + correlation-adjusted risk.
+> - **T6.1–T6.3** voice memos / NL search / screenshot OCR — full
+>   architecture, deps declared, **model-gated** (offline, no
+>   auto-download; degrade gracefully when models absent).
+> - **T6.4** rule-based EOD coaching. **T6.5** tamper-evident audit-log
+>   hash-chain seal. **T6.6** locale/RTL/holiday support. **T6.7**
+>   feature flags + read-only plugin scaffold. **T6.8** 25-test E2E
+>   acceptance suite. **T6.9** AC-V.1–V.5 manual playbook. **T6.10**
+>   perf-regression guard.
+> - Schema parity rule upheld throughout: migrations 008–013, each with
+>   a schema.sql↔schema.ts parity test.
+
+### Release-candidate history (Weeks 2–4)
+
+### Added — Week 2 (libraries) & Week 3 (analytics)
+- Setup library + versioning, methodology/mistake/confluence tags,
+  prop-firm presets, daily-loss circuit breaker, news blackout, risk
+  enforcement, deposit/withdrawal ledger UI, theme/a11y, Modified-Dietz
+  equity curve (T2.1–T2.10).
+- Sharpe/Sortino/Calmar/Recovery + expectancy CI, MAE/MFE, session×DoW
+  analytics, setup-version edge-degradation, revenge/tilt detector
+  (T3.1–T3.5).
+- **T3.6** pre-trade ritual + post-trade reflection queue.
+- **T3.7** anxiety slider + mood check-in + advisory cool-down.
+- **T3.8** post-mortem mode (`/post-mortem` drawdown autopsy).
+- **T3.9** slippage + spread-at-entry baseline.
+- **T3.10** per-account commission model.
+
+### Added — Week 4 (imports / UX / hardening)
+- **T4.1–T4.3** cTrader / MatchTrader / DXtrade / IBKR-Flex CSV importers
+  via the shared fuzzy-header engine + parametrized fixture harness.
+- **T4.4** monthly trader / prop-firm PDF report.
+- **T4.5** tax-prep CSV (credit-segregated).
+- **T4.6** Ctrl/Cmd-K command palette (no new deps).
+- **T4.7** bulk blotter tag/delete/export.
+- **T4.8** first-run sample-data toggle + what's-new banner + release notes.
+- **T4.9** bridge heartbeat + server-time drift alert.
+- **T4.10** local-only crash reporter + update downgrade/rollback.
+- **T4.11** SHA-256 integrity verification on auto-update.
+- **T4.12** Kelly criterion advisory.
+- **T4.13** +15 Playwright v1.1 acceptance tests.
+- **T4.14** acceptance playbook AC-V.1/V.2/V.3.
+
+### Technical
+- Schema migrations 008–010 (parity rule upheld: schema.sql ↔ schema.ts
+  ↔ client.ts + a parity test for every new column/table).
+- Tests: 417 unit (+ e2e suite); 0 typecheck / 0 lint errors.
+
+---
+
 ## [1.0.9] — 2026-04-24 — Nightly E2E Fix + Importer Diagnostics & Smoke CI
 
 ### Fixed

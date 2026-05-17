@@ -122,6 +122,36 @@ export function ReportsPage() {
     },
   });
 
+  const monthlyMutation = useMutation({
+    mutationFn: () => window.ledger.reports.monthlyPdf(filters),
+    onSuccess: (path) => {
+      if (path) {
+        setResultPath(path);
+        setResultKind('pdf');
+      }
+    },
+  });
+
+  const taxMutation = useMutation({
+    mutationFn: () => window.ledger.reports.taxCsv(filters),
+    onSuccess: (path) => {
+      if (path) {
+        setResultPath(path);
+        setResultKind('csv');
+      }
+    },
+  });
+
+  const yearEndMutation = useMutation({
+    mutationFn: () => window.ledger.reports.yearEndPdf(filters),
+    onSuccess: (path) => {
+      if (path) {
+        setResultPath(path);
+        setResultKind('pdf');
+      }
+    },
+  });
+
   const csvMutation = useMutation({
     mutationFn: () => window.ledger.reports.exportCsv(filters),
     onSuccess: (path) => {
@@ -172,6 +202,36 @@ export function ReportsPage() {
             action={() => summaryMutation.mutate()}
             actionLabel="Generate PDF"
             loading={summaryMutation.isPending}
+            disabled={!activeAccountId}
+          />
+
+          <ReportCard
+            icon={FileText}
+            title="Monthly Report"
+            description="Prop-firm submission bundle: KPI grid, highlights, and full trade ledger for the period."
+            action={() => monthlyMutation.mutate()}
+            actionLabel="Generate Monthly PDF"
+            loading={monthlyMutation.isPending}
+            disabled={!activeAccountId}
+          />
+
+          <ReportCard
+            icon={FileDown}
+            title="Tax-Prep CSV"
+            description="Closed trades only (deposits/bonuses excluded): gross/net P&L, fees, holding days, tax year."
+            action={() => taxMutation.mutate()}
+            actionLabel="Export Tax CSV"
+            loading={taxMutation.isPending}
+            disabled={!activeAccountId}
+          />
+
+          <ReportCard
+            icon={FileText}
+            title="Year-End Statement"
+            description="Per-tax-year realized P&L PDF with monthly breakdown. Credit-segregated — deposits/bonuses excluded."
+            action={() => yearEndMutation.mutate()}
+            actionLabel="Generate Year-End PDF"
+            loading={yearEndMutation.isPending}
             disabled={!activeAccountId}
           />
 

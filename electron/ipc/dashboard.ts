@@ -22,6 +22,8 @@ import {
   computeAggregateMetrics,
   computeRDistribution,
   computeSetupPerformance,
+  computeSetupVersionPerformance,
+  computeRevengeTradeIndicators,
   computeSessionPerformance,
   computeDayOfWeekHeatmap,
   computeHourOfDayHeatmap,
@@ -30,10 +32,15 @@ import {
   computeCalendarHeatmap,
   computeStreakInfo,
   computeMonthlyPnl,
+  computeSessionDowMatrix,
+  computeDurationVsOutcome,
+  computePostMortem,
+  computeSlippageStats,
   computeTradeMetrics,
   extractCacheableMetrics,
   type TradeBundle,
 } from '../../src/lib/pnl';
+import { generateCoaching } from '../../src/lib/coaching';
 import { metricsCache } from '../../src/lib/dashboard-metrics-cache';
 import { TradeFiltersSchema } from '../../src/lib/schemas';
 import { listTrades } from '../../src/lib/db/queries';
@@ -240,6 +247,8 @@ export function registerDashboardHandlers(): void {
             setup_name: trade.setupName ?? null,
             session: trade.session ?? null,
             confidence: trade.confidence ?? null,
+            mae_pips: trade.maePips ?? null,
+            mfe_pips: trade.mfePips ?? null,
           },
           legs: legs.map((l) => ({
             id: l.id,
@@ -267,6 +276,8 @@ export function registerDashboardHandlers(): void {
         aggregate: computeAggregateMetrics(bundles, startingBalance),
         rDistribution: computeRDistribution(bundles),
         setupPerformance: computeSetupPerformance(bundles),
+        setupVersionPerformance: computeSetupVersionPerformance(bundles),
+        revengeTradeIndicators: computeRevengeTradeIndicators(bundles),
         sessionPerformance: computeSessionPerformance(bundles),
         dayOfWeekHeatmap: computeDayOfWeekHeatmap(bundles, tz),
         hourOfDayHeatmap: computeHourOfDayHeatmap(bundles, tz),
@@ -275,6 +286,32 @@ export function registerDashboardHandlers(): void {
         calendarHeatmap: computeCalendarHeatmap(bundles, tz),
         streakInfo: computeStreakInfo(bundles),
         monthlyPnl: computeMonthlyPnl(bundles, tz),
+        // T3.8: drawdown autopsy / blown-account root cause
+        postMortem: computePostMortem(bundles, startingBalance),
+        // T6.4: rule-based end-of-day coaching for trades closed "today" (UTC)
+        coaching: generateCoaching(
+          bundles
+            .map((b) => {
+              const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
+              return {
+                closedAtUtc: m.closedAtUtc ?? null,
+                netPnl: m.netPnl ?? null,
+                rMultiple: m.rMultiple ?? null,
+                direction: b.trade.direction,
+                anxietyLevel: b.trade.anxiety_level ?? null,
+              };
+            })
+            .filter(
+              (t) =>
+                t.closedAtUtc != null &&
+                t.closedAtUtc.slice(0, 10) === new Date().toISOString().slice(0, 10),
+            ),
+        ),
+        // T3.9: per-symbol per-session slippage + spread baseline
+        slippageStats: computeSlippageStats(bundles),
+        // T3.3: session × DoW cross product + duration vs outcome
+        sessionDowMatrix: computeSessionDowMatrix(bundles, tz),
+        durationVsOutcome: computeDurationVsOutcome(bundles),
         // M-5: surface unknown symbols so the UI can warn the user
         warnings: unknownSymbols.size > 0
           ? { unknownSymbols: [...unknownSymbols] }

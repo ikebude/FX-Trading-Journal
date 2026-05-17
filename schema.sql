@@ -47,6 +47,13 @@ CREATE TABLE accounts (
   broker_type              TEXT CHECK(broker_type IN
                            ('RETAIL','PROP','ECN','MARKET_MAKER','CRYPTO_EXCHANGE')),
 
+  -- Commission model (T3.10). Optional per-account modeling, used to
+  -- compute expected commission when the broker does not report it.
+  commission_type          TEXT CHECK(commission_type IN
+                           ('PER_LOT','PER_NOTIONAL','ROUND_TRIP')),
+  commission_value         REAL,
+  commission_currency      TEXT,
+
   created_at_utc           TEXT NOT NULL,
   updated_at_utc           TEXT NOT NULL
 );
@@ -77,6 +84,34 @@ CREATE TABLE instruments (
 );
 
 -- ─────────────────────────────────────────────────────────────
+-- Methodologies (T2.2) — trading methodology taxonomy (SMC/ICT/Wyckoff…).
+-- Referenced by trades.methodology_id. Mirrors schema.ts `methodologies`.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE methodologies (
+  id               TEXT PRIMARY KEY,
+  name             TEXT NOT NULL UNIQUE,
+  description      TEXT,
+  is_active        INTEGER NOT NULL DEFAULT 1,
+  created_at_utc   TEXT NOT NULL,
+  updated_at_utc   TEXT NOT NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- Prop firm presets (T2.4) — seeded FTMO/MFF/Topstep… rule presets.
+-- Mirrors schema.ts `prop_firm_presets`.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE prop_firm_presets (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL UNIQUE,
+  max_drawdown_pct    REAL,
+  max_daily_loss_pct  REAL,
+  max_drawdown_amount REAL,
+  is_active           INTEGER NOT NULL DEFAULT 1,
+  created_at_utc      TEXT NOT NULL,
+  updated_at_utc      TEXT NOT NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
 -- Trades — position-level "trade idea".
 -- Multiple ENTRY legs allowed (scaling in).
 -- Multiple EXIT legs allowed (partials).
@@ -97,6 +132,7 @@ CREATE TABLE trades (
   planned_risk_pct         REAL,        -- as % of account at time of entry
 
   -- Qualitative context
+  methodology_id           TEXT REFERENCES methodologies(id),
   setup_name               TEXT,
   session                  TEXT,
   market_condition         TEXT CHECK(market_condition IN ('TRENDING','RANGING','NEWS_VOLATILITY')),
@@ -104,10 +140,16 @@ CREATE TABLE trades (
   confidence               INTEGER CHECK(confidence BETWEEN 1 AND 5),
   pre_trade_emotion        TEXT CHECK(pre_trade_emotion IN ('CALM','NEUTRAL','ANXIOUS','EXCITED','FRUSTRATED','TIRED')),
   post_trade_emotion       TEXT CHECK(post_trade_emotion IN ('SATISFIED','RELIEVED','DISAPPOINTED','FRUSTRATED','INDIFFERENT')),
+  anxiety_level            INTEGER CHECK(anxiety_level BETWEEN 0 AND 10), -- T3.7: optional 0-10 pre-trade slider
 
   -- Timing
   opened_at_utc            TEXT,        -- earliest ENTRY leg timestamp
   closed_at_utc            TEXT,        -- latest EXIT leg timestamp when fully closed
+
+  -- MAE / MFE — Maximum Adverse / Favorable Excursion in pips (T3.2).
+  -- Populated by the EA v2.1+ high/low watermark fields, or entered manually.
+  mae_pips                 REAL,
+  mfe_pips                 REAL,
 
   -- Computed money fields (recomputed by lib/pnl.ts on every leg change)
   net_pnl                  REAL,
@@ -129,6 +171,7 @@ CREATE TABLE trades (
   -- Soft delete + sample flag
   deleted_at_utc           TEXT,
   is_sample                INTEGER NOT NULL DEFAULT 0,
+  is_pinned                INTEGER NOT NULL DEFAULT 0,  -- T5.9: starred / pinned
 
   created_at_utc           TEXT NOT NULL,
   updated_at_utc           TEXT NOT NULL
@@ -179,6 +222,8 @@ CREATE TABLE trade_legs (
   commission          REAL NOT NULL DEFAULT 0,
   swap                REAL NOT NULL DEFAULT 0,
   broker_profit       REAL,                          -- if broker supplied per-leg P&L
+  slippage_pips       REAL,                          -- T3.9: signed requested-vs-filled (EA v2); null = unknown
+  spread_at_entry_pips REAL,                         -- T3.9: spread observed at fill (ENTRY legs); null = unknown
   external_deal_id    TEXT,
   notes               TEXT,
   created_at_utc      TEXT NOT NULL
@@ -200,6 +245,7 @@ CREATE TABLE screenshots (
   width_px        INTEGER,
   height_px       INTEGER,
   byte_size       INTEGER,
+  ocr_text        TEXT,                              -- T6.3: extracted chart text (local OCR)
   created_at_utc  TEXT NOT NULL
 );
 
@@ -448,6 +494,60 @@ CREATE TABLE bridge_files (
   error_message   TEXT,
   processed_at_utc TEXT NOT NULL
 );
+
+-- ─────────────────────────────────────────────────────────────
+-- Rituals & Reflections (T3.6)
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE rituals (
+  id              TEXT PRIMARY KEY,
+  account_id      TEXT REFERENCES accounts(id),
+  name            TEXT NOT NULL,
+  setup_name      TEXT,
+  items           TEXT NOT NULL,
+  is_active       INTEGER NOT NULL DEFAULT 1,
+  created_at_utc  TEXT NOT NULL,
+  updated_at_utc  TEXT NOT NULL
+);
+
+CREATE TABLE trade_reflections (
+  id                TEXT PRIMARY KEY,
+  trade_id          TEXT NOT NULL REFERENCES trades(id),
+  reflection        TEXT,
+  reflected_at_utc  TEXT NOT NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- Voice memos (T6.1) — short audio notes attached to a trade, with an
+-- optional local Whisper transcript. audio_path is relative to data_dir
+-- (Rule 7). Mirrors schema.ts.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE voice_memos (
+  id              TEXT PRIMARY KEY,
+  trade_id        TEXT NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+  audio_path      TEXT NOT NULL,
+  transcript      TEXT,
+  duration_sec    REAL,
+  created_at_utc  TEXT NOT NULL
+);
+
+CREATE INDEX idx_voice_memos_trade ON voice_memos(trade_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- Mood check-ins (T3.7) — standalone, optional wellness data.
+-- account_id nullable: a check-in can be global, not tied to an account.
+-- Independent of `reviews`; feeds mood-trend analytics. Mirrors schema.ts.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE mood_checkins (
+  id                 TEXT PRIMARY KEY,
+  account_id         TEXT REFERENCES accounts(id),
+  mood_score         INTEGER NOT NULL CHECK(mood_score BETWEEN 1 AND 5),
+  note               TEXT,
+  checked_in_at_utc  TEXT NOT NULL,
+  created_at_utc     TEXT NOT NULL
+);
+
+CREATE INDEX idx_mood_checkins_account_time
+  ON mood_checkins(account_id, checked_in_at_utc);
 
 -- ─────────────────────────────────────────────────────────────
 -- Settings (key/value).

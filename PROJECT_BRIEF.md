@@ -65,6 +65,9 @@ If any of these is missing, the journal is not done.
 | Image encoding | **sharp** | Converts pasted/dropped screenshots to WebP q85 (5–10× smaller than PNG). |
 | Markdown | **react-markdown + remark-gfm** | Renders trade notes. |
 | PDF generation | **pdfkit** | Generates per-trade and summary reports. |
+| Local speech-to-text | **nodejs-whisper** | T6.1 — offline Whisper.cpp voice-memo transcription. Model bundled at package time; feature is model-gated and no-ops if absent. No network. |
+| Local embeddings | **onnxruntime-node** | T6.2 — offline sentence-embedding model for trade-similarity / NL blotter search. Model-gated. No network. |
+| Local OCR | **tesseract.js** | T6.3 — offline OCR over chart screenshots → searchable text. Lang data bundled; model-gated. No network. |
 | Logging | **electron-log** | Rolling files in the data dir, never logs note content. |
 | Packaging | **electron-builder** | NSIS installer, desktop shortcut, Start Menu entry, auto-update channel (off by default). |
 | Tests | **Vitest** | Fast, ESM-native, used for all P&L math and importer parsers. |

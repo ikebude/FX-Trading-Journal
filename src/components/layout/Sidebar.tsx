@@ -1,10 +1,12 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import {
+  Activity,
   BarChart2,
   BookOpen,
   Calendar,
   FileText,
   LayoutDashboard,
+  Library,
   Settings,
   TrendingUp,
   Trash2,
@@ -24,8 +26,11 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: BarChart2, tourId: 'sidebar-dashboard' },
   { path: '/reviews', label: 'Reviews', icon: BookOpen },
   { path: '/import', label: 'Import', icon: Upload, tourId: 'sidebar-import' },
+  { path: '/library', label: 'Library', icon: Library },
   { path: '/calendar', label: 'Calendar', icon: Calendar },
   { path: '/reports', label: 'Reports', icon: FileText },
+  { path: '/post-mortem', label: 'Post-mortem', icon: Activity },
+  { path: '/portfolio', label: 'Portfolio', icon: TrendingUp },
   { path: '/trash', label: 'Trash', icon: Trash2 },
   { path: '/settings', label: 'Settings', icon: Settings, tourId: 'sidebar-settings' },
 ];

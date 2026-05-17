@@ -46,6 +46,12 @@ const api = {
     bulkAddTags: (ids: string[], tagIds: number[]) =>
       ipcRenderer.invoke('trades:bulk-add-tags', ids, tagIds),
     search: (query: string) => ipcRenderer.invoke('trades:search', query) as Promise<{ rows: unknown[]; total: number }>,
+    nlSearch: (query: string) =>
+      ipcRenderer.invoke('trades:nl-search', query) as Promise<{
+        rows: unknown[];
+        total: number;
+        parsed: unknown;
+      }>,
     aggregate: (filters: unknown) =>
       ipcRenderer.invoke('trades:aggregate', filters),
     clearSample: () =>
@@ -99,6 +105,12 @@ const api = {
       ipcRenderer.invoke('screenshots:save-from-path', tradeId, kind, path, caption),
     delete: (id: string) => ipcRenderer.invoke('screenshots:delete', id),
     getDataUrl: (id: string) => ipcRenderer.invoke('screenshots:data-url', id),
+    ocr: (id: string) =>
+      ipcRenderer.invoke('screenshots:ocr', id) as Promise<{
+        ok: boolean;
+        status: string;
+        ocrText?: string | null;
+      }>,
   },
 
   // ── Tags & setups ─────────────────────────────────
@@ -141,6 +153,11 @@ const api = {
       ipcRenderer.on('bridge:trade-received', handler);
       return () => { ipcRenderer.removeListener('bridge:trade-received', handler); };
     },
+    onHealth: (cb: (h: { kind: string; message: string }) => void): (() => void) => {
+      const handler = (_: unknown, h: { kind: string; message: string }) => cb(h);
+      ipcRenderer.on('bridge:health', handler);
+      return () => { ipcRenderer.removeListener('bridge:health', handler); };
+    },
   },
 
   // ── Capture overlay ───────────────────────────────
@@ -168,6 +185,8 @@ const api = {
     setSyncInterval: (hours: number) => ipcRenderer.invoke('calendar:set-sync-interval', hours),
     syncNow: () => ipcRenderer.invoke('calendar:sync-now'),
     getSyncSettings: () => ipcRenderer.invoke('calendar:get-sync-settings'),
+    checkBlackout: (symbol: string, timestampUtc: string, windowMinutes?: number) =>
+      ipcRenderer.invoke('calendar:check-blackout', symbol, timestampUtc, windowMinutes),
   },
 
   // ── Reports ───────────────────────────────────────
@@ -175,6 +194,10 @@ const api = {
     tradePdf: (tradeId: string) => ipcRenderer.invoke('reports:trade-pdf', tradeId),
     summaryPdf: (filters: unknown) =>
       ipcRenderer.invoke('reports:summary-pdf', filters),
+    monthlyPdf: (filters: unknown) =>
+      ipcRenderer.invoke('reports:monthly-pdf', filters),
+    taxCsv: (filters: unknown) => ipcRenderer.invoke('reports:tax-csv', filters),
+    yearEndPdf: (filters: unknown) => ipcRenderer.invoke('reports:year-end-pdf', filters),
     exportCsv: (filters: unknown) => ipcRenderer.invoke('reports:export-csv', filters),
   },
 
@@ -203,6 +226,37 @@ const api = {
     showInExplorer: (path: string) => ipcRenderer.invoke('shell:show-in-explorer', path),
   },
 
+  // T6.1 — voice memos
+  voice: {
+    add: (payload: {
+      tradeId: string;
+      bytes: ArrayBuffer | Uint8Array;
+      durationSec?: number;
+      transcript?: string | null;
+      autoTranscribe?: boolean;
+    }) => ipcRenderer.invoke('voice:add', payload) as Promise<{
+      id: string;
+      transcript: string | null;
+      transcriptionStatus: string;
+    }>,
+    list: (tradeId: string) =>
+      ipcRenderer.invoke('voice:list', { tradeId }) as Promise<unknown[]>,
+    setTranscript: (id: string, transcript: string) =>
+      ipcRenderer.invoke('voice:set-transcript', { id, transcript }),
+  },
+
+  // T5.1 — multi-account portfolio
+  portfolio: {
+    summary: (opts?: { baseCurrency?: string; rates?: Record<string, number> }) =>
+      ipcRenderer.invoke('portfolio:summary', opts ?? {}),
+  },
+
+  // T4.8 — app metadata
+  app: {
+    version: () => ipcRenderer.invoke('app:version') as Promise<string>,
+    releaseNotes: () => ipcRenderer.invoke('app:release-notes') as Promise<string>,
+  },
+
   // ── Updater ───────────────────────────────────────
   updater: {
     check: () =>
@@ -224,6 +278,73 @@ const api = {
       ipcRenderer.invoke('reconciliation:detect-drift', accountId),
     createCorrection: (accountId: string, driftAmount: number, note?: string) =>
       ipcRenderer.invoke('reconciliation:create-correction', accountId, driftAmount, note),
+  },
+
+  // ── Library (methodologies + prop firm presets) ───
+  library: {
+    methodologies: {
+      list: (activeOnly?: boolean) =>
+        ipcRenderer.invoke('library:methodologies:list', activeOnly) as Promise<unknown[]>,
+      get: (id: string) =>
+        ipcRenderer.invoke('library:methodologies:get', id) as Promise<unknown>,
+      create: (data: unknown) =>
+        ipcRenderer.invoke('library:methodologies:create', data) as Promise<unknown>,
+      update: (id: string, data: unknown) =>
+        ipcRenderer.invoke('library:methodologies:update', id, data) as Promise<void>,
+      delete: (id: string) =>
+        ipcRenderer.invoke('library:methodologies:delete', id) as Promise<void>,
+    },
+    presets: {
+      list: (activeOnly?: boolean) =>
+        ipcRenderer.invoke('library:presets:list', activeOnly) as Promise<unknown[]>,
+      get: (id: string) =>
+        ipcRenderer.invoke('library:presets:get', id) as Promise<unknown>,
+      create: (data: unknown) =>
+        ipcRenderer.invoke('library:presets:create', data) as Promise<unknown>,
+      update: (id: string, data: unknown) =>
+        ipcRenderer.invoke('library:presets:update', id, data) as Promise<void>,
+      delete: (id: string) =>
+        ipcRenderer.invoke('library:presets:delete', id) as Promise<void>,
+    },
+  },
+
+  // ── Balance operations (deposits / withdrawals) ───
+  balanceOps: {
+    list: (accountId: string, includeDeleted?: boolean) =>
+      ipcRenderer.invoke('balance-ops:list', accountId, includeDeleted) as Promise<unknown[]>,
+    create: (data: unknown) =>
+      ipcRenderer.invoke('balance-ops:create', data) as Promise<unknown>,
+    delete: (id: string) =>
+      ipcRenderer.invoke('balance-ops:delete', id) as Promise<void>,
+  },
+
+  // ── Rituals & Reflections ─────────────────────────
+  rituals: {
+    list: (accountId: string) =>
+      ipcRenderer.invoke('rituals:list', { accountId }) as Promise<unknown[]>,
+    create: (accountId: string, data: Record<string, unknown>) =>
+      ipcRenderer.invoke('rituals:create', { accountId, ...data }) as Promise<unknown>,
+    update: (id: string, data: Record<string, unknown>) =>
+      ipcRenderer.invoke('rituals:update', { id, ...data }) as Promise<void>,
+    delete: (id: string) =>
+      ipcRenderer.invoke('rituals:delete', { id }) as Promise<void>,
+  },
+
+  reflections: {
+    getForTrade: (tradeId: string) =>
+      ipcRenderer.invoke('reflections:get-for-trade', { tradeId }) as Promise<unknown | null>,
+    createOrUpdate: (tradeId: string, reflection: string) =>
+      ipcRenderer.invoke('reflections:create-or-update', { tradeId, reflection }) as Promise<unknown>,
+    listUnrefected: (hoursBack?: number) =>
+      ipcRenderer.invoke('reflections:list-unrefected', { hoursBack }) as Promise<unknown>,
+  },
+
+  // ── Mood check-ins (T3.7) ─────────────────────────
+  mood: {
+    checkin: (payload: { accountId?: string | null; moodScore: number; note?: string | null }) =>
+      ipcRenderer.invoke('mood:checkin', payload) as Promise<unknown>,
+    list: (accountId?: string | null) =>
+      ipcRenderer.invoke('mood:list', { accountId }) as Promise<unknown[]>,
   },
 
   // ── File dialogs ──────────────────────────────────

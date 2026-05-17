@@ -56,6 +56,11 @@ export const CreateAccountSchema = z.object({
   brokerType: z
     .enum(['RETAIL', 'PROP', 'ECN', 'MARKET_MAKER', 'CRYPTO_EXCHANGE'])
     .optional(),
+
+  // Commission model (T3.10) — all optional
+  commissionType: z.enum(['PER_LOT', 'PER_NOTIONAL', 'ROUND_TRIP']).optional(),
+  commissionValue: nonNegativeReal.optional(),
+  commissionCurrency: z.string().length(3, 'Must be 3-letter currency code').optional(),
 });
 
 export const UpdateAccountSchema = CreateAccountSchema.partial();
@@ -106,16 +111,23 @@ export const CreateTradeSchema = z.object({
   plannedRiskPct: z.number().min(0).max(100).optional(),
 
   // Qualitative
+  methodologyId: z.string().optional(),
   setupName: z.string().max(100).optional(),
   marketCondition: z.enum(['TRENDING', 'RANGING', 'NEWS_VOLATILITY']).optional(),
   entryModel: z.enum(['LIMIT', 'MARKET', 'STOP_ENTRY', 'ON_RETEST']).optional(),
   confidence: z.number().int().min(1).max(5).optional(),
+  // T3.7 — optional 0-10 pre-trade anxiety slider.
+  anxietyLevel: z.number().int().min(0).max(10).nullable().optional(),
   preTradeEmotion: z
     .enum(['CALM', 'NEUTRAL', 'ANXIOUS', 'EXCITED', 'FRUSTRATED', 'TIRED'])
     .optional(),
   postTradeEmotion: z
     .enum(['SATISFIED', 'RELIEVED', 'DISAPPOINTED', 'FRUSTRATED', 'INDIFFERENT'])
     .optional(),
+
+  // MAE / MFE — set by EA v2.1+ or manually after trade close (T3.2)
+  maePips: z.number().min(0).optional(),
+  mfePips: z.number().min(0).optional(),
 
   // Optional first entry leg (included in create so one round-trip creates both)
   entryLeg: z
@@ -146,8 +158,11 @@ export const QuickTradeSchema = z.object({
   volumeLots: positiveReal,
   initialStopPrice: positiveReal.optional(),
   initialTargetPrice: positiveReal.optional(),
+  methodologyId: z.string().optional(),
   setupName: z.string().max(100).optional(),
   confidence: z.number().int().min(1).max(5).optional(),
+  // T3.7 — optional 0-10 pre-trade anxiety slider.
+  anxietyLevel: z.number().int().min(0).max(10).nullable().optional(),
   preTradeEmotion: z
     .enum(['CALM', 'NEUTRAL', 'ANXIOUS', 'EXCITED', 'FRUSTRATED', 'TIRED'])
     .optional(),
@@ -185,6 +200,7 @@ export const TradeFiltersSchema = z.object({
   includeDeleted: z.boolean().default(false),
   deletedOnly: z.boolean().default(false),
   includeSample: z.boolean().default(false),
+  pinnedOnly: z.boolean().optional(), // T5.9 — "Pinned" blotter tab
   tagIds: z.array(z.number()).optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().min(1).max(500).default(100),
@@ -264,6 +280,43 @@ export const UpsertReviewSchema = z.object({
 });
 
 export type UpsertReviewInput = z.infer<typeof UpsertReviewSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// Rituals & Reflections (T3.6)
+// ─────────────────────────────────────────────────────────────
+
+export const RitualSchema = z.object({
+  name: z.string().min(1, 'Ritual name is required').max(200),
+  setupName: z.string().max(100).nullable().optional(),
+  items: z
+    .array(
+      z.object({
+        id: z.string(),
+        text: z.string().min(1, 'Item text is required'),
+        optional: z.boolean().optional().default(false),
+      }),
+    )
+    .min(1, 'At least one ritual item is required'),
+});
+
+export type RitualInput = z.infer<typeof RitualSchema>;
+
+export const ReflectionSchema = z.object({
+  reflection: z.string().min(1, 'Reflection is required').max(5000),
+});
+
+export type ReflectionInput = z.infer<typeof ReflectionSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// Mood check-in (T3.7) — standalone optional wellness data.
+// ─────────────────────────────────────────────────────────────
+export const MoodCheckinSchema = z.object({
+  accountId: z.string().nullable().optional(),
+  moodScore: z.number().int().min(1).max(5),
+  note: z.string().max(1000).nullable().optional(),
+});
+
+export type MoodCheckinInput = z.infer<typeof MoodCheckinSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // Settings patch

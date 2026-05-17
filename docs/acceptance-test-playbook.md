@@ -179,3 +179,86 @@ Run this playbook against a **clean install** of the release `.exe` — not the 
 
 **Sign-off:**
 > ☐ Passed — initials: ________  date: __________  version: _______
+
+---
+
+# v1.1 Acceptance Criteria (AC-V.x)
+
+> New manual criteria for the v1.1 release gate. Run on a packaged build
+> after the automated gate (`npm test && typecheck && lint && build &&
+> test:e2e`) passes.
+
+## AC-V.1 — Balance reconciliation (T1.5)
+
+**Steps:**
+1. Create/select an account; import or add closed trades.
+2. Add a deposit and a withdrawal via Account → Balance ledger.
+3. Trigger a balance op from the EA bridge (or simulate one).
+4. Open the account — the DriftBanner should be **absent** when the
+   computed balance matches the broker-reported balance.
+5. Edit a balance op so computed ≠ actual by > 0.01%.
+6. Reload — the DriftBanner appears with the drift amount; "Create
+   correction" zeroes it and the banner clears.
+
+**Expected:** Drift detected only when > 0.01%; correction op resolves it.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.2 — Prop-rule breach (T2.4/T2.5)
+
+**Steps:**
+1. Create a PROP account; apply a prop-firm preset (e.g. FTMO).
+2. Add losing trades until the daily-loss limit is exceeded.
+3. The persistent PropFirmBanner turns red and states the breached rule.
+4. Open the trade form — the daily-loss circuit-breaker modal warns
+   before a new entry is allowed.
+
+**Expected:** Breach is detected, banner + pre-trade warning both fire.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.3 — Zip-slip rejection (T1.8)
+
+**Steps:**
+1. Obtain/craft a malicious backup ZIP containing an entry with a
+   `../` traversal path.
+2. Settings → Restore from backup → choose the malicious ZIP.
+3. Restore must abort with a clear error; no file is written outside
+   the data dir.
+
+**Expected:** Path-traversal entries are rejected; data dir untouched.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.4 — Multi-account portfolio (T5.1/T5.2)
+
+**Steps:**
+1. Create two accounts in different currencies with some closed trades.
+2. Open `/portfolio`.
+3. Total net P&L shows in the base currency; accounts with no FX rate
+   are listed with a "(no rate)" badge and excluded from the total
+   (never silently summed at 1.0).
+4. Open opposing positions in the same symbol across the two accounts.
+5. The amber "Cross-account hedges detected" panel lists the symbol with
+   long/short accounts and the effectively-flat lot count.
+
+**Expected:** Currency conversion is rate-gated; cross-account hedge is
+surfaced; per-account open risk rolls up.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.5 — EA v2 migration / bridge (T1.4 + T4.9)
+
+**Steps:**
+1. Install the v2 EA; attach to an MT5 chart.
+2. Open and close a position; confirm the bridge toast and the trade
+   appearing in the blotter.
+3. Trigger a balance op (deposit/withdrawal) from the EA; confirm it
+   lands in the account ledger.
+4. Leave the EA idle during market hours > 5 min → the quiet-bridge
+   toast appears; skew the PC clock vs broker > 30s → drift toast.
+
+**Expected:** v2 deal/balance events flow end-to-end; heartbeat + drift
+alerts fire (T4.9).
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______

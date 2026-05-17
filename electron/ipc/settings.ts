@@ -1,5 +1,6 @@
 import { ipcMain, shell, app } from 'electron';
 import log from 'electron-log/main.js';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IpcContext } from './index';
 
@@ -53,6 +54,34 @@ export function registerSettingsHandlers(ctx: IpcContext): void {
 
   ipcMain.handle('shell:show-in-explorer', async (_e, filePath: string) => {
     shell.showItemInFolder(filePath);
+  });
+
+  // T4.8 — app version + latest release notes (top CHANGELOG section).
+  ipcMain.handle('app:version', () => app.getVersion());
+
+  ipcMain.handle('app:release-notes', () => {
+    try {
+      const candidates = [
+        join(process.resourcesPath ?? '', 'CHANGELOG.md'),
+        join(app.getAppPath(), 'CHANGELOG.md'),
+        join(process.cwd(), 'CHANGELOG.md'),
+      ];
+      for (const p of candidates) {
+        try {
+          const md = readFileSync(p, 'utf-8');
+          // First "## [" heading block → newest release.
+          const start = md.indexOf('## [');
+          if (start === -1) continue;
+          const next = md.indexOf('\n## [', start + 4);
+          return md.slice(start, next === -1 ? undefined : next).trim();
+        } catch {
+          /* try next candidate */
+        }
+      }
+    } catch (err) {
+      log.warn('app:release-notes failed', err);
+    }
+    return 'Release notes are unavailable.';
   });
 
   // capture:show, capture:hide, capture:foreground-window are registered by

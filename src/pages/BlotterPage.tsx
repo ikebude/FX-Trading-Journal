@@ -92,6 +92,35 @@ export function BlotterPage() {
     },
   });
 
+  // T4.7 — bulk tag + bulk export of the current selection.
+  const { data: allTags = [] } = useQuery<Array<{ id: number; name: string }>>({
+    queryKey: ['tags'],
+    queryFn: () => window.ledger.tags.list() as Promise<Array<{ id: number; name: string }>>,
+    staleTime: 60_000,
+  });
+
+  const bulkTagMutation = useMutation({
+    mutationFn: (tagId: number) => window.ledger.trades.bulkAddTags(selectedIds, [tagId]),
+    onSuccess: () => {
+      setSelectedIds([]);
+      qc.invalidateQueries({ queryKey: ['trades'] });
+    },
+  });
+
+  const bulkExportMutation = useMutation({
+    mutationFn: () =>
+      window.ledger.reports.exportCsv({ ids: selectedIds, includeDeleted: false }),
+  });
+
+  const bulkPinMutation = useMutation({
+    mutationFn: (pinned: boolean) =>
+      window.ledger.trades.bulkUpdate(selectedIds, { isPinned: pinned }),
+    onSuccess: () => {
+      setSelectedIds([]);
+      qc.invalidateQueries({ queryKey: ['trades'] });
+    },
+  });
+
   function handleFilterChange(patch: Partial<TradeFilters>) {
     updateFilters({ ...filters, ...patch });
     setPage(1);
@@ -129,6 +158,52 @@ export function BlotterPage() {
             >
               <Trash2 className="h-3.5 w-3.5" />
               Move to Trash
+            </Button>
+            {allTags.length > 0 && (
+              <select
+                aria-label="Apply tag to selected trades"
+                className="h-7 rounded border border-border bg-transparent px-2 text-xs"
+                value=""
+                disabled={bulkTagMutation.isPending}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  if (id) bulkTagMutation.mutate(id);
+                }}
+              >
+                <option value="">Add tag…</option>
+                {allTags.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground"
+              onClick={() => bulkExportMutation.mutate()}
+              disabled={bulkExportMutation.isPending}
+            >
+              {bulkExportMutation.isPending ? 'Exporting…' : 'Export CSV'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-amber-400"
+              onClick={() => bulkPinMutation.mutate(true)}
+              disabled={bulkPinMutation.isPending}
+            >
+              ★ Pin
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground"
+              onClick={() => bulkPinMutation.mutate(false)}
+              disabled={bulkPinMutation.isPending}
+            >
+              ☆ Unpin
             </Button>
             <Button
               variant="ghost"
@@ -168,6 +243,22 @@ export function BlotterPage() {
                 title="Toggle filters"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {!isSearching && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'h-7 gap-1.5 text-xs',
+                  filters.pinnedOnly
+                    ? 'bg-amber-500/15 text-amber-400'
+                    : 'text-muted-foreground',
+                )}
+                onClick={() => updateFilters({ pinnedOnly: !filters.pinnedOnly })}
+                title="Show pinned trades only"
+              >
+                {filters.pinnedOnly ? '★ Pinned' : '☆ Pinned'}
               </Button>
             )}
 

@@ -20,6 +20,7 @@ import { useAppStore } from '@/stores/app-store';
 import { TradeStatBar } from './TradeStatBar';
 import { LegsTable } from './LegsTable';
 import { NotesTimeline } from './NotesTimeline';
+import { VoiceMemos } from './VoiceMemos';
 import { ScreenshotGallery } from './ScreenshotGallery';
 import { AuditLog } from './AuditLog';
 import { TradeForm } from '@/components/trade-form/TradeForm';
@@ -168,6 +169,12 @@ export function TradeDetailDrawer() {
 
               <TabsContent value="notes" className="flex-1 overflow-y-auto px-4 pb-4 pt-2">
                 <NotesTimeline tradeId={trade.id} notes={trade.notes} />
+                <div className="mt-4 border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
+                    Voice memos
+                  </h4>
+                  <VoiceMemos tradeId={trade.id} />
+                </div>
               </TabsContent>
 
               <TabsContent value="media" className="flex-1 overflow-y-auto px-4 pb-4 pt-2">

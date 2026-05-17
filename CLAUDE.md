@@ -6,7 +6,7 @@
 **What it is:** A native Windows desktop trading journal for forex traders. Local-first, no cloud, no telemetry, single `.exe` installer.  
 **Full spec:** See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — 780 lines, nothing in it is optional or deferred.  
 **Data location:** `%APPDATA%\Ledger\` (configurable, moveable; data folder name intentionally preserved for v1.0 → v1.1 upgrade; see T1.3)  
-**Status:** Core libraries done. UI + IPC handlers remain.
+**Status:** v1.0 shipped; **v1.1 feature-complete on `v1.1/build-sprint`** (all T1.1–T6.11, 513 unit tests + e2e green). Branch held unmerged pending an explicit maintainer merge/tag trigger.
 
 ---
 
@@ -120,7 +120,7 @@ All 18 core milestones complete. Production-ready features shipped:
 
 ### v1.1.0 In Development (42-day sprint, target May 30, 2026)
 
-**Status:** Week 1 (T1.1–T1.10) ✅ COMPLETE. Week 2–6 (T2.1–T6.11) in pipeline.
+**Status:** ✅ ALL WEEKS COMPLETE — T1.1–T6.11 implemented on `v1.1/build-sprint` (v1.1.0; 513 unit tests + 25-test e2e suite; 0 typecheck/lint). Tag/GitHub-release/merge await an explicit maintainer trigger.
 
 **Completion:** T1.1–T1.10 (foundation) + T2.1–T2.10 (libraries) + T3.1–T3.10 (analytics) + T4.1–T4.15 (imports/UX) + T5.1–T5.10 (portfolio) + T6.1–T6.11 (intelligence/release).
 

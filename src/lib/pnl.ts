@@ -39,6 +39,11 @@ export interface Trade {
   setup_name?: string | null;
   session?: string | null;
   confidence?: number | null;
+  // MAE / MFE — populated by EA v2.1+ or manual entry (T3.2)
+  mae_pips?: number | null;
+  mfe_pips?: number | null;
+  // T3.7 — optional 0-10 pre-trade anxiety slider value. NULL = not recorded.
+  anxiety_level?: number | null;
 }
 
 export interface TradeLeg {
@@ -51,6 +56,9 @@ export interface TradeLeg {
   commission: number;
   swap: number;
   broker_profit: number | null;
+  // T3.9 — execution quality. null = unknown (manual entry / pre-EA-v2).
+  slippage_pips?: number | null;
+  spread_at_entry_pips?: number | null;
 }
 
 export interface TradeMetrics {
@@ -74,6 +82,60 @@ export interface TradeMetrics {
 export interface ComputeOptions {
   /** Tolerance for breakeven classification, as a fraction of |1R|. Default 0.1 */
   breakevenTolerance?: number;
+  /** T3.10: account commission model, applied only when broker commission is 0. */
+  commissionModel?: CommissionModel;
+}
+
+/**
+ * R-multiple from raw prices (reward distance / risk distance). The single
+ * source of R math (Rule 3) — reused by scale-out planning so that module
+ * never reimplements P&L/R arithmetic. Returns 0 when risk is non-positive
+ * (inverted/zero stop), mirroring computeTradeMetrics' guard.
+ */
+export function rMultipleFromPrices(
+  entry: number,
+  stop: number,
+  exitOrTarget: number,
+  direction: Direction,
+): number {
+  const riskDistance = direction === 'LONG' ? entry - stop : stop - entry;
+  if (!(riskDistance > 0)) return 0;
+  const rewardDistance =
+    direction === 'LONG' ? exitOrTarget - entry : entry - exitOrTarget;
+  return rewardDistance / riskDistance;
+}
+
+/** T3.10 — per-account commission model. */
+export interface CommissionModel {
+  type: 'PER_LOT' | 'PER_NOTIONAL' | 'ROUND_TRIP';
+  /**
+   * PER_LOT: cost per lot (charged on entry + exit volume).
+   * PER_NOTIONAL: cost per $1,000,000 of traded notional (entry + exit).
+   * ROUND_TRIP: flat cost per closed trade.
+   */
+  value: number;
+}
+
+/**
+ * Modeled commission as a positive cost. Pure. Used by computeTradeMetrics
+ * only when the broker did not report a commission.
+ */
+export function computeModeledCommission(
+  model: CommissionModel,
+  totalLots: number,
+  notionalUsd: number,
+): number {
+  if (model.value <= 0) return 0;
+  switch (model.type) {
+    case 'PER_LOT':
+      return model.value * totalLots;
+    case 'PER_NOTIONAL':
+      return model.value * (notionalUsd / 1_000_000);
+    case 'ROUND_TRIP':
+      return model.value;
+    default:
+      return 0;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -108,8 +170,23 @@ export function computeTradeMetrics(
   const totalExitVolume = sum(exits.map((l) => l.volume_lots));
   const remainingVolume = round(totalEntryVolume - totalExitVolume, 4);
 
-  const totalCommission =
+  const brokerCommission =
     sum(entries.map((l) => l.commission)) + sum(exits.map((l) => l.commission));
+  // T3.10: if the broker reported no commission and the account carries a
+  // commission model, substitute the modeled cost (negative = a cost).
+  let totalCommission = brokerCommission;
+  if (brokerCommission === 0 && opts.commissionModel) {
+    const notionalUsd =
+      [...entries, ...exits].reduce(
+        (s, l) => s + l.volume_lots * instrument.contractSize * l.price,
+        0,
+      );
+    totalCommission = -computeModeledCommission(
+      opts.commissionModel,
+      totalEntryVolume + totalExitVolume,
+      notionalUsd,
+    );
+  }
   const totalSwap =
     sum(entries.map((l) => l.swap)) + sum(exits.map((l) => l.swap));
 
@@ -313,6 +390,14 @@ export function extractCacheableMetrics(
 // Aggregate metrics across many trades
 // ─────────────────────────────────────────────────────────────
 
+/** One data point for the MAE / MFE scatter chart (T3.2). */
+export interface MaeMfePoint {
+  maePips: number;
+  mfePips: number;
+  rMultiple: number | null;
+  symbol: string;
+}
+
 export interface AggregateMetrics {
   totalTrades: number;
   closedTrades: number;
@@ -327,7 +412,26 @@ export interface AggregateMetrics {
   maxDrawdown: number;
   maxDrawdownPct: number;
   sharpePerTrade: number | null;
+  sortinoPerTrade: number | null;
+  calmarRatio: number | null;
+  recoveryFactor: number | null;
+  /** Number of days used to annualize Calmar (derived from equityCurve). */
+  calmarPeriodDays?: number | null;
+  /** Annualized total return (decimal), used to compute time-normalized Calmar. */
+  annualizedReturn?: number | null;
+  expectancyStd?: number | null;
+  expectancyCi95?: { lower: number; upper: number } | null;
   equityCurve: EquityPoint[];
+  /** MAE vs MFE scatter data — only includes closed trades that have both values set (T3.2). */
+  maeMfeScatter: MaeMfePoint[];
+  /** Setup version performance with rolling 30-trade expectancy and degradation alerts (T3.4). */
+  setupVersionPerformance: SetupVersionPerformance[];
+  /** Revenge trades — trades entered shortly after losses, typically emotional (T3.5). */
+  revengeTradeIndicators: RevengeTradeIndicator[];
+  /** Pearson r between pre-trade anxiety (0-10) and R-multiple; null if < 3 usable points (T3.7). */
+  anxietyOutcomeCorrelation: number | null;
+  /** Kelly sizing advisory derived from realized win rate + payoff (T4.12). */
+  kelly: KellyAdvice;
 }
 
 export interface EquityPoint {
@@ -368,7 +472,18 @@ export function computeAggregateMetrics(
     .filter((r): r is number => r !== null);
   const averageR =
     rValues.length > 0 ? sum(rValues) / rValues.length : null;
-  const expectancy = averageR; // Same definition; provided as a separate name for UI clarity.
+  // True expectancy: E = (winRate × avgWin) − ((1−winRate) × avgLoss)
+  // Degenerates to averageR when all trades are wins or all are losses.
+  const winRValues = rValues.filter((r) => r > 0);
+  const lossRValues = rValues.filter((r) => r < 0);
+  let expectancy: number | null;
+  if (winRValues.length > 0 && lossRValues.length > 0) {
+    const avgWin = sum(winRValues) / winRValues.length;
+    const avgLoss = sum(lossRValues.map(Math.abs)) / lossRValues.length;
+    expectancy = winRate * avgWin - (1 - winRate) * avgLoss;
+  } else {
+    expectancy = averageR;
+  }
 
   const winningPnl = sum(
     closed
@@ -439,6 +554,83 @@ export function computeAggregateMetrics(
       stdev > 0 ? (mean / stdev) * Math.sqrt(tradeReturns.length) : null;
   }
 
+  // Sortino per trade — use downside deviation (negative returns only)
+  let sortinoPerTrade: number | null = null;
+  if (tradeReturns.length > 1) {
+    const mean = sum(tradeReturns) / tradeReturns.length;
+    const downsideSqSum = sum(tradeReturns.map((r) => Math.min(r, 0) ** 2));
+    // Use population denominator N for downside deviation as a conservative measure
+    const downsideVar = downsideSqSum / tradeReturns.length;
+    const downsideStdev = Math.sqrt(downsideVar);
+    sortinoPerTrade = downsideStdev > 0 ? (mean / downsideStdev) * Math.sqrt(tradeReturns.length) : null;
+  }
+
+  // Expectancy statistics (in R-multiples)
+  let expectancyStd: number | null = null;
+  let expectancyCi95: { lower: number; upper: number } | null = null;
+  if (rValues.length > 1 && expectancy !== null) {
+    const meanR = sum(rValues) / rValues.length;
+    const varR = sum(rValues.map((r) => (r - meanR) ** 2)) / (rValues.length - 1);
+    const sdR = Math.sqrt(varR);
+    expectancyStd = sdR;
+    const se = sdR / Math.sqrt(rValues.length);
+    const z = 1.96; // 95% CI
+    expectancyCi95 = { lower: expectancy - z * se, upper: expectancy + z * se };
+  }
+
+  // Calmar ratio (practical, non-annualized): total return / max drawdown pct
+  // Calmar ratio — time-normalized: annualized return / max drawdown (as fraction)
+  let calmarRatio: number | null = null;
+  let calmarPeriodDays: number | null = null;
+  let annualizedReturn: number | null = null;
+  // Minimum measurement window (days) required to produce a stable annualized value.
+  // Short measurement windows produce misleadingly large annualized figures —
+  // for these cases we fall back to the non-annualized Calmar (total return / max drawdown).
+  const MIN_ANNUALIZATION_DAYS = 30;
+  if (startingBalance > 0 && maxDrawdownPct > 0) {
+    const totalReturn = netPnl / startingBalance; // can be negative
+    // Determine time span from equity curve if available; otherwise fallback to 1 day
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    let years = 1 / 365; // default to 1 day expressed in years
+    let days = 1;
+    if (equityCurve.length >= 2) {
+      const firstTs = new Date(equityCurve[0].timestamp).getTime();
+      const lastTs = new Date(equityCurve[equityCurve.length - 1].timestamp).getTime();
+      days = Math.max(1, (lastTs - firstTs) / MS_PER_DAY);
+      years = days / 365;
+    }
+    calmarPeriodDays = Math.round(days);
+    // If the measurement period is too short, avoid annualizing because the
+    // resulting figure will be unstable and misleading. In that case we fall
+    // back to the practical (non-annualized) Calmar: totalReturn / maxDrawdown.
+    if (calmarPeriodDays < MIN_ANNUALIZATION_DAYS) {
+      annualizedReturn = null;
+      calmarRatio = (maxDrawdownPct > 0) ? totalReturn / (maxDrawdownPct / 100) : null;
+    } else {
+      // Annualized return using chain-linking: (1+totalReturn)^(1/years) - 1
+      // Guard against negative base when totalReturn <= -1 (full loss)
+      if (totalReturn <= -1) {
+        annualizedReturn = -1;
+      } else {
+        annualizedReturn = Math.pow(1 + totalReturn, 1 / years) - 1;
+      }
+      calmarRatio = (maxDrawdownPct > 0) ? annualizedReturn / (maxDrawdownPct / 100) : null;
+    }
+  }
+
+  // Recovery factor: net P&L divided by absolute max drawdown amount
+  const recoveryFactor = maxDrawdown > 0 ? netPnl / maxDrawdown : null;
+
+  // MAE / MFE scatter — closed trades that have both fields populated (T3.2)
+  const maeMfeScatter: MaeMfePoint[] = closed
+    .filter((c) => c.bundle.trade.mae_pips != null && c.bundle.trade.mfe_pips != null)
+    .map((c) => ({
+      maePips: c.bundle.trade.mae_pips!,
+      mfePips: c.bundle.trade.mfe_pips!,
+      rMultiple: c.metrics.rMultiple,
+      symbol: c.bundle.trade.symbol,
+    }));
+
   return {
     totalTrades,
     closedTrades,
@@ -453,7 +645,19 @@ export function computeAggregateMetrics(
     maxDrawdown,
     maxDrawdownPct,
     sharpePerTrade,
+    sortinoPerTrade,
+    calmarRatio,
+    calmarPeriodDays,
+    annualizedReturn,
+    recoveryFactor,
+    expectancyStd,
+    expectancyCi95,
     equityCurve,
+    maeMfeScatter,
+    setupVersionPerformance: computeSetupVersionPerformance(bundles),
+    revengeTradeIndicators: computeRevengeTradeIndicators(bundles),
+    anxietyOutcomeCorrelation: anxietyOutcomeCorrelation(bundles),
+    kelly: computeKelly(bundles),
   };
 }
 
@@ -529,6 +733,157 @@ export function computeSetupPerformance(bundles: TradeBundle[]): SetupPerformanc
       wins: data.wins,
     }))
     .sort((a, b) => (b.avgR ?? -Infinity) - (a.avgR ?? -Infinity));
+}
+
+/**
+ * T3.4: Setup-performance per version + edge-degradation alert.
+ * Tracks rolling 30-trade expectancy per setup, detects when expectancy degrades.
+ */
+export interface SetupVersionPerformance {
+  setup: string;
+  /** Rolling 30-trade expectancy (last 30 closed trades with this setup). */
+  rolling30Expectancy: number | null;
+  /** Historical 30-trade expectancy baseline (all but last 30 trades). */
+  historicalExpectancy: number | null;
+  /** True if rolling 30-trade expectancy has degraded below historical average. */
+  isDegraded: boolean;
+  /** Total trades with this setup (all time). */
+  totalTrades: number;
+  /** Closed trades with this setup (all time). */
+  closedTrades: number;
+}
+
+/**
+ * Compute setup performance with rolling 30-trade expectancy and degradation detection.
+ * Per-setup metric: groups closed trades chronologically, computes rolling windows
+ * of expectancy, and flags when current performance drops below historical average.
+ *
+ * Usage: Called by dashboard aggregation to detect performance regressions in known setups.
+ * Output: One entry per setup that has > 0 closed trades.
+ */
+export function computeSetupVersionPerformance(bundles: TradeBundle[]): SetupVersionPerformance[] {
+  const computed = bundles.map((b) => ({
+    metrics: computeTradeMetrics(b.trade, b.legs, b.instrument),
+    bundle: b,
+  }));
+
+  // Group trades by setup, keep all closed trades
+  const bySetup = new Map<string, Array<{ metrics: TradeMetrics; bundle: TradeBundle }>>();
+  for (const c of computed) {
+    if (c.metrics.status !== 'CLOSED') continue;
+    const setup = c.bundle.trade.setup_name ?? '(no setup)';
+    if (!bySetup.has(setup)) bySetup.set(setup, []);
+    bySetup.get(setup)!.push(c);
+  }
+
+  // For each setup, compute rolling 30-trade expectancy and historical baseline
+  const results: SetupVersionPerformance[] = [];
+
+  for (const [setup, trades] of bySetup.entries()) {
+    if (trades.length === 0) continue;
+
+    // Sort trades chronologically by close time (then by trade ID for tie-break)
+    // Use numeric timestamp comparison to guarantee ascending order regardless of locale
+    const sorted = trades
+      .filter((t) => t.metrics.closedAtUtc !== null)
+      .sort((a, b) => {
+        const ta = new Date(a.metrics.closedAtUtc!).getTime();
+        const tb = new Date(b.metrics.closedAtUtc!).getTime();
+        if (ta !== tb) return ta - tb;
+        return a.bundle.trade.id.localeCompare(b.bundle.trade.id);
+      });
+
+    if (sorted.length === 0) continue;
+
+    // Compute rolling 30-trade window (last 30 trades)
+    const last30 = sorted.slice(-30);
+    const last30Rs = last30
+      .map((t) => t.metrics.rMultiple)
+      .filter((r): r is number => r !== null);
+
+    let rolling30Expectancy: number | null = null;
+    if (last30Rs.length > 0) {
+      const winLast30 = last30.filter((t) => t.metrics.result === 'WIN').length;
+      const lossLast30 = last30.filter((t) => t.metrics.result === 'LOSS').length;
+      const winRateLast30 = last30.length > 0 ? winLast30 / last30.length : 0;
+      const winRsLast30 = last30Rs.filter((r) => r > 0);
+      const lossRsLast30 = last30Rs.filter((r) => r < 0);
+      if (winRsLast30.length > 0 && lossRsLast30.length > 0) {
+        const avgWin = sum(winRsLast30) / winRsLast30.length;
+        const avgLoss = sum(lossRsLast30.map(Math.abs)) / lossRsLast30.length;
+        rolling30Expectancy = winRateLast30 * avgWin - (1 - winRateLast30) * avgLoss;
+      } else {
+        rolling30Expectancy = sum(last30Rs) / last30Rs.length;
+      }
+    }
+
+    // Compute historical baseline (all trades before the rolling 30 window)
+    let historicalExpectancy: number | null = null;
+    if (sorted.length > 30) {
+      const historicalTrades = sorted.slice(0, -30);
+      const historicalRs = historicalTrades
+        .map((t) => t.metrics.rMultiple)
+        .filter((r): r is number => r !== null);
+      if (historicalRs.length > 0) {
+        const winHist = historicalTrades.filter((t) => t.metrics.result === 'WIN').length;
+        const lossHist = historicalTrades.filter((t) => t.metrics.result === 'LOSS').length;
+        const winRateHist = historicalTrades.length > 0 ? winHist / historicalTrades.length : 0;
+        const winRsHist = historicalRs.filter((r) => r > 0);
+        const lossRsHist = historicalRs.filter((r) => r < 0);
+        if (winRsHist.length > 0 && lossRsHist.length > 0) {
+          const avgWin = sum(winRsHist) / winRsHist.length;
+          const avgLoss = sum(lossRsHist.map(Math.abs)) / lossRsHist.length;
+          historicalExpectancy = winRateHist * avgWin - (1 - winRateHist) * avgLoss;
+        } else {
+          historicalExpectancy = sum(historicalRs) / historicalRs.length;
+        }
+      }
+    } else if (sorted.length <= 30) {
+      // If we have 30 or fewer trades total, treat the entire history as baseline
+      const allRs = sorted
+        .map((t) => t.metrics.rMultiple)
+        .filter((r): r is number => r !== null);
+      if (allRs.length > 0) {
+        const winAll = sorted.filter((t) => t.metrics.result === 'WIN').length;
+        const lossAll = sorted.filter((t) => t.metrics.result === 'LOSS').length;
+        const winRateAll = sorted.length > 0 ? winAll / sorted.length : 0;
+        const winRsAll = allRs.filter((r) => r > 0);
+        const lossRsAll = allRs.filter((r) => r < 0);
+        if (winRsAll.length > 0 && lossRsAll.length > 0) {
+          const avgWin = sum(winRsAll) / winRsAll.length;
+          const avgLoss = sum(lossRsAll.map(Math.abs)) / lossRsAll.length;
+          historicalExpectancy = winRateAll * avgWin - (1 - winRateAll) * avgLoss;
+        } else {
+          historicalExpectancy = sum(allRs) / allRs.length;
+        }
+      }
+    }
+
+    // Detect degradation: rolling30 exists AND is less than historical (or historical is null)
+    const isDegraded =
+      rolling30Expectancy !== null &&
+      historicalExpectancy !== null &&
+      rolling30Expectancy < historicalExpectancy;
+
+    // Count total trades (closed + open + partial + cancelled)
+    const totalTrades = bundles.filter((b) => b.trade.setup_name === setup).length;
+    const closedTrades = sorted.length;
+
+    results.push({
+      setup,
+      rolling30Expectancy,
+      historicalExpectancy,
+      isDegraded,
+      totalTrades,
+      closedTrades,
+    });
+  }
+
+  // Sort by degradation flag first (degraded first), then by setup name
+  return results.sort((a, b) => {
+    if (a.isDegraded !== b.isDegraded) return a.isDegraded ? -1 : 1;
+    return a.setup.localeCompare(b.setup);
+  });
 }
 
 export interface SessionPerformance {
@@ -817,6 +1172,175 @@ export function computeMonthlyPnl(
     .slice(-12);
 }
 
+export interface SessionDowCell {
+  session: string;
+  dayIndex: number; // 0 = Sunday … 6 = Saturday
+  dayName: string;
+  netPnl: number;
+  count: number;
+  wins: number;
+  winRate: number;
+}
+
+/**
+ * Session × day-of-week cross product.
+ * Returns one cell per (session, day) pair that has at least one closed trade.
+ * Useful for identifying which sessions perform best on specific days.
+ */
+export function computeSessionDowMatrix(
+  bundles: TradeBundle[],
+  displayTimezone: string,
+): SessionDowCell[] {
+  const map = new Map<string, { pnl: number; count: number; wins: number }>();
+
+  for (const b of bundles) {
+    const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
+    if (m.status !== 'CLOSED' || !m.closedAtUtc) continue;
+    const session = b.trade.session ?? 'OFF_HOURS';
+    const dow = dayOfWeekInTz(m.closedAtUtc, displayTimezone);
+    const key = `${session}::${dow}`;
+    if (!map.has(key)) map.set(key, { pnl: 0, count: 0, wins: 0 });
+    const entry = map.get(key)!;
+    entry.count++;
+    entry.pnl += m.netPnl ?? 0;
+    if (m.result === 'WIN') entry.wins++;
+  }
+
+  return [...map.entries()].map(([key, data]) => {
+    const sep = key.indexOf('::');
+    const session = key.slice(0, sep);
+    const dayIndex = parseInt(key.slice(sep + 2), 10);
+    return {
+      session,
+      dayIndex,
+      dayName: DAY_NAMES[dayIndex],
+      netPnl: data.pnl,
+      count: data.count,
+      wins: data.wins,
+      winRate: data.count > 0 ? data.wins / data.count : 0,
+    };
+  });
+}
+
+export interface DurationOutcomePoint {
+  holdingTimeMinutes: number;
+  rMultiple: number | null;
+  netPnl: number;
+  symbol: string;
+}
+
+/**
+ * Holding time (minutes) vs trade outcome (R-multiple + net P&L).
+ * Only includes closed trades with a known open and close timestamp.
+ */
+export function computeDurationVsOutcome(bundles: TradeBundle[]): DurationOutcomePoint[] {
+  const points: DurationOutcomePoint[] = [];
+
+  for (const b of bundles) {
+    const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
+    if (m.status !== 'CLOSED' || m.holdingTimeMs === null) continue;
+    points.push({
+      holdingTimeMinutes: m.holdingTimeMs / 60_000,
+      rMultiple: m.rMultiple,
+      netPnl: m.netPnl ?? 0,
+      symbol: b.trade.symbol,
+    });
+  }
+
+  return points;
+}
+
+export interface RevengeTradeIndicator {
+  /** Trade ID of the revenge trade (entered shortly after a loss). */
+  tradeId: string;
+  /** Timestamp when the revenge trade was opened. */
+  openedAtUtc: string;
+  /** Time (minutes) between prior loss close and revenge trade open. */
+  minutesAfterLoss: number;
+  /** The loss that triggered the revenge trade. */
+  priorLossPnl: number;
+  /** Result of the revenge trade itself (WIN, LOSS, BREAKEVEN, or null if still open). */
+  revengeResult: TradeResult | null;
+  /** P&L of the revenge trade. */
+  revengePnl: number | null;
+  /** R-multiple of the revenge trade. */
+  revengeR: number | null;
+  /** True if revenge trade won money (positive pnl). */
+  recouped: boolean;
+}
+
+/**
+ * T3.5: Revenge-trade detector.
+ * Identifies trades entered shortly after losses, typically in an emotional attempt to quickly recover.
+ *
+ * Algorithm:
+ * 1. Sort closed trades by close timestamp
+ * 2. For each loss trade, look ahead to find trades opened within windowMinutes
+ * 3. Mark those trades as revenge trades
+ * 4. Track revenge result and whether it recouped the loss
+ *
+ * Usage: Called by dashboard aggregation to detect emotional trading patterns.
+ */
+export function computeRevengeTradeIndicators(
+  bundles: TradeBundle[],
+  windowMinutes: number = 15,
+): RevengeTradeIndicator[] {
+  // Compute all metrics
+  const computed = bundles.map((b) => ({
+    metrics: computeTradeMetrics(b.trade, b.legs, b.instrument),
+    bundle: b,
+  }));
+
+  // Sort by open timestamp to detect temporal patterns
+  const sorted = computed
+    .filter((c) => c.metrics.closedAtUtc !== null && c.metrics.openedAtUtc !== null)
+    .sort((a, b) => {
+      const byOpen = (a.metrics.openedAtUtc ?? '').localeCompare(
+        b.metrics.openedAtUtc ?? '',
+      );
+      if (byOpen !== 0) return byOpen;
+      return a.bundle.trade.id.localeCompare(b.bundle.trade.id);
+    });
+
+  const revenge: RevengeTradeIndicator[] = [];
+
+  // Find losses and check for subsequent revenge trades
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const current = sorted[i];
+    if (current.metrics.result !== 'LOSS') continue;
+
+    const lossCloseTime = new Date(current.metrics.closedAtUtc!).getTime();
+    const windowMs = windowMinutes * 60_000;
+
+    // Look at subsequent trades to find revenge entries
+    for (let j = i + 1; j < sorted.length; j++) {
+      const next = sorted[j];
+      const nextOpenTime = new Date(next.metrics.openedAtUtc!).getTime();
+      const deltaMs = nextOpenTime - lossCloseTime;
+
+      // Stop looking if we've gone beyond the window
+      if (deltaMs > windowMs) break;
+
+      // Only consider if this trade was opened within the window after the loss closed
+      if (deltaMs > 0 && deltaMs <= windowMs) {
+        const minutesAfter = deltaMs / 60_000;
+        revenge.push({
+          tradeId: next.bundle.trade.id,
+          openedAtUtc: next.metrics.openedAtUtc!,
+          minutesAfterLoss: minutesAfter,
+          priorLossPnl: current.metrics.netPnl ?? 0,
+          revengeResult: next.metrics.result,
+          revengePnl: next.metrics.netPnl,
+          revengeR: next.metrics.rMultiple,
+          recouped: (next.metrics.netPnl ?? 0) > 0,
+        });
+      }
+    }
+  }
+
+  return revenge;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -830,4 +1354,349 @@ function sum(xs: number[]): number {
 function round(n: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(n * factor) / factor;
+}
+
+// ─────────────────────────────────────────────────────────────
+// T3.7 — Cool-down timer + anxiety/outcome correlation
+// ─────────────────────────────────────────────────────────────
+
+export interface CooldownState {
+  active: boolean;
+  /** Whole seconds left before the cool-down window elapses (0 when inactive). */
+  secondsRemaining: number;
+}
+
+/**
+ * Advisory cool-down after a losing trade. Pure and timezone-safe (all inputs
+ * are UTC ISO-8601 strings). Returns inactive when there is no prior loss, the
+ * feature is off (`cooldownMinutes <= 0`), the window has elapsed, or the
+ * timestamp is in the future (treated defensively as inactive).
+ */
+export function computeCooldown(
+  lastClosedLossAtUtc: string | null,
+  cooldownMinutes: number,
+  now: Date | string = new Date(),
+): CooldownState {
+  const inactive: CooldownState = { active: false, secondsRemaining: 0 };
+  if (!lastClosedLossAtUtc || cooldownMinutes <= 0) return inactive;
+
+  const lossMs = new Date(lastClosedLossAtUtc).getTime();
+  const nowMs = (now instanceof Date ? now : new Date(now)).getTime();
+  if (Number.isNaN(lossMs) || Number.isNaN(nowMs)) return inactive;
+
+  const elapsedMs = nowMs - lossMs;
+  if (elapsedMs < 0) return inactive; // future timestamp — defensive
+
+  const windowMs = cooldownMinutes * 60_000;
+  if (elapsedMs >= windowMs) return inactive;
+
+  return { active: true, secondsRemaining: Math.ceil((windowMs - elapsedMs) / 1000) };
+}
+
+/**
+ * Pearson product-moment correlation. Returns null when there are fewer than
+ * 3 points or either series has zero variance (correlation undefined).
+ */
+export function pearson(xs: number[], ys: number[]): number | null {
+  const n = xs.length;
+  if (n < 3 || ys.length !== n) return null;
+
+  const meanX = sum(xs) / n;
+  const meanY = sum(ys) / n;
+
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - meanX;
+    const dy = ys[i] - meanY;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+
+  if (sxx === 0 || syy === 0) return null; // no variance → undefined
+  return sxy / Math.sqrt(sxx * syy);
+}
+
+/**
+ * Correlation between pre-trade anxiety (0-10) and realized R-multiple over
+ * trades that carry both an `anxiety_level` and a computable R. Null until at
+ * least 3 usable pairs exist. Pure — recomputes per-trade metrics internally.
+ */
+export function anxietyOutcomeCorrelation(bundles: TradeBundle[]): number | null {
+  const anx: number[] = [];
+  const r: number[] = [];
+  for (const { trade, legs, instrument } of bundles) {
+    if (trade.anxiety_level == null) continue;
+    const { rMultiple } = computeTradeMetrics(trade, legs, instrument);
+    if (rMultiple == null) continue;
+    anx.push(trade.anxiety_level);
+    r.push(rMultiple);
+  }
+  return pearson(anx, r);
+}
+
+// ─────────────────────────────────────────────────────────────
+// T3.8 — Post-mortem (drawdown autopsy / blown-account root cause)
+// ─────────────────────────────────────────────────────────────
+
+export interface PostMortemWorstTrade {
+  tradeId: string;
+  symbol: string;
+  netPnl: number;
+  closedAtUtc: string | null;
+}
+
+export interface PostMortem {
+  /** True once the worst drawdown breaches `triggerPct` (default 10%). */
+  triggered: boolean;
+  maxDrawdown: number;
+  maxDrawdownPct: number;
+  /** Equity-curve window from peak to the deepest trough. Null if no drawdown. */
+  drawdownPeriod: {
+    startUtc: string;
+    endUtc: string;
+    peakEquity: number;
+    troughEquity: number;
+  } | null;
+  /** Number of closed trades whose close falls inside the drawdown window. */
+  tradesInDrawdown: number;
+  /** Up to 3 largest losers (most negative net P&L). */
+  worstTrades: PostMortemWorstTrade[];
+  /** Plain-language root-cause signals, ordered most-to-least severe. */
+  contributingFactors: string[];
+}
+
+/**
+ * Drawdown autopsy. Pure: derives everything from computeAggregateMetrics +
+ * per-trade metrics. `triggerPct` is the drawdown depth (decimal, e.g. 0.10)
+ * at which a post-mortem is considered warranted.
+ */
+export function computePostMortem(
+  bundles: TradeBundle[],
+  startingBalance: number,
+  triggerPct = 0.1,
+): PostMortem {
+  const agg = computeAggregateMetrics(bundles, startingBalance);
+  const curve = agg.equityCurve;
+
+  let drawdownPeriod: PostMortem['drawdownPeriod'] = null;
+  if (curve.length > 0) {
+    // Deepest trough by drawdownPct.
+    let troughIdx = 0;
+    for (let i = 1; i < curve.length; i++) {
+      if (curve[i].drawdownPct > curve[troughIdx].drawdownPct) troughIdx = i;
+    }
+    if (curve[troughIdx].drawdownPct > 0) {
+      // Walk back to the equity peak that preceded the trough.
+      let peakIdx = troughIdx;
+      for (let i = troughIdx; i >= 0; i--) {
+        if (curve[i].drawdown === 0 || curve[i].equity >= curve[peakIdx].equity) peakIdx = i;
+        if (curve[i].drawdown === 0) break;
+      }
+      drawdownPeriod = {
+        startUtc: curve[peakIdx].timestamp,
+        endUtc: curve[troughIdx].timestamp,
+        peakEquity: curve[peakIdx].equity,
+        troughEquity: curve[troughIdx].equity,
+      };
+    }
+  }
+
+  // Per-trade metrics for worst-trade ranking + in-window counting.
+  const scored = bundles
+    .map(({ trade, legs, instrument }) => ({
+      trade,
+      m: computeTradeMetrics(trade, legs, instrument),
+    }))
+    .filter((s) => s.m.netPnl !== null);
+
+  const worstTrades: PostMortemWorstTrade[] = [...scored]
+    .sort((a, b) => (a.m.netPnl as number) - (b.m.netPnl as number))
+    .slice(0, 3)
+    .filter((s) => (s.m.netPnl as number) < 0)
+    .map((s) => ({
+      tradeId: s.trade.id,
+      symbol: s.trade.symbol,
+      netPnl: s.m.netPnl as number,
+      closedAtUtc: s.m.closedAtUtc ?? null,
+    }));
+
+  let tradesInDrawdown = 0;
+  if (drawdownPeriod) {
+    const lo = new Date(drawdownPeriod.startUtc).getTime();
+    const hi = new Date(drawdownPeriod.endUtc).getTime();
+    tradesInDrawdown = scored.filter((s) => {
+      if (!s.m.closedAtUtc) return false;
+      const t = new Date(s.m.closedAtUtc).getTime();
+      return t >= lo && t <= hi;
+    }).length;
+  }
+
+  const factors: string[] = [];
+  if (agg.maxDrawdownPct >= triggerPct) {
+    factors.push(
+      `Peak-to-trough drawdown of ${(agg.maxDrawdownPct * 100).toFixed(1)}% ` +
+        `(${formatLossWord(agg.maxDrawdown)}).`,
+    );
+  }
+  const revengeInDd = drawdownPeriod
+    ? agg.revengeTradeIndicators.filter((r) => {
+        const t = new Date(r.openedAtUtc).getTime();
+        return (
+          t >= new Date(drawdownPeriod!.startUtc).getTime() &&
+          t <= new Date(drawdownPeriod!.endUtc).getTime()
+        );
+      }).length
+    : agg.revengeTradeIndicators.length;
+  if (revengeInDd > 0) {
+    factors.push(
+      `${revengeInDd} revenge trade${revengeInDd === 1 ? '' : 's'} during the drawdown — ` +
+        `emotional re-entry after losses.`,
+    );
+  }
+  const degraded = agg.setupVersionPerformance.filter(
+    (s) => 'isDegraded' in s && (s as { isDegraded?: boolean }).isDegraded,
+  ).length;
+  if (degraded > 0) {
+    factors.push(`${degraded} setup version(s) showing edge degradation.`);
+  }
+  if (worstTrades.length > 0 && drawdownPeriod) {
+    const biggest = worstTrades[0];
+    const span = drawdownPeriod.peakEquity || startingBalance || 1;
+    if (Math.abs(biggest.netPnl) >= 0.25 * Math.abs(span)) {
+      factors.push(
+        `A single trade (${biggest.symbol}) lost ` +
+          `${(Math.abs(biggest.netPnl / span) * 100).toFixed(1)}% of peak equity.`,
+      );
+    }
+  }
+  if (factors.length === 0) {
+    factors.push('No significant drawdown detected. Account is within normal variance.');
+  }
+
+  return {
+    triggered: agg.maxDrawdownPct >= triggerPct,
+    maxDrawdown: agg.maxDrawdown,
+    maxDrawdownPct: agg.maxDrawdownPct,
+    drawdownPeriod,
+    tradesInDrawdown,
+    worstTrades,
+    contributingFactors: factors,
+  };
+}
+
+function formatLossWord(amount: number): string {
+  return amount > 0 ? `-${amount.toFixed(2)}` : amount.toFixed(2);
+}
+
+// ─────────────────────────────────────────────────────────────
+// T3.9 — Slippage + spread baseline per (symbol, session)
+// ─────────────────────────────────────────────────────────────
+
+export interface SlippageStat {
+  symbol: string;
+  session: string;
+  /** Trades contributing at least one slippage or spread sample. */
+  sampleCount: number;
+  /** Mean signed slippage in pips (negative = filled worse than requested). */
+  avgSlippagePips: number | null;
+  /** Mean spread at entry in pips. */
+  avgSpreadPips: number | null;
+}
+
+/**
+ * Per-symbol, per-session execution-quality baseline. Pure. Ignores legs with
+ * null slippage/spread (manual entry / pre-EA-v2). Sessions fall back to
+ * 'UNKNOWN' when the trade has none. Sorted by sampleCount desc.
+ */
+export function computeSlippageStats(bundles: TradeBundle[]): SlippageStat[] {
+  const groups = new Map<
+    string,
+    { symbol: string; session: string; slip: number[]; spread: number[] }
+  >();
+
+  for (const { trade, legs } of bundles) {
+    const session = trade.session ?? 'UNKNOWN';
+    const key = `${trade.symbol}__${session}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { symbol: trade.symbol, session, slip: [], spread: [] };
+      groups.set(key, g);
+    }
+    for (const leg of legs) {
+      if (leg.slippage_pips != null) g.slip.push(leg.slippage_pips);
+      if (leg.leg_type === 'ENTRY' && leg.spread_at_entry_pips != null) {
+        g.spread.push(leg.spread_at_entry_pips);
+      }
+    }
+  }
+
+  const out: SlippageStat[] = [];
+  for (const g of groups.values()) {
+    if (g.slip.length === 0 && g.spread.length === 0) continue;
+    out.push({
+      symbol: g.symbol,
+      session: g.session,
+      sampleCount: Math.max(g.slip.length, g.spread.length),
+      avgSlippagePips: g.slip.length ? sum(g.slip) / g.slip.length : null,
+      avgSpreadPips: g.spread.length ? sum(g.spread) / g.spread.length : null,
+    });
+  }
+  return out.sort((a, b) => b.sampleCount - a.sampleCount);
+}
+
+// ─────────────────────────────────────────────────────────────
+// T4.12 — Kelly criterion (advisory)
+// ─────────────────────────────────────────────────────────────
+
+export interface KellyAdvice {
+  /** Realized win rate over closed trades with a P&L, or null if none. */
+  winRate: number | null;
+  /** Avg win / avg loss magnitude (payoff ratio), or null. */
+  payoffRatio: number | null;
+  /** Full Kelly fraction, clamped to [0, 1]; null if undefined. */
+  kellyFraction: number | null;
+  /** Half-Kelly — the practical, less-volatile sizing recommendation. */
+  halfKelly: number | null;
+  sampleSize: number;
+}
+
+/**
+ * Kelly sizing from realized results: f* = W − (1−W)/R, where W = win rate
+ * and R = avg win / avg loss. Pure, advisory only. Returns nulls when there
+ * are no wins or no losses (R undefined). Negative edge → 0 (don't bet).
+ */
+export function computeKelly(bundles: TradeBundle[]): KellyAdvice {
+  const pnls: number[] = [];
+  for (const { trade, legs, instrument } of bundles) {
+    const { netPnl } = computeTradeMetrics(trade, legs, instrument);
+    if (netPnl != null && netPnl !== 0) pnls.push(netPnl);
+  }
+  const wins = pnls.filter((p) => p > 0);
+  const losses = pnls.filter((p) => p < 0);
+  const n = pnls.length;
+  if (n === 0 || wins.length === 0 || losses.length === 0) {
+    return {
+      winRate: n > 0 ? wins.length / n : null,
+      payoffRatio: null,
+      kellyFraction: null,
+      halfKelly: null,
+      sampleSize: n,
+    };
+  }
+  const winRate = wins.length / n;
+  const avgWin = sum(wins) / wins.length;
+  const avgLoss = Math.abs(sum(losses) / losses.length);
+  const payoffRatio = avgWin / avgLoss;
+  const raw = winRate - (1 - winRate) / payoffRatio;
+  const kellyFraction = Math.max(0, Math.min(1, raw));
+  return {
+    winRate,
+    payoffRatio,
+    kellyFraction,
+    halfKelly: kellyFraction / 2,
+    sampleSize: n,
+  };
 }

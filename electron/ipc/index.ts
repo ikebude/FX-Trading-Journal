@@ -27,8 +27,15 @@ import { registerTagHandlers } from './tags';
 import { registerTradeHandlers } from './trades';
 import { registerUpdaterHandlers } from './updater';
 import { registerReconciliationHandlers } from './reconciliation';
+import { registerLibraryHandlers } from './library';
+import { registerBalanceOpHandlers } from './balance-ops';
+import { registerRitualHandlers, registerReflectionHandlers } from './rituals';
+import { registerMoodHandlers } from './mood';
+import { registerPortfolioHandlers } from './portfolio';
+import { registerVoiceHandlers } from './voice';
 
-interface AppConfig {
+/** Single source of truth for the on-disk app config shape. */
+export interface AppConfig {
   data_dir: string;
   first_run_complete: boolean;
   theme: 'dark' | 'light' | 'system';
@@ -37,6 +44,9 @@ interface AppConfig {
   last_account_id: string | null;
   auto_launch: boolean;
   auto_update: boolean;
+  load_sample_data: boolean;
+  whats_new_seen_version: string | null;
+  crash_reporter: boolean;
 }
 
 export interface IpcContext {
@@ -69,6 +79,13 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   registerStubHandlers();
   registerUpdaterHandlers();
   registerReconciliationHandlers();
+  registerLibraryHandlers();
+  registerBalanceOpHandlers();
+  registerRitualHandlers();
+  registerReflectionHandlers();
+  registerMoodHandlers();
+  registerPortfolioHandlers();
+  registerVoiceHandlers(ctx);
 
   log.info('IPC: all handlers registered');
 }

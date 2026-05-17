@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   computeAggregateMetrics,
   computeTradeMetrics,
+  computeSessionDowMatrix,
+  computeDurationVsOutcome,
+  computeSetupVersionPerformance,
+  computeRevengeTradeIndicators,
+  computeCooldown,
+  anxietyOutcomeCorrelation,
+  pearson,
+  computePostMortem,
+  computeSlippageStats,
+  computeModeledCommission,
+  rMultipleFromPrices,
+  computeKelly,
   type Instrument,
   type Trade,
   type TradeLeg,
@@ -627,6 +639,30 @@ describe('computeAggregateMetrics — portfolio math', () => {
     expect(m.closedTrades).toBe(1);
     expect(m.wins).toBe(1);
   });
+
+  it('35. True expectancy: 2 wins (R=+1, R=+2), 1 loss (R=−1)', () => {
+    // winRate=2/3, avgWin=(1+2)/2=1.5, avgLoss=1
+    // E = (2/3)*1.5 − (1/3)*1 = 1.0 − 0.333 = 0.667
+    const bundles = [
+      bundle([entry(1.085, 1.0, '2026-04-01T10:00:00Z'), exit(1.09, 1.0, '2026-04-01T12:00:00Z')], 1.08),    // R=+1
+      bundle([entry(1.085, 1.0, '2026-04-02T10:00:00Z'), exit(1.095, 1.0, '2026-04-02T12:00:00Z')], 1.08),  // R=+2
+      bundle([entry(1.085, 1.0, '2026-04-03T10:00:00Z'), exit(1.08, 1.0, '2026-04-03T12:00:00Z')], 1.08),   // R=−1
+    ];
+    const m = computeAggregateMetrics(bundles, 10000);
+    expect(m.expectancy).toBeCloseTo(0.667, 2);
+  });
+
+  it('36. Expectancy with all wins → falls back to averageR (degenerate case)', () => {
+    // No losses → winRValues.length > 0, lossRValues.length === 0 → degenerate
+    const bundles = [
+      bundle([entry(1.085, 1.0, '2026-04-01T10:00:00Z'), exit(1.09, 1.0, '2026-04-01T12:00:00Z')], 1.08),   // R=+1
+      bundle([entry(1.085, 1.0, '2026-04-02T10:00:00Z'), exit(1.095, 1.0, '2026-04-02T12:00:00Z')], 1.08), // R=+2
+    ];
+    const m = computeAggregateMetrics(bundles, 10000);
+    // averageR = (1+2)/2 = 1.5; expectancy falls back to averageR
+    expect(m.expectancy).toBeCloseTo(1.5, 3);
+    expect(m.expectancy).toBeCloseTo(m.averageR!, 3);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -745,5 +781,973 @@ describe('computeAggregateMetrics — T2-3: equity curve tie-breaker', () => {
     // b1 (opens 09:00) should come first → equity after b1 ≈ 10500
     expect(m1.equityCurve[0].equity).toBeCloseTo(10500, 0);
     expect(m1.equityCurve[1].equity).toBeCloseTo(11500, 0);
+  });
+});
+
+describe('computeAggregateMetrics — T3.2: MAE/MFE scatter', () => {
+  it('35. Returns empty scatter when no trades have mae_pips/mfe_pips set', () => {
+    const b = {
+      trade: makeTrade({ status: 'CLOSED', initial_stop_price: 1.08 }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-01T12:00:00Z'),
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toEqual([]);
+  });
+
+  it('36. Includes closed trade with both mae_pips and mfe_pips, carries rMultiple and symbol', () => {
+    const b = {
+      trade: makeTrade({
+        id: 'win-trade',
+        symbol: 'EURUSD',
+        direction: 'LONG',
+        initial_stop_price: 1.08,
+        mae_pips: 8.5,
+        mfe_pips: 52.0,
+      }),
+      legs: [
+        { ...entry(1.085, 1.0, '2026-04-01T09:00:00Z'), trade_id: 'win-trade', id: 'e1' },
+        { ...exit(1.09, 1.0, '2026-04-01T12:00:00Z'), trade_id: 'win-trade', id: 'x1' },
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toHaveLength(1);
+    const pt = agg.maeMfeScatter[0];
+    expect(pt.maePips).toBe(8.5);
+    expect(pt.mfePips).toBe(52.0);
+    expect(pt.symbol).toBe('EURUSD');
+    // rMultiple = (exit - entry) / (entry - stop) = (1.09-1.085)/(1.085-1.08) = 0.005/0.005 = 1.0
+    expect(pt.rMultiple).toBeCloseTo(1.0, 4);
+  });
+
+  it('37. Excludes open trades even when mae_pips/mfe_pips are set', () => {
+    const b = {
+      trade: makeTrade({ status: 'OPEN', mae_pips: 5.0, mfe_pips: 10.0 }),
+      legs: [entry(1.085, 1.0, '2026-04-01T09:00:00Z')],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toEqual([]);
+  });
+
+  it('38. Excludes closed trade where only one of mae_pips/mfe_pips is set', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: 1.08, mae_pips: 8.0, mfe_pips: null }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-01T12:00:00Z'),
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toEqual([]);
+  });
+
+  it('39. rMultiple is null in scatter when trade has no stop price', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: null, mae_pips: 12.0, mfe_pips: 30.0 }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-01T12:00:00Z'),
+      ],
+      instrument: EURUSD,
+    };
+    const agg = computeAggregateMetrics([b], 10000);
+    expect(agg.maeMfeScatter).toHaveLength(1);
+    expect(agg.maeMfeScatter[0].rMultiple).toBeNull();
+  });
+});
+
+describe('computeSessionDowMatrix — T3.3', () => {
+  // London session, Monday close (2026-04-06 is a Monday)
+  const londonMon = {
+    trade: makeTrade({ id: 'lm', initial_stop_price: 1.08, session: 'LONDON' }),
+    legs: [
+      { ...entry(1.085, 1.0, '2026-04-06T09:00:00Z'), trade_id: 'lm', id: 'e1' },
+      { ...exit(1.09, 1.0, '2026-04-06T11:00:00Z'), trade_id: 'lm', id: 'x1' },
+    ],
+    instrument: EURUSD, // WIN, +500
+  };
+  // London session, Tuesday close (2026-04-07)
+  const londonTue = {
+    trade: makeTrade({ id: 'lt', initial_stop_price: 1.08, session: 'LONDON' }),
+    legs: [
+      { ...entry(1.085, 1.0, '2026-04-07T09:00:00Z'), trade_id: 'lt', id: 'e2' },
+      { ...exit(1.082, 1.0, '2026-04-07T10:30:00Z'), trade_id: 'lt', id: 'x2' },
+    ],
+    instrument: EURUSD, // LOSS, -300
+  };
+  const TZ = 'UTC';
+
+  it('40. Returns one cell per (session, day) combination', () => {
+    const cells = computeSessionDowMatrix([londonMon, londonTue], TZ);
+    expect(cells).toHaveLength(2);
+  });
+
+  it('41. Cell for London Monday has positive P&L and win rate 1', () => {
+    const cells = computeSessionDowMatrix([londonMon], TZ);
+    expect(cells).toHaveLength(1);
+    const cell = cells[0];
+    expect(cell.session).toBe('LONDON');
+    expect(cell.dayName).toBe('Mon');
+    expect(cell.count).toBe(1);
+    expect(cell.wins).toBe(1);
+    expect(cell.winRate).toBe(1);
+    expect(cell.netPnl).toBeGreaterThan(0);
+  });
+
+  it('42. Open trades are excluded from the matrix', () => {
+    const openTrade = {
+      trade: makeTrade({ id: 'open', session: 'LONDON' }),
+      legs: [entry(1.085, 1.0, '2026-04-06T09:00:00Z')],
+      instrument: EURUSD,
+    };
+    const cells = computeSessionDowMatrix([openTrade], TZ);
+    expect(cells).toHaveLength(0);
+  });
+
+  it('43. Trades without session field use OFF_HOURS', () => {
+    const noSession = {
+      trade: makeTrade({ id: 'ns', initial_stop_price: 1.08, session: null }),
+      legs: [
+        { ...entry(1.085, 1.0, '2026-04-06T09:00:00Z'), trade_id: 'ns', id: 'e3' },
+        { ...exit(1.09, 1.0, '2026-04-06T11:00:00Z'), trade_id: 'ns', id: 'x3' },
+      ],
+      instrument: EURUSD,
+    };
+    const cells = computeSessionDowMatrix([noSession], TZ);
+    expect(cells[0].session).toBe('OFF_HOURS');
+  });
+});
+
+describe('computeDurationVsOutcome — T3.3', () => {
+  it('44. Returns a point for every closed trade with a known holding time', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: 1.08 }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-06T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-06T11:00:00Z'), // 2h = 120m
+      ],
+      instrument: EURUSD,
+    };
+    const pts = computeDurationVsOutcome([b]);
+    expect(pts).toHaveLength(1);
+    expect(pts[0].holdingTimeMinutes).toBeCloseTo(120, 1);
+    expect(pts[0].rMultiple).toBeCloseTo(1.0, 4);
+    expect(pts[0].symbol).toBe('EURUSD');
+  });
+
+  it('45. Open trade with no exit is excluded', () => {
+    const open = {
+      trade: makeTrade(),
+      legs: [entry(1.085, 1.0, '2026-04-06T09:00:00Z')],
+      instrument: EURUSD,
+    };
+    expect(computeDurationVsOutcome([open])).toHaveLength(0);
+  });
+
+  it('46. rMultiple is null when no stop price is set', () => {
+    const b = {
+      trade: makeTrade({ initial_stop_price: null }),
+      legs: [
+        entry(1.085, 1.0, '2026-04-06T09:00:00Z'),
+        exit(1.09, 1.0, '2026-04-06T10:30:00Z'), // 90m
+      ],
+      instrument: EURUSD,
+    };
+    const pts = computeDurationVsOutcome([b]);
+    expect(pts).toHaveLength(1);
+    expect(pts[0].rMultiple).toBeNull();
+    expect(pts[0].holdingTimeMinutes).toBeCloseTo(90, 1);
+  });
+});
+
+describe('computeSetupVersionPerformance — T3.4', () => {
+  // Helper: create N-trade sequence for a setup with varied R results
+  function createSetupTrades(
+    setupName: string,
+    count: number,
+    baseDate: string,
+    rValues: number[], // Specify R-multiples for each trade
+  ) {
+    return rValues.slice(0, count).map((r, idx) => {
+      const ts = new Date(new Date(baseDate).getTime() + idx * 3600000).toISOString(); // 1 hour apart
+      const entryPrice = 1.085;
+      const stop = 1.08;
+      const exitPrice = entryPrice + r * (entryPrice - stop); // compute exit from R multiple
+
+      return {
+        trade: makeTrade({
+          id: `${setupName}-${idx}`,
+          setup_name: setupName,
+          initial_stop_price: stop,
+        }),
+        legs: [
+          { ...entry(entryPrice, 1.0, ts), trade_id: `${setupName}-${idx}`, id: `e${idx}` },
+          { ...exit(exitPrice, 1.0, ts), trade_id: `${setupName}-${idx}`, id: `x${idx}` },
+        ],
+        instrument: EURUSD,
+      };
+    });
+  }
+
+  it('47. Empty bundles returns empty array', () => {
+    expect(computeSetupVersionPerformance([])).toEqual([]);
+  });
+
+  it('48. Single setup with < 30 trades: historicalExpectancy equals all-time expectancy', () => {
+    // 10 trades with R values: [0.5, -1, 1, -0.5, 2, 0.5, -1, 1, 0.5, -1]
+    const trades = createSetupTrades(
+      'scalp',
+      10,
+      '2026-04-01T09:00:00Z',
+      [0.5, -1, 1, -0.5, 2, 0.5, -1, 1, 0.5, -1],
+    );
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    const r = results[0];
+    expect(r.setup).toBe('scalp');
+    expect(r.totalTrades).toBe(10);
+    expect(r.closedTrades).toBe(10);
+    expect(r.rolling30Expectancy).not.toBeNull();
+    expect(r.historicalExpectancy).not.toBeNull();
+    // Since < 30 trades, rolling30 == all-time
+    expect(r.rolling30Expectancy).toBeCloseTo(r.historicalExpectancy!, 4);
+    expect(r.isDegraded).toBe(false); // Can't degrade if rolling == historical
+  });
+
+  it('49. Setup with 30+ trades: splits into rolling30 and historical', () => {
+    // First 5 trades: all losses (-1R) → poor historical baseline
+    // Last 30 trades: all wins (+1R) → strong rolling window
+    // Expected: rolling30Expectancy > historicalExpectancy → isDegraded = false
+    const poor5 = Array(5).fill(-1);   // avg -1R historical
+    const strong30 = Array(30).fill(1); // avg +1R rolling
+
+    const trades = createSetupTrades(
+      'swing',
+      35,
+      '2026-04-01T09:00:00Z',
+      [...poor5, ...strong30],
+    );
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    const r = results[0];
+    expect(r.closedTrades).toBe(35);
+    expect(r.rolling30Expectancy).not.toBeNull();
+    expect(r.historicalExpectancy).not.toBeNull();
+    // rolling (last 30, all +1R) > historical (first 5, all -1R)
+    expect(r.rolling30Expectancy!).toBeGreaterThan(r.historicalExpectancy!);
+    expect(r.isDegraded).toBe(false);
+  });
+
+  it('50. Degradation detected when rolling30 < historicalExpectancy', () => {
+    // First 20 trades: all wins +1R
+    const strong = Array(20).fill(1);
+    // Next 15 trades: all losses -1R (weak)
+    const weak = Array(15).fill(-1);
+
+    const trades = createSetupTrades(
+      'trend',
+      35,
+      '2026-04-01T09:00:00Z',
+      [...strong, ...weak],
+    );
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    const r = results[0];
+    expect(r.isDegraded).toBe(true); // rolling < historical
+    expect(r.rolling30Expectancy).toBeLessThan(r.historicalExpectancy!);
+  });
+
+  it('51. Open trades are not included in totals', () => {
+    const closed = createSetupTrades(
+      'mixed',
+      5,
+      '2026-04-01T09:00:00Z',
+      [1, -0.5, 0.5, -1, 2],
+    );
+    const open = {
+      trade: makeTrade({ id: 'open-1', setup_name: 'mixed' }),
+      legs: [entry(1.085, 1.0, '2026-04-02T09:00:00Z')],
+      instrument: EURUSD,
+    };
+
+    const results = computeSetupVersionPerformance([...closed, open]);
+    expect(results).toHaveLength(1);
+    expect(results[0].closedTrades).toBe(5); // only closed
+    expect(results[0].totalTrades).toBe(6); // both closed + open
+  });
+
+  it('52. Multiple setups are sorted with degraded first', () => {
+    const setup1 = createSetupTrades(
+      'strong',
+      10,
+      '2026-04-01T09:00:00Z',
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    );
+    const setup2Strong = Array(20).fill(1);
+    const setup2Weak = Array(15).fill(-1);
+    const setup2 = createSetupTrades(
+      'weak',
+      35,
+      '2026-04-02T09:00:00Z',
+      [...setup2Strong, ...setup2Weak],
+    );
+
+    const results = computeSetupVersionPerformance([...setup1, ...setup2]);
+    expect(results).toHaveLength(2);
+    // 'weak' is degraded, should come first
+    expect(results[0].setup).toBe('weak');
+    expect(results[0].isDegraded).toBe(true);
+    expect(results[1].setup).toBe('strong');
+    expect(results[1].isDegraded).toBe(false);
+  });
+
+  it('53. Null R-multiples are excluded from expectancy calculation', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 't1', setup_name: 'no-stop', initial_stop_price: null }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T09:00:00Z'),
+          exit(1.09, 1.0, '2026-04-01T10:00:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({ id: 't2', setup_name: 'no-stop', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T11:00:00Z'),
+          exit(1.095, 1.0, '2026-04-01T12:00:00Z'), // R = (1.095-1.085)/(1.085-1.08) = 2.0
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    // Only 1 R-value (from t2), so expectancy should be 2.0
+    expect(results[0].rolling30Expectancy).toBeCloseTo(2.0, 4);
+  });
+
+  it('54. Chronological order: trades sorted by closedAtUtc then trade id', () => {
+    // Create two trades that close at same time, verify they're consistently ordered
+    const trades = [
+      {
+        trade: makeTrade({
+          id: 'z-last',
+          setup_name: 'order-test',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.09, 1.0, '2026-04-01T10:30:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'a-first',
+          setup_name: 'order-test',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.095, 1.0, '2026-04-01T10:30:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeSetupVersionPerformance(trades);
+    expect(results).toHaveLength(1);
+    // Should compute successfully without error; ordering is deterministic
+    expect(results[0].closedTrades).toBe(2);
+    expect(results[0].rolling30Expectancy).not.toBeNull();
+  });
+});
+
+describe('T3.5: Revenge-trade detector', () => {
+  it('55. No revenge trades when no losses exist', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 't1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.095, 1.0, '2026-04-01T10:30:00Z'), // +1R win
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({ id: 't2', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T11:00:00Z'),
+          exit(1.09, 1.0, '2026-04-01T11:30:00Z'), // +0.5R win
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0);
+  });
+
+  it('56. No revenge trades when loss has no follow-up', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 't1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // Stop hit = LOSS
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0);
+  });
+
+  it('57. Detect revenge trade within 15-minute window after loss', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS -1R
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:40:00Z'), // 10 minutes after loss close
+          exit(1.095, 1.0, '2026-04-01T11:00:00Z'), // +1R win
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(1);
+    expect(results[0].tradeId).toBe('revenge-t2');
+    expect(results[0].minutesAfterLoss).toBeCloseTo(10.0, 0);
+    expect(results[0].priorLossPnl).toBeCloseTo(-500, 0); // -1R on EURUSD (50 pips * 100k * 0.0001)
+    expect(results[0].revengeResult).toBe('WIN');
+    expect(results[0].revengePnl).toBeCloseTo(1000, 0); // +1R (entry 1.085, exit 1.095, gain 100 pips = 1000 USD)
+    expect(results[0].recouped).toBe(true);
+  });
+
+  it('58. Ignore trades opened after 15-minute window (default)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'late-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:46:00Z'), // 16 minutes after loss close
+          exit(1.095, 1.0, '2026-04-01T11:00:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0); // Not within 15-minute window
+  });
+
+  it('59. Revenge trade that LOST money (failed recovery)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS -1R
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-loss-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.084,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:35:00Z'), // 5 minutes later
+          exit(1.084, 1.0, '2026-04-01T10:50:00Z'), // Stop hit again = LOSS
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(1);
+    expect(results[0].tradeId).toBe('revenge-loss-t2');
+    expect(results[0].revengeResult).toBe('LOSS');
+    expect(results[0].recouped).toBe(false); // Did not recover
+  });
+
+  it('60. Multiple consecutive losses, each can trigger revenge', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.084,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:35:00Z'), // 5 min after t1 loss
+          exit(1.084, 1.0, '2026-04-01T11:00:00Z'), // Stop = LOSS again
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-t3',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T11:05:00Z'), // 5 min after t2 loss
+          exit(1.095, 1.0, '2026-04-01T11:30:00Z'), // WIN +1R
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(2); // t2 and t3 are both revenge trades
+    // t2 is revenge after t1 loss
+    expect(results.find((r) => r.tradeId === 'revenge-t2')).toBeDefined();
+    // t3 is revenge after t2 loss
+    expect(results.find((r) => r.tradeId === 'revenge-t3')).toBeDefined();
+  });
+
+  it('61. Custom window size (30 minutes)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'far-revenge-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.08,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:55:00Z'), // 25 min after loss (outside default 15, inside 30)
+          exit(1.095, 1.0, '2026-04-01T11:15:00Z'),
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    // With default 15-minute window
+    let results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(0);
+
+    // With 30-minute window
+    results = computeRevengeTradeIndicators(trades, 30);
+    expect(results).toHaveLength(1);
+    expect(results[0].tradeId).toBe('far-revenge-t2');
+  });
+
+  it('62. BREAKEVEN result tracking (edge case)', () => {
+    const trades = [
+      {
+        trade: makeTrade({ id: 'loss-t1', symbol: 'EURUSD', initial_stop_price: 1.08 }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:00:00Z'),
+          exit(1.08, 1.0, '2026-04-01T10:30:00Z'), // LOSS
+        ],
+        instrument: EURUSD,
+      },
+      {
+        trade: makeTrade({
+          id: 'revenge-be-t2',
+          symbol: 'EURUSD',
+          initial_stop_price: 1.085,
+        }),
+        legs: [
+          entry(1.085, 1.0, '2026-04-01T10:35:00Z'),
+          exit(1.085, 1.0, '2026-04-01T11:00:00Z'), // BREAKEVEN (exit at entry)
+        ],
+        instrument: EURUSD,
+      },
+    ];
+
+    const results = computeRevengeTradeIndicators(trades);
+    expect(results).toHaveLength(1);
+    expect(results[0].revengeResult).toBe('BREAKEVEN');
+    expect(results[0].recouped).toBe(false); // BREAKEVEN is 0 pnl, so not >0
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.7 — Cool-down timer (pure helper)
+// ─────────────────────────────────────────────────────────────
+
+describe('computeCooldown — T3.7', () => {
+  const now = new Date('2026-05-16T12:00:00Z');
+
+  it('inactive when there is no prior closed loss', () => {
+    expect(computeCooldown(null, 15, now)).toEqual({ active: false, secondsRemaining: 0 });
+  });
+
+  it('inactive when cooldownMinutes is 0 (feature off)', () => {
+    expect(computeCooldown('2026-05-16T11:59:00Z', 0, now)).toEqual({
+      active: false,
+      secondsRemaining: 0,
+    });
+  });
+
+  it('active with remaining seconds when loss is within the window', () => {
+    // loss closed 5 minutes ago, 15-minute cooldown → 10 minutes (600s) left
+    const r = computeCooldown('2026-05-16T11:55:00Z', 15, now);
+    expect(r.active).toBe(true);
+    expect(r.secondsRemaining).toBe(600);
+  });
+
+  it('inactive once the window has fully elapsed', () => {
+    // loss closed 20 minutes ago, 15-minute cooldown → expired
+    expect(computeCooldown('2026-05-16T11:40:00Z', 15, now)).toEqual({
+      active: false,
+      secondsRemaining: 0,
+    });
+  });
+
+  it('treats a future timestamp defensively as inactive', () => {
+    expect(computeCooldown('2026-05-16T12:05:00Z', 15, now).active).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.7 — Pearson correlation core + anxiety/outcome correlation
+// ─────────────────────────────────────────────────────────────
+
+describe('pearson — T3.7', () => {
+  it('returns null for fewer than 3 points', () => {
+    expect(pearson([1, 2], [2, 4])).toBeNull();
+  });
+
+  it('returns +1 for a perfectly positive linear relationship', () => {
+    expect(pearson([1, 2, 3, 4], [2, 4, 6, 8])).toBeCloseTo(1, 10);
+  });
+
+  it('returns -1 for a perfectly negative linear relationship', () => {
+    expect(pearson([1, 2, 3, 4], [8, 6, 4, 2])).toBeCloseTo(-1, 10);
+  });
+
+  it('returns null when a series has zero variance (undefined correlation)', () => {
+    expect(pearson([5, 5, 5, 5], [1, 2, 3, 4])).toBeNull();
+  });
+});
+
+describe('anxietyOutcomeCorrelation — T3.7', () => {
+  function anxBundle(anxiety: number | null, exitPrice: number) {
+    const ts = `2026-04-0${1}T1${exitPrice}:00:00Z`;
+    return {
+      trade: makeTrade({
+        id: `anx-${anxiety}-${exitPrice}`,
+        status: 'CLOSED' as const,
+        initial_stop_price: 1.08,
+        anxiety_level: anxiety,
+      }),
+      legs: [
+        { ...entry(1.09, 1.0, ts), trade_id: `anx-${anxiety}-${exitPrice}` },
+        {
+          ...exit(exitPrice, 1.0, ts.replace('T1', 'T2')),
+          trade_id: `anx-${anxiety}-${exitPrice}`,
+        },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('returns null with fewer than 3 usable (anxiety, R) pairs', () => {
+    expect(anxietyOutcomeCorrelation([anxBundle(2, 1.1), anxBundle(8, 1.05)])).toBeNull();
+  });
+
+  it('excludes trades with no anxiety recorded', () => {
+    // 4 trades but only 2 carry an anxiety value → still null
+    const bundles = [
+      anxBundle(null, 1.1),
+      anxBundle(null, 1.05),
+      anxBundle(3, 1.1),
+      anxBundle(7, 1.0),
+    ];
+    expect(anxietyOutcomeCorrelation(bundles)).toBeNull();
+  });
+
+  it('returns a correlation coefficient in [-1, 1] for >= 3 usable pairs', () => {
+    const bundles = [
+      anxBundle(1, 1.12),
+      anxBundle(5, 1.1),
+      anxBundle(9, 1.07),
+      anxBundle(7, 1.08),
+    ];
+    const r = anxietyOutcomeCorrelation(bundles);
+    expect(r).not.toBeNull();
+    expect(r as number).toBeGreaterThanOrEqual(-1);
+    expect(r as number).toBeLessThanOrEqual(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.8 — Post-mortem (drawdown autopsy)
+// ─────────────────────────────────────────────────────────────
+
+describe('computePostMortem — T3.8', () => {
+  function pmBundle(id: string, entryP: number, exitP: number, ts: string) {
+    return {
+      trade: makeTrade({ id, status: 'CLOSED' as const, initial_stop_price: 1.08 }),
+      legs: [
+        { ...entry(entryP, 1.0, ts), trade_id: id },
+        { ...exit(exitP, 1.0, ts.replace('T10', 'T12')), trade_id: id },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('empty book → not triggered, no drawdown period, benign message', () => {
+    const pm = computePostMortem([], 10000);
+    expect(pm.triggered).toBe(false);
+    expect(pm.drawdownPeriod).toBeNull();
+    expect(pm.worstTrades).toEqual([]);
+    expect(pm.tradesInDrawdown).toBe(0);
+    expect(pm.contributingFactors).toHaveLength(1);
+    expect(pm.contributingFactors[0]).toMatch(/no significant drawdown/i);
+  });
+
+  it('a losing run breaches the trigger and surfaces the worst trade + factors', () => {
+    // Small starting balance so a few 1-lot losses exceed a 10% drawdown.
+    const bundles = [
+      pmBundle('w1', 1.0850, 1.0900, '2026-04-01T10:00:00Z'), // +50 pips win
+      pmBundle('l1', 1.0900, 1.0820, '2026-04-02T10:00:00Z'), // -80 pips
+      pmBundle('l2', 1.0900, 1.0780, '2026-04-03T10:00:00Z'), // -120 pips (worst)
+      pmBundle('l3', 1.0900, 1.0850, '2026-04-04T10:00:00Z'), // -50 pips
+    ];
+    const pm = computePostMortem(bundles, 2000, 0.1);
+
+    expect(pm.maxDrawdownPct).toBeGreaterThan(0);
+    expect(pm.triggered).toBe(pm.maxDrawdownPct >= 0.1);
+    expect(pm.worstTrades.length).toBeGreaterThan(0);
+    // 'l2' is the most negative.
+    expect(pm.worstTrades[0].tradeId).toBe('l2');
+    expect(pm.worstTrades[0].netPnl).toBeLessThan(0);
+    expect(pm.drawdownPeriod).not.toBeNull();
+    expect(pm.contributingFactors.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.9 — Slippage / spread baseline
+// ─────────────────────────────────────────────────────────────
+
+describe('computeSlippageStats — T3.9', () => {
+  function legBundle(
+    symbol: string,
+    session: string | null,
+    entrySlip: number | null,
+    spread: number | null,
+  ) {
+    const id = `${symbol}-${session}-${entrySlip}-${spread}`;
+    return {
+      trade: makeTrade({ id, symbol, session }),
+      legs: [
+        {
+          ...entry(1.09, 1.0, '2026-04-01T10:00:00Z'),
+          trade_id: id,
+          slippage_pips: entrySlip,
+          spread_at_entry_pips: spread,
+        },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('ignores legs with no slippage/spread data', () => {
+    expect(computeSlippageStats([legBundle('EURUSD', 'LONDON', null, null)])).toEqual([]);
+  });
+
+  it('averages slippage and spread per (symbol, session)', () => {
+    const stats = computeSlippageStats([
+      legBundle('EURUSD', 'LONDON', -0.4, 0.8),
+      legBundle('EURUSD', 'LONDON', -0.6, 1.2),
+      legBundle('EURUSD', 'NEWYORK', -0.2, 0.5),
+    ]);
+    const london = stats.find((s) => s.session === 'LONDON')!;
+    expect(london.avgSlippagePips).toBeCloseTo(-0.5, 10);
+    expect(london.avgSpreadPips).toBeCloseTo(1.0, 10);
+    expect(london.sampleCount).toBe(2);
+    // sorted by sampleCount desc → LONDON (2) before NEWYORK (1)
+    expect(stats[0].session).toBe('LONDON');
+  });
+
+  it('falls back to UNKNOWN session', () => {
+    const stats = computeSlippageStats([legBundle('GBPUSD', null, -1, null)]);
+    expect(stats[0].session).toBe('UNKNOWN');
+    expect(stats[0].avgSpreadPips).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T4.12 — Kelly criterion
+// ─────────────────────────────────────────────────────────────
+
+describe('computeKelly — T4.12', () => {
+  function kBundle(id: string, entryP: number, exitP: number) {
+    return {
+      trade: makeTrade({ id, status: 'CLOSED' as const, initial_stop_price: 1.0 }),
+      legs: [
+        { ...entry(entryP, 1.0, '2026-04-01T10:00:00Z'), trade_id: id },
+        { ...exit(exitP, 1.0, '2026-04-01T12:00:00Z'), trade_id: id },
+      ],
+      instrument: EURUSD,
+    };
+  }
+
+  it('null payoff/kelly when there are no losses', () => {
+    const k = computeKelly([kBundle('w1', 1.0, 1.1), kBundle('w2', 1.0, 1.1)]);
+    expect(k.winRate).toBe(1);
+    expect(k.payoffRatio).toBeNull();
+    expect(k.kellyFraction).toBeNull();
+  });
+
+  it('computes Kelly for a 50% win rate, 2:1 payoff', () => {
+    // 2 wins of +1000, 2 losses of -500 → W=0.5, R=2 → f* = 0.5 - 0.5/2 = 0.25
+    const k = computeKelly([
+      kBundle('w1', 1.0, 1.1),
+      kBundle('w2', 1.0, 1.1),
+      kBundle('l1', 1.0, 0.95),
+      kBundle('l2', 1.0, 0.95),
+    ]);
+    expect(k.winRate).toBeCloseTo(0.5, 10);
+    expect(k.payoffRatio).toBeCloseTo(2, 6);
+    expect(k.kellyFraction).toBeCloseTo(0.25, 6);
+    expect(k.halfKelly).toBeCloseTo(0.125, 6);
+  });
+
+  it('clamps a negative edge to 0 (do not bet)', () => {
+    // 1 win +500, 3 losses -1000 → strongly negative edge
+    const k = computeKelly([
+      kBundle('w1', 1.0, 1.05),
+      kBundle('l1', 1.0, 0.9),
+      kBundle('l2', 1.0, 0.9),
+      kBundle('l3', 1.0, 0.9),
+    ]);
+    expect(k.kellyFraction).toBe(0);
+  });
+
+  it('empty book → all null, sampleSize 0', () => {
+    const k = computeKelly([]);
+    expect(k).toEqual({
+      winRate: null,
+      payoffRatio: null,
+      kellyFraction: null,
+      halfKelly: null,
+      sampleSize: 0,
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// T3.10 — Modeled commission
+// ─────────────────────────────────────────────────────────────
+
+describe('computeModeledCommission — T3.10', () => {
+  it('PER_LOT charges value per total lot', () => {
+    expect(computeModeledCommission({ type: 'PER_LOT', value: 3.5 }, 2, 0)).toBe(7);
+  });
+
+  it('PER_NOTIONAL charges value per $1M traded', () => {
+    expect(
+      computeModeledCommission({ type: 'PER_NOTIONAL', value: 50 }, 0, 2_000_000),
+    ).toBe(100);
+  });
+
+  it('ROUND_TRIP is a flat per-trade cost', () => {
+    expect(computeModeledCommission({ type: 'ROUND_TRIP', value: 6 }, 99, 9e9)).toBe(6);
+  });
+
+  it('non-positive value → 0', () => {
+    expect(computeModeledCommission({ type: 'PER_LOT', value: 0 }, 5, 0)).toBe(0);
+  });
+
+  it('applies in computeTradeMetrics only when broker commission is 0', () => {
+    const legs = [
+      entry(1.1, 1.0, '2026-04-01T10:00:00Z'),
+      exit(1.105, 1.0, '2026-04-01T12:00:00Z'),
+    ];
+    const withModel = computeTradeMetrics(
+      makeTrade({ status: 'CLOSED', initial_stop_price: 1.09 }),
+      legs,
+      EURUSD,
+      { commissionModel: { type: 'PER_LOT', value: 3 } },
+    );
+    // 2 lots total (1 entry + 1 exit) * $3 = $6 cost.
+    expect(withModel.totalCommission).toBe(-6);
+
+    // Broker-reported commission wins; model is ignored.
+    const brokerLegs = [
+      { ...entry(1.1, 1.0, '2026-04-01T10:00:00Z'), commission: -4 },
+      exit(1.105, 1.0, '2026-04-01T12:00:00Z'),
+    ];
+    const withBroker = computeTradeMetrics(
+      makeTrade({ status: 'CLOSED', initial_stop_price: 1.09 }),
+      brokerLegs,
+      EURUSD,
+      { commissionModel: { type: 'PER_LOT', value: 3 } },
+    );
+    expect(withBroker.totalCommission).toBe(-4);
+  });
+});
+
+describe('rMultipleFromPrices — single R source (Rule 3)', () => {
+  it('LONG: reward/risk', () => {
+    expect(rMultipleFromPrices(1.1, 1.09, 1.12, 'LONG')).toBeCloseTo(2, 10);
+  });
+  it('SHORT: reward/risk', () => {
+    expect(rMultipleFromPrices(1.1, 1.11, 1.08, 'SHORT')).toBeCloseTo(2, 10);
+  });
+  it('non-positive risk (inverted/zero stop) → 0', () => {
+    expect(rMultipleFromPrices(1.1, 1.1, 1.12, 'LONG')).toBe(0);
+    expect(rMultipleFromPrices(1.1, 1.12, 1.13, 'LONG')).toBe(0); // stop above entry on a LONG
+  });
+  it('negative reward yields negative R', () => {
+    expect(rMultipleFromPrices(1.1, 1.09, 1.095, 'LONG')).toBeCloseTo(-0.5, 10);
   });
 });

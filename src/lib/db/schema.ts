@@ -59,6 +59,14 @@ export const accounts = sqliteTable(
       enum: ['RETAIL', 'PROP', 'ECN', 'MARKET_MAKER', 'CRYPTO_EXCHANGE'],
     }),
 
+    // Commission model (T3.10). Optional; used to model expected commission
+    // when the broker does not report it. Mirrors schema.sql.
+    commissionType: text('commission_type', {
+      enum: ['PER_LOT', 'PER_NOTIONAL', 'ROUND_TRIP'],
+    }),
+    commissionValue: real('commission_value'),
+    commissionCurrency: text('commission_currency'),
+
     createdAtUtc: text('created_at_utc').notNull(),
     updatedAtUtc: text('updated_at_utc').notNull(),
   },
@@ -117,6 +125,7 @@ export const trades = sqliteTable(
     plannedRiskPct: real('planned_risk_pct'),
 
     // Qualitative context
+    methodologyId: text('methodology_id').references(() => methodologies.id),
     setupName: text('setup_name'),
     session: text('session'),
     marketCondition: text('market_condition', {
@@ -132,10 +141,16 @@ export const trades = sqliteTable(
     postTradeEmotion: text('post_trade_emotion', {
       enum: ['SATISFIED', 'RELIEVED', 'DISAPPOINTED', 'FRUSTRATED', 'INDIFFERENT'],
     }),
+    // T3.7: optional 0-10 pre-trade anxiety slider. NULL = not recorded.
+    anxietyLevel: integer('anxiety_level'),
 
     // Timing
     openedAtUtc: text('opened_at_utc'),
     closedAtUtc: text('closed_at_utc'),
+
+    // MAE / MFE — Maximum Adverse / Favorable Excursion in pips (T3.2)
+    maePips: real('mae_pips'),
+    mfePips: real('mfe_pips'),
 
     // Computed money fields (recomputed by lib/pnl.ts on every leg change)
     netPnl: real('net_pnl'),
@@ -160,6 +175,8 @@ export const trades = sqliteTable(
     // Soft delete + sample
     deletedAtUtc: text('deleted_at_utc'),
     isSample: integer('is_sample', { mode: 'boolean' }).notNull().default(false),
+    // T5.9 — starred/pinned for the "Pinned" blotter tab.
+    isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
 
     createdAtUtc: text('created_at_utc').notNull(),
     updatedAtUtc: text('updated_at_utc').notNull(),
@@ -200,6 +217,9 @@ export const tradeLegs = sqliteTable(
     commission: real('commission').notNull().default(0),
     swap: real('swap').notNull().default(0),
     brokerProfit: real('broker_profit'),
+    // T3.9 — execution quality (EA v2 emits; null = unknown / manual entry).
+    slippagePips: real('slippage_pips'),
+    spreadAtEntryPips: real('spread_at_entry_pips'),
     externalDealId: text('external_deal_id'),
     notes: text('notes'),
     createdAtUtc: text('created_at_utc').notNull(),
@@ -229,6 +249,8 @@ export const screenshots = sqliteTable(
     widthPx: integer('width_px'),
     heightPx: integer('height_px'),
     byteSize: integer('byte_size'),
+    // T6.3 — local OCR text extracted from the chart screenshot.
+    ocrText: text('ocr_text'),
     createdAtUtc: text('created_at_utc').notNull(),
   },
   (t) => ({
@@ -303,6 +325,32 @@ export const setups = sqliteTable('setups', {
   description: text('description'),
   isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+});
+
+// ─────────────────────────────────────────────────────────────
+// Methodologies (user-defined trading methodologies / tags)
+// ─────────────────────────────────────────────────────────────
+export const methodologies = sqliteTable('methodologies', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  description: text('description'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAtUtc: text('created_at_utc').notNull(),
+  updatedAtUtc: text('updated_at_utc').notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────
+// Prop firm presets
+// ─────────────────────────────────────────────────────────────
+export const propFirmPresets = sqliteTable('prop_firm_presets', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  maxDrawdownPct: real('max_drawdown_pct'),
+  maxDailyLossPct: real('max_daily_loss_pct'),
+  maxDrawdownAmount: real('max_drawdown_amount'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAtUtc: text('created_at_utc').notNull(),
+  updatedAtUtc: text('updated_at_utc').notNull(),
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -572,6 +620,58 @@ export const bridgeFiles = sqliteTable('bridge_files', {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Rituals & Reflections (T3.6)
+// ─────────────────────────────────────────────────────────────
+
+export const rituals = sqliteTable('rituals', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').references(() => accounts.id),
+  name: text('name').notNull(), // e.g., "Breakout Checklist"
+  setupName: text('setup_name'), // Optional: ritual applies only to this setup
+  items: text('items').notNull(), // JSON array of {id, text, optional}
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAtUtc: text('created_at_utc').notNull(),
+  updatedAtUtc: text('updated_at_utc').notNull(),
+});
+
+export const tradeReflections = sqliteTable('trade_reflections', {
+  id: text('id').primaryKey(),
+  tradeId: text('trade_id')
+    .notNull()
+    .references(() => trades.id),
+  reflection: text('reflection'), // User's written reflection
+  reflectedAtUtc: text('reflected_at_utc').notNull(), // When reflection was written
+});
+
+// ─────────────────────────────────────────────────────────────
+// Voice memos (T6.1) — audio note + optional local transcript.
+// audioPath is relative to data_dir (Rule 7). Mirrors schema.sql.
+// ─────────────────────────────────────────────────────────────
+export const voiceMemos = sqliteTable('voice_memos', {
+  id: text('id').primaryKey(),
+  tradeId: text('trade_id')
+    .notNull()
+    .references(() => trades.id, { onDelete: 'cascade' }),
+  audioPath: text('audio_path').notNull(),
+  transcript: text('transcript'),
+  durationSec: real('duration_sec'),
+  createdAtUtc: text('created_at_utc').notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────
+// Mood check-ins (T3.7) — standalone optional wellness data.
+// accountId nullable: a check-in may be global. Mirrors schema.sql.
+// ─────────────────────────────────────────────────────────────
+export const moodCheckins = sqliteTable('mood_checkins', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').references(() => accounts.id),
+  moodScore: integer('mood_score').notNull(), // 1-5
+  note: text('note'),
+  checkedInAtUtc: text('checked_in_at_utc').notNull(),
+  createdAtUtc: text('created_at_utc').notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────
 // Settings
 // ─────────────────────────────────────────────────────────────
 
@@ -604,3 +704,11 @@ export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type ImportRun = typeof importRuns.$inferSelect;
 export type BalanceOperation = typeof balanceOperations.$inferSelect;
 export type NewBalanceOperation = typeof balanceOperations.$inferInsert;
+export type Methodology = typeof methodologies.$inferSelect;
+export type NewMethodology = typeof methodologies.$inferInsert;
+export type PropFirmPreset = typeof propFirmPresets.$inferSelect;
+export type NewPropFirmPreset = typeof propFirmPresets.$inferInsert;
+export type MoodCheckin = typeof moodCheckins.$inferSelect;
+export type NewMoodCheckin = typeof moodCheckins.$inferInsert;
+export type VoiceMemo = typeof voiceMemos.$inferSelect;
+export type NewVoiceMemo = typeof voiceMemos.$inferInsert;

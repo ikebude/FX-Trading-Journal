@@ -185,6 +185,74 @@ export interface DriftResult {
   driftPercent: number;
 }
 
+// ─────────────────────────────────────────────────────────────
+// T5.4 — Broker statement reconciler (pure)
+//
+// Cross-checks a broker's reported monthly figures against FXLedger's
+// computed values. PDF text extraction is intentionally NOT bundled (no
+// pdfjs dep added to the locked stack here) — the trader enters/pastes
+// the three figures from the statement and this flags any drift.
+// ─────────────────────────────────────────────────────────────
+
+export interface BrokerStatementFigures {
+  endingBalance: number;
+  totalPnl: number;
+  netDepositsWithdrawals: number;
+}
+
+export interface ComputedFigures {
+  endingBalance: number;
+  totalPnl: number;
+  netDepositsWithdrawals: number;
+}
+
+export interface StatementLineDrift {
+  field: 'endingBalance' | 'totalPnl' | 'netDepositsWithdrawals';
+  broker: number;
+  computed: number;
+  drift: number;
+  driftPercent: number;
+  flagged: boolean;
+}
+
+export interface BrokerReconcileResult {
+  hasDrift: boolean;
+  lines: StatementLineDrift[];
+}
+
+/**
+ * Compare broker-reported figures vs computed. A line is flagged when the
+ * absolute drift exceeds the greater of `absTolerance` (default 0.01) or
+ * `pctTolerance` of |broker| (default 0.1%). Pure.
+ */
+export function reconcileBrokerStatement(
+  broker: BrokerStatementFigures,
+  computed: ComputedFigures,
+  absTolerance = 0.01,
+  pctTolerance = 0.001,
+): BrokerReconcileResult {
+  const fields: StatementLineDrift['field'][] = [
+    'endingBalance',
+    'totalPnl',
+    'netDepositsWithdrawals',
+  ];
+  const lines = fields.map((field) => {
+    const b = broker[field];
+    const c = computed[field];
+    const drift = round(c - b, 2);
+    const tol = Math.max(absTolerance, Math.abs(b) * pctTolerance);
+    return {
+      field,
+      broker: b,
+      computed: c,
+      drift,
+      driftPercent: b !== 0 ? round((drift / Math.abs(b)) * 100, 4) : drift === 0 ? 0 : 100,
+      flagged: Math.abs(drift) > tol,
+    };
+  });
+  return { hasDrift: lines.some((l) => l.flagged), lines };
+}
+
 function round(num: number, decimals = 2): number {
   return Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
 }

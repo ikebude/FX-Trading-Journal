@@ -68,8 +68,27 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
   const currentVersion = sqlite.pragma('user_version', { simple: true }) as number;
   log.info(`Database: schema version ${currentVersion}`);
 
+  // Latest schema version. schema.sql is the COMPLETE current schema, so a
+  // brand-new DB is fully up to date the moment applyMigration001 runs it.
+  const LATEST_SCHEMA_VERSION = 13;
+
   if (currentVersion < 1) {
+    // Fresh install: applyMigration001 execs the full schema.sql (all
+    // tables/columns up to LATEST). The incremental migrations 002–N only
+    // exist to upgrade *pre-existing* v1.0.x DBs; running them here would
+    // re-ALTER columns schema.sql already created ("duplicate column
+    // name") and crash first launch. So jump straight to LATEST and skip
+    // them.
     applyMigration001(sqlite, schemaPath);
+    sqlite.pragma(`user_version = ${LATEST_SCHEMA_VERSION}`);
+    _sqlite = sqlite;
+    _db = drizzle(sqlite, { schema });
+    log.info(
+      `Database: ready (fresh install, schema v${sqlite.pragma('user_version', {
+        simple: true,
+      })})`,
+    );
+    return;
   }
 
   if (currentVersion < 2) {
@@ -78,6 +97,46 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
 
   if (currentVersion < 3) {
     applyMigration003(sqlite);
+  }
+
+  if (currentVersion < 4) {
+    applyMigration004(sqlite);
+  }
+
+  if (currentVersion < 5) {
+    applyMigration005(sqlite);
+  }
+
+  if (currentVersion < 6) {
+    applyMigration006(sqlite);
+  }
+
+  if (currentVersion < 7) {
+    applyMigration007(sqlite);
+  }
+
+  if (currentVersion < 8) {
+    applyMigration008(sqlite);
+  }
+
+  if (currentVersion < 9) {
+    applyMigration009(sqlite);
+  }
+
+  if (currentVersion < 10) {
+    applyMigration010(sqlite);
+  }
+
+  if (currentVersion < 11) {
+    applyMigration011(sqlite);
+  }
+
+  if (currentVersion < 12) {
+    applyMigration012(sqlite);
+  }
+
+  if (currentVersion < 13) {
+    applyMigration013(sqlite);
   }
 
   _sqlite = sqlite;
@@ -383,6 +442,240 @@ function applyMigration003(sqlite: Database.Database): void {
   migrate();
   sqlite.pragma('foreign_keys = ON');
   log.info('Database: migration 003 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 004 — methodologies + prop_firm_presets tables
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration004(sqlite: Database.Database): void {
+  log.info('Database: applying migration 004 (methodologies + prop_firm_presets)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS methodologies (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL UNIQUE,
+        description     TEXT,
+        is_active       INTEGER NOT NULL DEFAULT 1,
+        created_at_utc  TEXT NOT NULL,
+        updated_at_utc  TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS prop_firm_presets (
+        id                    TEXT PRIMARY KEY,
+        name                  TEXT NOT NULL UNIQUE,
+        max_drawdown_pct      REAL,
+        max_daily_loss_pct    REAL,
+        max_drawdown_amount   REAL,
+        is_active             INTEGER NOT NULL DEFAULT 1,
+        created_at_utc        TEXT NOT NULL,
+        updated_at_utc        TEXT NOT NULL
+      );
+    `);
+
+    sqlite.pragma('user_version = 4');
+  });
+
+  migrate();
+  log.info('Database: migration 004 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 005 — trades.methodology_id + seed built-in methodologies
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration005(sqlite: Database.Database): void {
+  log.info('Database: applying migration 005 (trades.methodology_id + methodology seeds)');
+
+  const now = new Date().toISOString();
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN methodology_id TEXT REFERENCES methodologies(id);`);
+
+    // Seed five universal methodology presets — traders can rename/delete them
+    const seedMethods = [
+      { id: 'smc',     name: 'SMC',             description: 'Smart Money Concepts — order blocks, FVGs, liquidity sweeps' },
+      { id: 'ict',     name: 'ICT',             description: 'Inner Circle Trader — market structure, optimal trade entries' },
+      { id: 'wyckoff', name: 'Wyckoff',         description: 'Wyckoff accumulation/distribution schematics' },
+      { id: 'pa',      name: 'Price Action',    description: 'Pure price action — candle patterns, S/R, trend following' },
+      { id: 'snr',     name: 'Supply & Demand', description: 'Supply and demand zone trading' },
+    ];
+    const insert = sqlite.prepare(
+      `INSERT OR IGNORE INTO methodologies(id, name, description, is_active, created_at_utc, updated_at_utc)
+       VALUES (?, ?, ?, 1, ?, ?)`,
+    );
+    for (const m of seedMethods) {
+      insert.run(m.id, m.name, m.description, now, now);
+    }
+
+    sqlite.pragma('user_version = 5');
+  });
+
+  migrate();
+  log.info('Database: migration 005 complete');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Migration 006 — seed built-in prop firm presets
+// ─────────────────────────────────────────────────────────────
+
+function applyMigration006(sqlite: Database.Database): void {
+  log.info('Database: applying migration 006 (prop firm preset seeds)');
+
+  const now = new Date().toISOString();
+  const migrate = sqlite.transaction(() => {
+    const insert = sqlite.prepare(
+      `INSERT OR IGNORE INTO prop_firm_presets
+         (id, name, max_drawdown_pct, max_daily_loss_pct, max_drawdown_amount,
+          is_active, created_at_utc, updated_at_utc)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    );
+
+    const firms = [
+      { id: 'ftmo',        name: 'FTMO',           maxDdPct: 10, maxDailyPct: 5,   maxDdAmt: null },
+      { id: 'mff',         name: 'MyForexFunds',   maxDdPct: 12, maxDailyPct: 5,   maxDdAmt: null },
+      { id: 'topstep',     name: 'Topstep',        maxDdPct: 6,  maxDailyPct: 3,   maxDdAmt: null },
+      { id: 'e8',          name: 'E8 Funding',     maxDdPct: 8,  maxDailyPct: 4,   maxDdAmt: null },
+      { id: 'fundednext',  name: 'FundedNext',     maxDdPct: 10, maxDailyPct: 5,   maxDdAmt: null },
+    ];
+
+    for (const f of firms) {
+      insert.run(f.id, f.name, f.maxDdPct, f.maxDailyPct, f.maxDdAmt, now, now);
+    }
+
+    sqlite.pragma('user_version = 6');
+  });
+
+  migrate();
+  log.info('Database: migration 006 complete');
+}
+
+function applyMigration007(sqlite: Database.Database): void {
+  log.info('Database: applying migration 007 (MAE/MFE columns on trades)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN mae_pips REAL`);
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN mfe_pips REAL`);
+    sqlite.pragma('user_version = 7');
+  });
+
+  migrate();
+  log.info('Database: migration 007 complete');
+}
+
+/**
+ * Migration 008 — T3.7 anxiety slider + mood check-ins.
+ *  1. trades.anxiety_level (nullable INTEGER, 0-10).
+ *  2. mood_checkins table + (account_id, checked_in_at_utc) index.
+ * SQLite ALTER TABLE ADD COLUMN cannot carry an inline CHECK on older
+ * engines; the 0-10 / 1-5 bounds are enforced by Zod at the IPC layer.
+ * Fresh DBs get the CHECKs from schema.sql.
+ */
+function applyMigration008(sqlite: Database.Database): void {
+  log.info('Database: applying migration 008 (T3.7 anxiety_level + mood_checkins)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN anxiety_level INTEGER`);
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS mood_checkins (
+        id                 TEXT PRIMARY KEY,
+        account_id         TEXT REFERENCES accounts(id),
+        mood_score         INTEGER NOT NULL,
+        note               TEXT,
+        checked_in_at_utc  TEXT NOT NULL,
+        created_at_utc     TEXT NOT NULL
+      );
+    `);
+    sqlite.exec(`
+      CREATE INDEX IF NOT EXISTS idx_mood_checkins_account_time
+        ON mood_checkins(account_id, checked_in_at_utc);
+    `);
+    sqlite.pragma('user_version = 8');
+  });
+
+  migrate();
+  log.info('Database: migration 008 complete');
+}
+
+/**
+ * Migration 009 — T3.9 execution-quality columns on trade_legs.
+ * Nullable; populated by EA v2 / advanced importers, null for manual entry.
+ */
+function applyMigration009(sqlite: Database.Database): void {
+  log.info('Database: applying migration 009 (T3.9 slippage + spread on trade_legs)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trade_legs ADD COLUMN slippage_pips REAL`);
+    sqlite.exec(`ALTER TABLE trade_legs ADD COLUMN spread_at_entry_pips REAL`);
+    sqlite.pragma('user_version = 9');
+  });
+
+  migrate();
+  log.info('Database: migration 009 complete');
+}
+
+/**
+ * Migration 010 — T3.10 per-account commission model.
+ * Nullable; CHECK omitted on ALTER (Zod enforces enum). Fresh DBs get the
+ * CHECK from schema.sql.
+ */
+function applyMigration010(sqlite: Database.Database): void {
+  log.info('Database: applying migration 010 (T3.10 account commission model)');
+
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE accounts ADD COLUMN commission_type TEXT`);
+    sqlite.exec(`ALTER TABLE accounts ADD COLUMN commission_value REAL`);
+    sqlite.exec(`ALTER TABLE accounts ADD COLUMN commission_currency TEXT`);
+    sqlite.pragma('user_version = 10');
+  });
+
+  migrate();
+  log.info('Database: migration 010 complete');
+}
+
+/** Migration 011 — T5.9 trades.is_pinned (starred trades). */
+function applyMigration011(sqlite: Database.Database): void {
+  log.info('Database: applying migration 011 (T5.9 trades.is_pinned)');
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE trades ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`);
+    sqlite.pragma('user_version = 11');
+  });
+  migrate();
+  log.info('Database: migration 011 complete');
+}
+
+/** Migration 012 — T6.1 voice_memos table. */
+function applyMigration012(sqlite: Database.Database): void {
+  log.info('Database: applying migration 012 (T6.1 voice_memos)');
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS voice_memos (
+        id              TEXT PRIMARY KEY,
+        trade_id        TEXT NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+        audio_path      TEXT NOT NULL,
+        transcript      TEXT,
+        duration_sec    REAL,
+        created_at_utc  TEXT NOT NULL
+      );
+    `);
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS idx_voice_memos_trade ON voice_memos(trade_id);`,
+    );
+    sqlite.pragma('user_version = 12');
+  });
+  migrate();
+  log.info('Database: migration 012 complete');
+}
+
+/** Migration 013 — T6.3 screenshots.ocr_text. */
+function applyMigration013(sqlite: Database.Database): void {
+  log.info('Database: applying migration 013 (T6.3 screenshots.ocr_text)');
+  const migrate = sqlite.transaction(() => {
+    sqlite.exec(`ALTER TABLE screenshots ADD COLUMN ocr_text TEXT`);
+    sqlite.pragma('user_version = 13');
+  });
+  migrate();
+  log.info('Database: migration 013 complete');
 }
 
 /**

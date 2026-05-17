@@ -15,6 +15,13 @@
       "when": 1776541351653,
       "tag": "0001_tiny_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777537877319,
+      "tag": "0002_loud_scream",
+      "breakpoints": true
     }
   ]
 }
