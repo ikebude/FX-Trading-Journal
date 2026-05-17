@@ -12,6 +12,7 @@ import {
   computePostMortem,
   computeSlippageStats,
   computeModeledCommission,
+  rMultipleFromPrices,
   computeKelly,
   type Instrument,
   type Trade,
@@ -1732,5 +1733,21 @@ describe('computeModeledCommission — T3.10', () => {
       { commissionModel: { type: 'PER_LOT', value: 3 } },
     );
     expect(withBroker.totalCommission).toBe(-4);
+  });
+});
+
+describe('rMultipleFromPrices — single R source (Rule 3)', () => {
+  it('LONG: reward/risk', () => {
+    expect(rMultipleFromPrices(1.1, 1.09, 1.12, 'LONG')).toBeCloseTo(2, 10);
+  });
+  it('SHORT: reward/risk', () => {
+    expect(rMultipleFromPrices(1.1, 1.11, 1.08, 'SHORT')).toBeCloseTo(2, 10);
+  });
+  it('non-positive risk (inverted/zero stop) → 0', () => {
+    expect(rMultipleFromPrices(1.1, 1.1, 1.12, 'LONG')).toBe(0);
+    expect(rMultipleFromPrices(1.1, 1.12, 1.13, 'LONG')).toBe(0); // stop above entry on a LONG
+  });
+  it('negative reward yields negative R', () => {
+    expect(rMultipleFromPrices(1.1, 1.09, 1.095, 'LONG')).toBeCloseTo(-0.5, 10);
   });
 });

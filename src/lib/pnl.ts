@@ -86,6 +86,25 @@ export interface ComputeOptions {
   commissionModel?: CommissionModel;
 }
 
+/**
+ * R-multiple from raw prices (reward distance / risk distance). The single
+ * source of R math (Rule 3) — reused by scale-out planning so that module
+ * never reimplements P&L/R arithmetic. Returns 0 when risk is non-positive
+ * (inverted/zero stop), mirroring computeTradeMetrics' guard.
+ */
+export function rMultipleFromPrices(
+  entry: number,
+  stop: number,
+  exitOrTarget: number,
+  direction: Direction,
+): number {
+  const riskDistance = direction === 'LONG' ? entry - stop : stop - entry;
+  if (!(riskDistance > 0)) return 0;
+  const rewardDistance =
+    direction === 'LONG' ? exitOrTarget - entry : entry - exitOrTarget;
+  return rewardDistance / riskDistance;
+}
+
 /** T3.10 — per-account commission model. */
 export interface CommissionModel {
   type: 'PER_LOT' | 'PER_NOTIONAL' | 'ROUND_TRIP';

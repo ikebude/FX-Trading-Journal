@@ -4,10 +4,12 @@
  * Plan TP1/TP2/TP3 (price + % of position) at entry; the planner returns
  * the R-multiple and weighted blended R for the ladder. trackScaleOut
  * compares realized exits against the plan. No P&L currency math here —
- * R-multiples only (Rule 3 keeps money math in pnl.ts).
+ * R-multiples only, and the R formula itself comes from pnl.ts
+ * (rMultipleFromPrices) — Rule 3: no reimplemented P&L/R math here.
  */
+import { rMultipleFromPrices, type Direction } from './pnl';
 
-export type Direction = 'LONG' | 'SHORT';
+export type { Direction };
 
 export interface ScaleOutLeg {
   /** Take-profit price for this rung. */
@@ -30,18 +32,6 @@ export interface ScaleOutPlan {
   valid: boolean;
 }
 
-function rMultiple(
-  entry: number,
-  stop: number,
-  target: number,
-  direction: Direction,
-): number {
-  const risk = Math.abs(entry - stop);
-  if (risk === 0) return 0;
-  const reward = direction === 'LONG' ? target - entry : entry - target;
-  return reward / risk;
-}
-
 export function computeScaleOutPlan(
   entry: number,
   stop: number,
@@ -50,7 +40,7 @@ export function computeScaleOutPlan(
 ): ScaleOutPlan {
   const rungs = legs.map((l) => ({
     ...l,
-    rMultiple: rMultiple(entry, stop, l.price, direction),
+    rMultiple: rMultipleFromPrices(entry, stop, l.price, direction),
   }));
   const totalSizePct = rungs.reduce((s, r) => s + r.sizePct, 0);
   const blendedR = rungs.reduce((s, r) => s + r.sizePct * r.rMultiple, 0);
@@ -94,7 +84,7 @@ export function trackScaleOut(
 ): ScaleOutTracking {
   const realizedSizePct = realized.reduce((s, r) => s + r.sizePct, 0);
   const realizedBlendedR = realized.reduce(
-    (s, r) => s + r.sizePct * rMultiple(entry, stop, r.price, direction),
+    (s, r) => s + r.sizePct * rMultipleFromPrices(entry, stop, r.price, direction),
     0,
   );
   const deltaR = realizedBlendedR - plan.blendedR;

@@ -11,7 +11,7 @@ import { ipcMain } from 'electron';
 import log from 'electron-log/main.js';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/lib/db/client';
 import { voiceMemos } from '../../src/lib/db/schema';
@@ -22,6 +22,17 @@ import {
 import type { IpcContext } from './index';
 
 const WHISPER_MODEL_REL = join('models', 'whisper', 'ggml-base.en.bin');
+
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB — a 60s memo is ~1 MB
+/** Trade ids are randomUUID; reject anything that could traverse paths. */
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+function assertWithinDataDir(dataDir: string, p: string): void {
+  const safe = resolve(dataDir);
+  if (!p.startsWith(safe + sep) && p !== safe) {
+    throw new Error('Access denied: path is outside the data directory');
+  }
+}
 
 function gate(dataDir: string, enabled: boolean): TranscriptionGateInput {
   let enginePresent = false;
@@ -72,14 +83,33 @@ export function registerVoiceHandlers(ctx: IpcContext): void {
       },
     ) => {
       try {
+        // Input validation (parity with other IPC handlers).
+        if (!payload || !SAFE_ID.test(String(payload.tradeId ?? ''))) {
+          throw new Error('Invalid tradeId');
+        }
+        const buf = Buffer.from(payload.bytes as Uint8Array);
+        if (buf.byteLength === 0 || buf.byteLength > MAX_AUDIO_BYTES) {
+          throw new RangeError(
+            `Audio size out of range: ${buf.byteLength} bytes (max ${MAX_AUDIO_BYTES})`,
+          );
+        }
+        if (
+          payload.transcript != null &&
+          (typeof payload.transcript !== 'string' || payload.transcript.length > 20_000)
+        ) {
+          throw new Error('Invalid transcript');
+        }
+
         const dataDir = ctx.config.data_dir;
         const id = randomUUID();
         const relDir = join('voice', payload.tradeId);
         const relPath = join(relDir, `${id}.webm`);
         const absDir = resolve(dataDir, relDir);
+        assertWithinDataDir(dataDir, absDir);
         mkdirSync(absDir, { recursive: true });
         const absPath = resolve(dataDir, relPath);
-        writeFileSync(absPath, Buffer.from(payload.bytes as Uint8Array));
+        assertWithinDataDir(dataDir, absPath);
+        writeFileSync(absPath, buf);
 
         let transcript = payload.transcript ?? null;
         const status = transcriptionStatus(

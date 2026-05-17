@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import log from 'electron-log/main.js';
 import sharp from 'sharp';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import { statSync } from 'node:fs';
 import { nanoid } from 'nanoid';
@@ -194,6 +194,15 @@ export function registerScreenshotHandlers(ctx: IpcContext): void {
       const absPath = resolve(ctx.config.data_dir, rows[0].filePath);
       assertWithinDataDir(ctx.config.data_dir, absPath);
 
+      // Rule 11 (no network): tesseract.js auto-downloads traineddata from
+      // a CDN unless langPath points at a local copy. We REQUIRE a bundled
+      // <data_dir>/models/tessdata/eng.traineddata and never call recognize
+      // without it — so OCR is strictly offline and model-gated.
+      const tessDir = resolve(ctx.config.data_dir, 'models', 'tessdata');
+      if (!existsSync(resolve(tessDir, 'eng.traineddata'))) {
+        return { ok: false, status: 'lang-missing' };
+      }
+
       let text: string | null = null;
       try {
         const spec = 'tesseract.js';
@@ -204,7 +213,13 @@ export function registerScreenshotHandlers(ctx: IpcContext): void {
             opts: Record<string, unknown>,
           ) => Promise<{ data: { text: string } }>;
         };
-        const res = await t.recognize(absPath, 'eng', {});
+        const res = await t.recognize(absPath, 'eng', {
+          // All paths local; gzip off since the bundled file is raw.
+          langPath: tessDir,
+          cachePath: tessDir,
+          gzip: false,
+          logger: () => {},
+        });
         text = normalizeOcrText(res?.data?.text ?? '') || null;
       } catch (err) {
         log.warn('screenshots:ocr — engine/lang unavailable (non-fatal)', err);
