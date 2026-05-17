@@ -229,3 +229,36 @@ Run this playbook against a **clean install** of the release `.exe` — not the 
 **Expected:** Path-traversal entries are rejected; data dir untouched.
 
 **Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.4 — Multi-account portfolio (T5.1/T5.2)
+
+**Steps:**
+1. Create two accounts in different currencies with some closed trades.
+2. Open `/portfolio`.
+3. Total net P&L shows in the base currency; accounts with no FX rate
+   are listed with a "(no rate)" badge and excluded from the total
+   (never silently summed at 1.0).
+4. Open opposing positions in the same symbol across the two accounts.
+5. The amber "Cross-account hedges detected" panel lists the symbol with
+   long/short accounts and the effectively-flat lot count.
+
+**Expected:** Currency conversion is rate-gated; cross-account hedge is
+surfaced; per-account open risk rolls up.
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
+
+## AC-V.5 — EA v2 migration / bridge (T1.4 + T4.9)
+
+**Steps:**
+1. Install the v2 EA; attach to an MT5 chart.
+2. Open and close a position; confirm the bridge toast and the trade
+   appearing in the blotter.
+3. Trigger a balance op (deposit/withdrawal) from the EA; confirm it
+   lands in the account ledger.
+4. Leave the EA idle during market hours > 5 min → the quiet-bridge
+   toast appears; skew the PC clock vs broker > 30s → drift toast.
+
+**Expected:** v2 deal/balance events flow end-to-end; heartbeat + drift
+alerts fire (T4.9).
+
+**Sign-off:** ☐ Passed — initials: ____ date: ______ version: ______
