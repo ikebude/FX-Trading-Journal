@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.1.0] — 2026-05-17 — FXLedger v1.1 (released)
 
 > All 61 v1.1 tasks (T1.1–T6.11) **shipped**: merged to `main`, tagged
-> `v1.1.0`, GitHub release + NSIS installer (`FXLedger Setup 1.1.0.exe`
+> `v1.1.0`, GitHub release + NSIS installer (`FXLedger.Setup.1.1.0.exe`
 > + `latest.yml`) published. 521 unit tests (41 files) + 25-test
 > Playwright acceptance suite, 0 typecheck, 0 lint.
 

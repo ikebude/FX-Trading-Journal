@@ -120,7 +120,7 @@ All 18 core milestones complete. Production-ready features shipped:
 
 ### v1.1.0 — Shipped (2026-05-17)
 
-**Status:** ✅ COMPLETE & RELEASED — T1.1–T6.11 merged to `main`, tagged `v1.1.0`, GitHub release + NSIS installer (`FXLedger Setup 1.1.0.exe` + `latest.yml`) published. 521 unit tests + 25-test e2e suite; 0 typecheck/lint.
+**Status:** ✅ COMPLETE & RELEASED — T1.1–T6.11 merged to `main`, tagged `v1.1.0`, GitHub release + NSIS installer (`FXLedger.Setup.1.1.0.exe` + `latest.yml`) published. 521 unit tests + 25-test e2e suite; 0 typecheck/lint.
 
 **Completion:** T1.1–T1.10 (foundation) + T2.1–T2.10 (libraries) + T3.1–T3.10 (analytics) + T4.1–T4.15 (imports/UX) + T5.1–T5.10 (portfolio) + T6.1–T6.11 (intelligence/release).
 

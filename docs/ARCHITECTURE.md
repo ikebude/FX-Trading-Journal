@@ -388,7 +388,7 @@ Windows installer:
   npm run package:win
   → electron-vite build (above)
   → electron-builder --win
-  → NSIS installer: release/FXLedger Setup 1.1.0.exe
+  → NSIS installer: release/FXLedger.Setup.1.1.0.exe
   → Bundles: dist/, dist-electron/, electron/mql/ (EAs)
   → Creates: Desktop shortcut, Start Menu entry
   → Allows: Custom install directory
