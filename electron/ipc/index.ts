@@ -34,7 +34,8 @@ import { registerMoodHandlers } from './mood';
 import { registerPortfolioHandlers } from './portfolio';
 import { registerVoiceHandlers } from './voice';
 
-interface AppConfig {
+/** Single source of truth for the on-disk app config shape. */
+export interface AppConfig {
   data_dir: string;
   first_run_complete: boolean;
   theme: 'dark' | 'light' | 'system';

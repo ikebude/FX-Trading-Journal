@@ -15,7 +15,7 @@ import log from 'electron-log/main.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { registerIpcHandlers } from './ipc/index';
+import { registerIpcHandlers, type AppConfig as IpcAppConfig } from './ipc/index';
 import { initializeDatabase, closeDatabase } from '../src/lib/db/client';
 import { getTodayStats } from '../src/lib/db/queries';
 import { startBridgeWatcher, stopBridgeWatcher } from './services/bridge-watcher';
@@ -36,22 +36,9 @@ const DATA_FOLDER_NAME = 'Ledger';
 const DEFAULT_DATA_DIR = join(app.getPath('appData'), DATA_FOLDER_NAME);
 const CONFIG_FILENAME = 'config.json';
 
-interface AppConfig {
-  data_dir: string;
-  first_run_complete: boolean;
-  theme: 'dark' | 'light' | 'system';
-  display_timezone: string;
-  hotkey: string;
-  last_account_id: string | null;
-  auto_launch: boolean;
-  auto_update: boolean;
-  // T4.8 — load demo trades on first run (user-toggleable in Settings).
-  load_sample_data: boolean;
-  // T4.8 — last app version the "what's new" banner was dismissed for.
-  whats_new_seen_version: string | null;
-  // T4.10 — opt-in local-only crash reporter (no upload, ever).
-  crash_reporter: boolean;
-}
+// Single source of truth lives in electron/ipc/index.ts — re-typed here
+// by import to eliminate the hand-synced duplicate (a prior drift bug).
+type AppConfig = IpcAppConfig;
 
 // ─────────────────────────────────────────────────────────────
 // Logging setup

@@ -32,6 +32,7 @@ import { EAInstallGuide } from '@/components/help/EAInstallGuide';
 import { GuidedTour } from '@/components/tour/GuidedTour';
 import { useGlobalKeys } from '@/hooks/useGlobalKeys';
 import { useTheme } from '@/hooks/useTheme';
+import { localeDir } from '@/lib/locale';
 import { NewTradeDialog } from '@/components/trade-form/NewTradeDialog';
 import { TradeDetailDrawer } from '@/components/trade-detail/TradeDetailDrawer';
 import { ToastProvider, useToast } from '@/components/ui/toast';
@@ -141,6 +142,18 @@ function AppShell() {
   });
 
   useTheme(settings?.theme);
+
+  // T6.6 — apply locale direction/lang to the document so RTL locales
+  // (ar/he/fa/…) actually render right-to-left. Locale falls back to the
+  // OS/browser locale; no network, display-only (Rule 2 timestamps stay UTC).
+  useEffect(() => {
+    const locale =
+      (settings?.locale as string | undefined) ||
+      (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
+    document.documentElement.lang = locale;
+    document.documentElement.dir = localeDir(locale);
+  }, [settings?.locale]);
+
   // Show tour once: when first_run_complete is false and we have settings loaded
   const firstRunRef = useState(false);
   if (settings && settings.first_run_complete === false && !firstRunRef[0]) {
