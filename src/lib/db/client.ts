@@ -68,8 +68,27 @@ export async function initializeDatabase(dbPath: string, schemaPath: string): Pr
   const currentVersion = sqlite.pragma('user_version', { simple: true }) as number;
   log.info(`Database: schema version ${currentVersion}`);
 
+  // Latest schema version. schema.sql is the COMPLETE current schema, so a
+  // brand-new DB is fully up to date the moment applyMigration001 runs it.
+  const LATEST_SCHEMA_VERSION = 13;
+
   if (currentVersion < 1) {
+    // Fresh install: applyMigration001 execs the full schema.sql (all
+    // tables/columns up to LATEST). The incremental migrations 002–N only
+    // exist to upgrade *pre-existing* v1.0.x DBs; running them here would
+    // re-ALTER columns schema.sql already created ("duplicate column
+    // name") and crash first launch. So jump straight to LATEST and skip
+    // them.
     applyMigration001(sqlite, schemaPath);
+    sqlite.pragma(`user_version = ${LATEST_SCHEMA_VERSION}`);
+    _sqlite = sqlite;
+    _db = drizzle(sqlite, { schema });
+    log.info(
+      `Database: ready (fresh install, schema v${sqlite.pragma('user_version', {
+        simple: true,
+      })})`,
+    );
+    return;
   }
 
   if (currentVersion < 2) {
