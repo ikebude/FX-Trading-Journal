@@ -126,6 +126,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "build/tray.png",
+        "to": "tray.png"
       }
     ],
     "win": {
