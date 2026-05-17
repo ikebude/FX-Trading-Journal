@@ -6,11 +6,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.1.0-rc.1] — 2026-05-16 — v1.1 Release Candidate (Weeks 2–4)
+## [1.1.0] — 2026-05-17 — FXLedger v1.1 (feature-complete)
 
-> Mid-cycle release candidate on `v1.1/build-sprint`. Not yet tagged or
-> published — the final v1.1.0 ship is T6.11 after Weeks 5–6. Branch is
-> not merged to `main` pending the agreed integration step.
+> All 61 v1.1 tasks (T1.1–T6.11) implemented on `v1.1/build-sprint`,
+> green at every step (513 unit tests + e2e suite, 0 typecheck, 0 lint).
+> Tag / GitHub release / merge to `main` are intentionally deferred to an
+> explicit maintainer trigger (the branch is held unmerged by request).
+>
+> Weeks 5–6 additions on top of the rc.1 entry below:
+> - **T5.1/5.2** multi-account portfolio + cross-account hedge / open-risk.
+> - **T5.3** Edgewonk/TradeZella/TraderVue importers. **T5.4** broker
+>   statement reconciler. **T5.5** payout/consistency/weekend-flat.
+>   **T5.6** scale-out ladder planner. **T5.7** year-end P&L PDF.
+>   **T5.8** undo/redo + autosave primitives. **T5.9** pinnable trades.
+>   **T5.10** margin/leverage + correlation-adjusted risk.
+> - **T6.1–T6.3** voice memos / NL search / screenshot OCR — full
+>   architecture, deps declared, **model-gated** (offline, no
+>   auto-download; degrade gracefully when models absent).
+> - **T6.4** rule-based EOD coaching. **T6.5** tamper-evident audit-log
+>   hash-chain seal. **T6.6** locale/RTL/holiday support. **T6.7**
+>   feature flags + read-only plugin scaffold. **T6.8** 25-test E2E
+>   acceptance suite. **T6.9** AC-V.1–V.5 manual playbook. **T6.10**
+>   perf-regression guard.
+> - Schema parity rule upheld throughout: migrations 008–013, each with
+>   a schema.sql↔schema.ts parity test.
+
+### Release-candidate history (Weeks 2–4)
 
 ### Added — Week 2 (libraries) & Week 3 (analytics)
 - Setup library + versioning, methodology/mistake/confluence tags,
