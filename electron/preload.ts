@@ -46,6 +46,12 @@ const api = {
     bulkAddTags: (ids: string[], tagIds: number[]) =>
       ipcRenderer.invoke('trades:bulk-add-tags', ids, tagIds),
     search: (query: string) => ipcRenderer.invoke('trades:search', query) as Promise<{ rows: unknown[]; total: number }>,
+    nlSearch: (query: string) =>
+      ipcRenderer.invoke('trades:nl-search', query) as Promise<{
+        rows: unknown[];
+        total: number;
+        parsed: unknown;
+      }>,
     aggregate: (filters: unknown) =>
       ipcRenderer.invoke('trades:aggregate', filters),
     clearSample: () =>

@@ -22,6 +22,7 @@ import {
 } from '../../src/lib/db/queries';
 import { withAsyncTransaction } from '../../src/lib/db/client';
 import { computeTradeMetrics } from '../../src/lib/pnl';
+import { parseNlQuery } from '../../src/lib/nl-query';
 import {
   CreateTradeSchema,
   QuickTradeSchema,
@@ -219,6 +220,61 @@ export function registerTradeHandlers(): void {
     } catch (err) {
       log.error('trades:search', err);
       throw new Error('Failed to search trades');
+    }
+  });
+
+  ipcMain.handle('trades:nl-search', async (_e, query: string) => {
+    try {
+      const f = parseNlQuery(String(query ?? ''));
+      let dateFrom: string | undefined;
+      const now = Date.now();
+      const days =
+        f.window === 'today'
+          ? 1
+          : f.window === '7d'
+          ? 7
+          : f.window === '30d'
+          ? 30
+          : f.window === '90d'
+          ? 90
+          : f.window === 'ytd'
+          ? -1
+          : 0;
+      if (days === -1) dateFrom = new Date(new Date().getUTCFullYear(), 0, 1).toISOString();
+      else if (days > 0) dateFrom = new Date(now - days * 86_400_000).toISOString();
+
+      const ftsIds = f.freeText ? await searchTrades(f.freeText) : undefined;
+      if (f.freeText && (!ftsIds || ftsIds.length === 0) && !f.symbol && !f.direction) {
+        return { rows: [], total: 0, parsed: f };
+      }
+
+      const { rows } = await listTrades({
+        ...(ftsIds && ftsIds.length ? { ids: ftsIds } : {}),
+        ...(f.symbol ? { symbol: f.symbol } : {}),
+        ...(f.direction ? { direction: f.direction } : {}),
+        ...(f.status ? { status: f.status } : {}),
+        ...(f.session ? { session: f.session } : {}),
+        ...(f.pinnedOnly ? { pinnedOnly: true } : {}),
+        ...(dateFrom ? { dateFrom } : {}),
+        page: 1,
+        pageSize: 500,
+        sortBy: 'opened_at_utc',
+        sortDir: 'desc',
+        includeDeleted: false,
+        deletedOnly: false,
+        includeSample: false,
+      });
+
+      const filtered = rows.filter((r) => {
+        if (f.outcome === 'WIN' && (r.netPnl ?? 0) <= 0) return false;
+        if (f.outcome === 'LOSS' && (r.netPnl ?? 0) >= 0) return false;
+        if (f.minConfidence != null && (r.confidence ?? 0) < f.minConfidence) return false;
+        return true;
+      });
+      return { rows: filtered, total: filtered.length, parsed: f };
+    } catch (err) {
+      log.error('trades:nl-search', err);
+      throw new Error('Failed to run smart search');
     }
   });
 
