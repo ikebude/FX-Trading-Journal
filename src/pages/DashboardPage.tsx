@@ -98,6 +98,7 @@ interface DashboardData {
   durationVsOutcome: DurationOutcomePoint[];
   postMortem: PostMortem;
   slippageStats: SlippageStat[];
+  coaching: Array<{ id: string; severity: 'info' | 'watch' | 'warn'; message: string }>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1470,6 +1471,27 @@ export function DashboardPage() {
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {/* Stats row */}
         <StatsRow agg={aggregate} />
+
+        {/* End-of-day coaching (T6.4) — rule-based, only when noteworthy */}
+        {data.coaching.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {data.coaching.map((c) => (
+              <div
+                key={c.id}
+                className={cn(
+                  'rounded-lg border px-4 py-2.5 text-sm',
+                  c.severity === 'warn'
+                    ? 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+                    : c.severity === 'watch'
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                    : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
+                )}
+              >
+                {c.message}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Mood check-in (T3.7) — optional, standalone */}
         <div className="grid grid-cols-3 gap-4">

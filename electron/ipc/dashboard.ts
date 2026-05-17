@@ -40,6 +40,7 @@ import {
   extractCacheableMetrics,
   type TradeBundle,
 } from '../../src/lib/pnl';
+import { generateCoaching } from '../../src/lib/coaching';
 import { metricsCache } from '../../src/lib/dashboard-metrics-cache';
 import { TradeFiltersSchema } from '../../src/lib/schemas';
 import { listTrades } from '../../src/lib/db/queries';
@@ -287,6 +288,25 @@ export function registerDashboardHandlers(): void {
         monthlyPnl: computeMonthlyPnl(bundles, tz),
         // T3.8: drawdown autopsy / blown-account root cause
         postMortem: computePostMortem(bundles, startingBalance),
+        // T6.4: rule-based end-of-day coaching for trades closed "today" (UTC)
+        coaching: generateCoaching(
+          bundles
+            .map((b) => {
+              const m = computeTradeMetrics(b.trade, b.legs, b.instrument);
+              return {
+                closedAtUtc: m.closedAtUtc ?? null,
+                netPnl: m.netPnl ?? null,
+                rMultiple: m.rMultiple ?? null,
+                direction: b.trade.direction,
+                anxietyLevel: b.trade.anxiety_level ?? null,
+              };
+            })
+            .filter(
+              (t) =>
+                t.closedAtUtc != null &&
+                t.closedAtUtc.slice(0, 10) === new Date().toISOString().slice(0, 10),
+            ),
+        ),
         // T3.9: per-symbol per-session slippage + spread baseline
         slippageStats: computeSlippageStats(bundles),
         // T3.3: session × DoW cross product + duration vs outcome
