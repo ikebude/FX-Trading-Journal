@@ -6,12 +6,37 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.1.0] — 2026-05-17 — FXLedger v1.1 (feature-complete)
+## [1.1.0] — 2026-05-17 — FXLedger v1.1 (released)
 
-> All 61 v1.1 tasks (T1.1–T6.11) implemented on `v1.1/build-sprint`,
-> green at every step (513 unit tests + e2e suite, 0 typecheck, 0 lint).
-> Tag / GitHub release / merge to `main` are intentionally deferred to an
-> explicit maintainer trigger (the branch is held unmerged by request).
+> All 61 v1.1 tasks (T1.1–T6.11) **shipped**: merged to `main`, tagged
+> `v1.1.0`, GitHub release + NSIS installer (`FXLedger Setup 1.1.0.exe`
+> + `latest.yml`) published. 521 unit tests (41 files) + 25-test
+> Playwright acceptance suite, 0 typecheck, 0 lint.
+
+### Post-feature operational audit & release hardening
+- **CRITICAL fix** — fresh-install crash in the DB migration runner
+  (`applyMigration001` ran the full `schema.sql`, then 002–013 re-ALTERed
+  existing columns → `duplicate column name` → first launch threw, the
+  startup catch called `app.quit()`, and the Nightly Playwright smoke
+  suite went red). Fresh DBs now stamp straight to the latest schema
+  version and skip the incremental migrations; covered by the new
+  `tests/db-migration-runner.test.ts` (first test to drive
+  `initializeDatabase()` on a fresh DB — a deterministic guard in the
+  unit phase so this can never silently recur).
+- **HIGH security** — OCR no longer risks a CDN download (hard-gated to a
+  local `tessdata`); `voice:add` path-traversal + size hardened; Rule-3
+  R-math de-duplicated into `pnl.ts`.
+- **AI model bundling (best-practice, not deferred)** — `scripts/fetch
+  -models.js` fetches Whisper / MiniLM-ONNX / Tesseract weights on the
+  BUILD machine into `build/models/`; electron-builder ships them via
+  `extraResources`; the app seeds them into `<data_dir>/models/` on first
+  run. Zero runtime network (Rule 11). `SKIP_MODEL_FETCH=1` packages
+  without them and the features degrade gracefully.
+- **Docs** — README/CLAUDE.md/ARCHITECTURE/blueprint/playbook corrected
+  to the shipped v1.1.0 state (removed stale v1.0.7/v1.0.5 status,
+  roadmap-as-future, and embedded mini-changelog; CHANGELOG.md is the
+  single source of truth).
+- AppConfig duplication removed; i18n RTL wired into the shell.
 >
 > Weeks 5–6 additions on top of the rc.1 entry below:
 > - **T5.1/5.2** multi-account portfolio + cross-account hedge / open-risk.

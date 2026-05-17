@@ -1,6 +1,6 @@
-# Ledger — Full Architecture & Feature Specification
+# FXLedger — Full Architecture & Feature Specification
 
-> **Version:** 1.0.0  
+> **Version:** 1.1.0  
 > **Platform:** Windows 10/11 (64-bit)  
 > **Architecture:** Local-first Electron desktop application  
 > **Stack locked:** No cloud. No telemetry. No subscriptions.

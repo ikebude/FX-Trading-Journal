@@ -6,7 +6,7 @@
 **What it is:** A native Windows desktop trading journal for forex traders. Local-first, no cloud, no telemetry, single `.exe` installer.  
 **Full spec:** See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — 780 lines, nothing in it is optional or deferred.  
 **Data location:** `%APPDATA%\Ledger\` (configurable, moveable; data folder name intentionally preserved for v1.0 → v1.1 upgrade; see T1.3)  
-**Status:** v1.0 shipped; **v1.1 feature-complete on `v1.1/build-sprint`** (all T1.1–T6.11, 513 unit tests + e2e green). Branch held unmerged pending an explicit maintainer merge/tag trigger.
+**Status:** **v1.1.0 SHIPPED (2026-05-17)** — all T1.1–T6.11 delivered, merged to `main`, tagged `v1.1.0`, GitHub release + NSIS installer published. 521 unit tests (41 files) + 25-test Playwright acceptance suite, 0 typecheck / 0 lint. Includes the critical fresh-install migration-runner fix.
 
 ---
 
@@ -118,9 +118,9 @@ All 18 core milestones complete. Production-ready features shipped:
 | Trade-form P0 combobox + TP (T1.7) | v1.0.6 | ✅ Done |
 | Calendar auto-sync service (T1.10) | v1.1.0 | ✅ Done |
 
-### v1.1.0 In Development (42-day sprint, target May 30, 2026)
+### v1.1.0 — Shipped (2026-05-17)
 
-**Status:** ✅ ALL WEEKS COMPLETE — T1.1–T6.11 implemented on `v1.1/build-sprint` (v1.1.0; 513 unit tests + 25-test e2e suite; 0 typecheck/lint). Tag/GitHub-release/merge await an explicit maintainer trigger.
+**Status:** ✅ COMPLETE & RELEASED — T1.1–T6.11 merged to `main`, tagged `v1.1.0`, GitHub release + NSIS installer (`FXLedger Setup 1.1.0.exe` + `latest.yml`) published. 521 unit tests + 25-test e2e suite; 0 typecheck/lint.
 
 **Completion:** T1.1–T1.10 (foundation) + T2.1–T2.10 (libraries) + T3.1–T3.10 (analytics) + T4.1–T4.15 (imports/UX) + T5.1–T5.10 (portfolio) + T6.1–T6.11 (intelligence/release).
 

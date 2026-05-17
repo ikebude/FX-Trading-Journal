@@ -35,3 +35,7 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# T6.1-6.3 AI model weights (fetched at package time, never committed)
+build/models/*
+!build/models/.gitkeep

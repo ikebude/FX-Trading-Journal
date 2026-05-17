@@ -12,7 +12,7 @@
 
 import { app, BrowserWindow, dialog, globalShortcut, screen, Tray, Menu, nativeImage, session, ipcMain, crashReporter } from 'electron';
 import log from 'electron-log/main.js';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { registerIpcHandlers, type AppConfig as IpcAppConfig } from './ipc/index';
@@ -401,6 +401,24 @@ app.whenReady().then(async () => {
   setupContentSecurityPolicy();
 
   ensureDataFolderLayout(config.data_dir);
+
+  // T6.1–T6.3: seed bundled AI models (resources/models, shipped by the
+  // installer via electron-builder extraResources) into <data_dir>/models
+  // on first run. Pure local file copy — no network (Rule 11). If no
+  // models were bundled (SKIP_MODEL_FETCH build), this is a no-op and the
+  // AI features degrade gracefully.
+  try {
+    if (app.isPackaged) {
+      const bundled = join(process.resourcesPath, 'models');
+      const target = join(config.data_dir, 'models');
+      if (existsSync(bundled) && !existsSync(target)) {
+        cpSync(bundled, target, { recursive: true });
+        log.info(`Seeded bundled AI models → ${target}`);
+      }
+    }
+  } catch (err) {
+    log.warn('AI model seed skipped (non-fatal)', err);
+  }
 
   // schema.sql is an extraResource bundled alongside the app in production.
   // In development, it lives at the project root (CWD when launched by electron-vite).
