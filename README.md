@@ -2,7 +2,7 @@
 
 > A local-first, institutional-grade trading journal for Windows. No cloud, no login, no subscription, no telemetry. Your data never leaves your machine.
 >
-> **Status:** v1.0.7 — Critical bug-fix release. 270/270 unit tests passing, 3/3 Playwright smoke tests passing. Electron 41 + Node.js v24 compatible. Calendar auto-sync ready.
+> **Status:** v1.1.0 — Feature-complete major release. 521/521 unit tests + 25-test Playwright acceptance suite passing; 0 typecheck / 0 lint. All 61 v1.1 tasks (T1.1–T6.11) shipped. Electron 41 + Node.js v24 compatible.
 
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-blue?style=for-the-badge&logo=windows)](https://github.com/ikebude/FX-Trading-Journal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -20,6 +20,47 @@ FXLedger is a professional forex trading journal designed for serious traders wh
 - **Live bridge.** Trades from MetaTrader 4/5 appear in your journal the instant they open, giving you time to add context *while you're in the trade*.
 - **Institutional analytics.** R-multiples, equity curves, session heatmaps, profit factor, setup performance — the metrics you'd expect from a prop firm evaluation platform.
 - **Zero compromise on privacy.** No telemetry, no analytics, no cloud. The only outbound network request ever made is the optional auto-update check, which is off by default.
+
+---
+
+## New in v1.1
+
+v1.1 turns FXLedger from a journal into a full **trading-performance and
+discipline platform**, while keeping the local-first, zero-telemetry promise.
+
+**Analytics & edge**
+- Sharpe / Sortino / Calmar / Recovery factor, expectancy with 95% CI
+- MAE/MFE excursion capture, session×day-of-week matrix, setup-version
+  edge-degradation alerts, Kelly-criterion position-sizing advisory
+- **Post-mortem mode** — automated drawdown autopsy at `/post-mortem`
+
+**Discipline & psychology**
+- Pre-trade ritual checklist + post-trade reflection queue
+- Anxiety slider, mood check-ins, advisory post-loss cool-down
+- Revenge/tilt/overtrading detectors and rule-based end-of-day coaching
+
+**Multi-account & prop**
+- Consolidated multi-account portfolio with FX-rate-gated conversion
+- Cross-account hedge detection, per-account open-risk, prop-firm presets,
+  daily-loss circuit breaker, payout/consistency/weekend-flat tracking
+
+**Imports & reporting**
+- cTrader / MatchTrader / DXtrade / IBKR-Flex / Edgewonk / TradeZella /
+  TraderVue importers via one shared fuzzy-header engine
+- Monthly prop-submission PDF, tax-prep CSV, credit-segregated year-end
+  P&L statement, broker-statement reconciler
+
+**Productivity & intelligence (offline, model-gated)**
+- Ctrl/Cmd-K command palette, bulk blotter ops, pinnable trades
+- Voice memos with optional local Whisper transcription
+- Natural-language blotter search, local screenshot OCR indexing
+- Tamper-evident audit-log hash-chain seal, locale/RTL support,
+  feature-flag + plugin scaffold
+
+> The AI features (voice transcription, embedding search, OCR) run
+> **100% offline** and are *model-gated*: with no model installed they
+> degrade gracefully (manual transcript / FTS search / no OCR) — never a
+> network call. Models are bundled at package time.
 
 ---
 
